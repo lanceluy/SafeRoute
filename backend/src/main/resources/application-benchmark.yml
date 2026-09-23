@@ -1,0 +1,14 @@
+# Activated with SPRING_PROFILES_ACTIVE=benchmark (see benchmark/README.md).
+# Synthetic load uses hundreds of simulated users from one IP, so the per-user/per-IP limits
+# that protect a real deployment would throttle the experiment itself.
+saferoute:
+  rate-limit:
+    enabled: false
+  coverage:
+    enabled: true
+  benchmark:
+    consumer-control-enabled: true
+
+logging:
+  level:
+    com.saferoute.backend: INFO

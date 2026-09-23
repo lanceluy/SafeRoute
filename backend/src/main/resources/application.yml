@@ -1,0 +1,120 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: saferoute-backend
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:saferoute}
+    username: ${DB_USER:saferoute}
+    password: ${DB_PASSWORD:saferoute}
+
+  jpa:
+    hibernate:
+      # Flyway (below) is the sole schema authority. `validate` is skipped because Hibernate's
+      # schema validator is known to be finicky about custom PostGIS `geography` column types
+      # declared via columnDefinition — not worth the friction for a Flyway-owned schema.
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        # No special "Postgis" dialect needed on Hibernate 6 — hibernate-spatial auto-registers
+        # geometry/geography type support via SPI (SpatialTypeContributor) for the standard
+        # PostgreSQLDialect, which Spring Boot already auto-detects from the JDBC driver.
+        format_sql: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # ErrorHandlingDeserializer turns a poison (unparseable) record into a DLQ entry instead of
+      # an infinite redelivery loop.
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: "com.saferoute.backend.event.dto"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.block.ms: 5000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: SafeRoute backend
+    description: Event-driven pedestrian hazard reporting (CSS123P)
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+saferoute:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-insecure-secret-change-me-please-must-be-32-bytes-min}
+    access-token-expiration-ms: ${JWT_ACCESS_TTL_MS:1800000} # 30 minutes
+    refresh-token-ttl: ${JWT_REFRESH_TTL:P30D}
+  websocket:
+    # Tokens in URLs end up in access logs; clients should send the Authorization header.
+    allow-query-token: ${WS_ALLOW_QUERY_TOKEN:false}
+  notification:
+    # Sessions within this distance receive live map-state updates for every status change.
+    map-update-radius-meters: 5000
+    # A hazard within this distance of the commuter's active route (and ahead of them) is "on route".
+    route-corridor-meters: 40
+  hazard:
+    duplicate-radius-meters: 30
+    duplicate-lookback-hours: 72
+    verification-threshold: 2
+    dispute-threshold: 2
+    resolution-threshold: 2
+    expiry-check-interval: PT1M
+  coverage:
+    enabled: ${SAFEROUTE_COVERAGE_ENABLED:true}
+    name: Metro Manila pilot area
+    min-lat: 14.35
+    max-lat: 14.80
+    min-lon: 120.90
+    max-lon: 121.15
+  rate-limit:
+    enabled: ${SAFEROUTE_RATE_LIMIT_ENABLED:true}
+  uploads:
+    dir: ${SAFEROUTE_UPLOADS_DIR:./uploads}
+  bootstrap:
+    # Comma-separated emails promoted to MODERATOR at startup/registration.
+    moderator-emails: ${SAFEROUTE_MODERATOR_EMAILS:}
+  benchmark:
+    consumer-control-enabled: ${SAFEROUTE_BENCHMARK_CONSUMER_CONTROL:false}
+
+logging:
+  pattern:
+    # correlationId / userId / eventId come from the MDC (CorrelationIdFilter, JwtAuthFilter, EventContext).
+    level: "%5p [cid=%X{correlationId:-} uid=%X{userId:-} eid=%X{eventId:-}]"
+  level:
+    com.saferoute.backend: DEBUG
+    org.apache.kafka: WARN

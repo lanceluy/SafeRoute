@@ -1,0 +1,6 @@
+# Activated with SPRING_PROFILES_ACTIVE=docker when the backend itself runs inside docker-compose.
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/${DB_NAME:saferoute}
+  kafka:
+    bootstrap-servers: kafka:29092

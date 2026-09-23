@@ -1,0 +1,83 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: saferoute-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-saferoute}
+      POSTGRES_USER: ${DB_USER:-saferoute}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-saferoute}
+    ports:
+      - "5432:5432"
+    volumes:
+      - saferoute-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-saferoute} -d ${DB_NAME:-saferoute}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: saferoute-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: saferoute-kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8081:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: saferoute
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+
+  # Not started by a plain `docker compose up` — run during development via `./mvnw spring-boot:run`
+  # for fast iteration. Use `docker compose --profile with-backend up --build` to containerize it
+  # for an end-to-end demo instead.
+  backend:
+    build: ./backend
+    container_name: saferoute-backend
+    profiles: ["with-backend"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_NAME: ${DB_NAME:-saferoute}
+      DB_USER: ${DB_USER:-saferoute}
+      DB_PASSWORD: ${DB_PASSWORD:-saferoute}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-change-me-please-must-be-32-bytes-min}
+      SAFEROUTE_UPLOADS_DIR: /app/uploads
+      SAFEROUTE_MODERATOR_EMAILS: ${SAFEROUTE_MODERATOR_EMAILS:-}
+      SAFEROUTE_COVERAGE_ENABLED: ${SAFEROUTE_COVERAGE_ENABLED:-true}
+    volumes:
+      # Hazard photos (POST /api/uploads/hazard-image) survive container rebuilds.
+      - saferoute-uploads:/app/uploads
+
+volumes:
+  saferoute-postgres-data:
+  saferoute-uploads:

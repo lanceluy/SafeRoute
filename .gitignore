@@ -1,0 +1,33 @@
+# Secrets / local env
+.env
+
+# macOS
+.DS_Store
+
+# Backend build output
+backend/target/
+target/
+
+# Local image-upload storage (Docker volume in compose)
+uploads/
+backend/uploads/
+
+# Xcode — SafeRoute.xcodeproj is generated from ios/project.yml by XcodeGen
+ios/SafeRoute.xcodeproj/
+ios/build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Benchmark output (keep the folder)
+benchmark/results/*
+!benchmark/results/.gitkeep
+node_modules/
+
+# Kept local (course material and working notes, not published)
+Grp3-CSS123P Project_ SafeRoute.pdf
+PROJECT_BRIEF.txt
+SafeRoute_Consolidated_Engineering_Review.txt
+SafeRoute_UI_UX_Design_Review.txt
+SafeRoute_Implementation_Summary.txt
+memory/
