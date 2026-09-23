@@ -1,12 +1,4 @@
-# SafeRoute
-
-Event-driven crowdsourced pedestrian-hazard mapping and safe-navigation platform, built from
-the CSS123P research proposal (`Grp3-CSS123P Project_ SafeRoute.pdf`). Commuters report
-hazards from a native iOS app; a Kafka-driven Spring Boot backend deduplicates, classifies and
-stores them in PostgreSQL/PostGIS, lets the community confirm, dispute and resolve them, and
-pushes real-time, route-aware alerts back over WebSockets.
-
-## Architecture
+## SafeRoute Architecture
 
 ```
 iOS app (SwiftUI / MapKit)
