@@ -220,6 +220,10 @@ scenarios, fault-tolerance test — and [`docs/METRICS.md`](docs/METRICS.md) for
   the corridor), not a validated model. Point buffers don't model flood extent, which side of the
   street a hazard is on, or footbridges above a road.
 - EXPIRED means "no recent confirmation", not "repaired"; it drops off the map and out of routing.
-- The Simulator reaches `localhost`; a physical device needs the host's LAN IP in `APIConfig.swift`.
+- The Simulator always uses `localhost`. On a physical iPhone, enter the backend's address in the
+  **Server** field on the login screen (e.g. `http://my-mac.local:8080` or the Mac's LAN IP; the
+  phone must be on the same Wi-Fi), or bake a default in at build time with
+  `SAFEROUTE_DEFAULT_SERVER=http://my-mac.local:8080`. A free Apple ID can sign device builds
+  (select your team in Xcode → Signing & Capabilities).
 - Attached hazard photos are public to anyone who can see the hazard. Metadata (including GPS) is
   stripped, but faces or plates in the picture are not blurred.

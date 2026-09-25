@@ -8,11 +8,21 @@ final class AuthViewModel: ObservableObject {
     @Published var email = ""
     @Published var password = ""
     @Published var displayName = ""
+    /// Only used on a real iPhone (see APIConfig).
+    @Published var server = APIConfig.serverIsConfigurable ? APIConfig.baseURL.absoluteString : ""
     @Published var isSubmitting = false
     @Published var errorMessage: String?
 
     func submit(appState: AppState) async {
         errorMessage = nil
+        if APIConfig.serverIsConfigurable {
+            guard let url = APIConfig.normalized(server) else {
+                errorMessage = "Enter the server address, for example http://192.168.1.20:8080."
+                return
+            }
+            UserDefaults.standard.set(url.absoluteString, forKey: APIConfig.serverDefaultsKey)
+            server = url.absoluteString
+        }
         isSubmitting = true
         defer { isSubmitting = false }
         do {

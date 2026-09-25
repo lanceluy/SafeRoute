@@ -5,7 +5,7 @@ struct AuthView: View {
     @StateObject private var viewModel = AuthViewModel()
     @FocusState private var focusedField: Field?
 
-    private enum Field { case email, password, displayName }
+    private enum Field { case email, password, displayName, server }
 
     var body: some View {
         ScrollView {
@@ -77,12 +77,37 @@ struct AuthView: View {
                         .font(SR.Font.meta)
                         .foregroundStyle(SR.Palette.textTertiary)
                 }
+
+                if APIConfig.serverIsConfigurable {
+                    serverSection
+                }
             }
             .padding(.horizontal, SR.Space.screenMargin)
             .padding(.bottom, SR.Space.xxl)
         }
         .scrollDismissesKeyboard(.interactively)
         .srPageBackground()
+    }
+
+    /// On a real iPhone the backend runs on another machine; the Simulator always uses localhost.
+    private var serverSection: some View {
+        VStack(alignment: .leading, spacing: SR.Space.xs) {
+            Text("Server")
+                .font(SR.Font.metaStrong)
+                .foregroundStyle(SR.Palette.textSecondary)
+            SRCard(padding: SR.Space.md) {
+                field("http://your-mac.local:8080", text: $viewModel.server)
+                    .keyboardType(.URL)
+                    .textContentType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focusedField, equals: .server)
+                    .accessibilityLabel("Server address")
+            }
+            Text("The computer running the SafeRoute backend. Your iPhone must be on the same Wi-Fi, or use a public address.")
+                .font(SR.Font.meta)
+                .foregroundStyle(SR.Palette.textTertiary)
+        }
     }
 
     private func field(_ title: String, text: Binding<String>) -> some View {

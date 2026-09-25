@@ -29,10 +29,18 @@ targets:
         NSLocationAlwaysAndWhenInUseUsageDescription: "With background hazard alerts on, SafeRoute uses your approximate location while the app is closed to warn you about hazards reported near you."
         # Keeps navigation (and its on-route alerts) running with the screen locked.
         UIBackgroundModes: [location]
+        # A real iPhone reaches the backend on a Mac over plain HTTP on the local network.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: "SafeRoute connects to the SafeRoute server on your local network."
+        # Server a device build uses until one is entered on the login screen, e.g.
+        # xcodebuild ... SAFEROUTE_DEFAULT_SERVER=http://my-mac.local:8080
+        SafeRouteDefaultServer: $(SAFEROUTE_DEFAULT_SERVER)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.saferoute.app
         TARGETED_DEVICE_FAMILY: "1"
+        SAFEROUTE_DEFAULT_SERVER: ""
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         SWIFT_STRICT_CONCURRENCY: complete
         # APNs background alerts need the Push Notifications entitlement, which free Apple IDs
