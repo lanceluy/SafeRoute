@@ -11,10 +11,19 @@ struct APIEndpoint {
     /// If set, the request is sent only while the signed-in account is this user — so work
     /// queued by one account (offline reports, photo uploads) can never go out as another.
     var actingUserId: UUID?
+    /// Sends with this access token instead of the Keychain's, e.g. to finish a call for an
+    /// account that is signing out after its tokens have been cleared.
+    var bearerToken: String?
 
     func acting(as userId: UUID?) -> APIEndpoint {
         var copy = self
         copy.actingUserId = userId
+        return copy
+    }
+
+    func authorized(with token: String) -> APIEndpoint {
+        var copy = self
+        copy.bearerToken = token
         return copy
     }
 
@@ -106,6 +115,20 @@ struct APIEndpoint {
 
     static func updateNotificationPreferences(_ prefs: NotificationPreferences) -> APIEndpoint {
         json("/me/notification-preferences", "PUT", prefs)
+    }
+
+    // MARK: Background alerts (APNs)
+
+    static func registerPushDevice(token: String) -> APIEndpoint {
+        json("/me/push-device", "PUT", ["deviceToken": token])
+    }
+
+    static func unregisterPushDevice(token: String) -> APIEndpoint {
+        APIEndpoint(path: "/me/push-device/\(token)", method: "DELETE")
+    }
+
+    static func updatePushDeviceLocation(token: String, _ coordinate: CLLocationCoordinate2D) -> APIEndpoint {
+        json("/me/push-device/\(token)/location", "PUT", ["latitude": coordinate.latitude, "longitude": coordinate.longitude])
     }
 
     // MARK: Meta & uploads

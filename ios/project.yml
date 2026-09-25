@@ -26,14 +26,19 @@ targets:
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         NSLocationWhenInUseUsageDescription: "SafeRoute uses your location to show pedestrian hazards near you and to alert you as you approach one."
-        NSLocationAlwaysAndWhenInUseUsageDescription: "SafeRoute uses your location in the background to keep hazard alerts current while you're walking."
-        UIBackgroundModes: []
+        NSLocationAlwaysAndWhenInUseUsageDescription: "With background hazard alerts on, SafeRoute uses your approximate location while the app is closed to warn you about hazards reported near you."
+        # Keeps navigation (and its on-route alerts) running with the screen locked.
+        UIBackgroundModes: [location]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.saferoute.app
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         SWIFT_STRICT_CONCURRENCY: complete
+        # APNs background alerts need the Push Notifications entitlement, which free Apple IDs
+        # can't sign. With a paid team, uncomment this and regenerate (xcodegen generate); without
+        # it the app still builds and runs, and alerts only arrive while it's open or navigating.
+        # CODE_SIGN_ENTITLEMENTS: SafeRoute.entitlements
     scheme:
       testTargets: [SafeRouteTests]
       gatherCoverageData: false

@@ -46,7 +46,8 @@ actor APIClient {
     }
 
     private func rawSend(_ endpoint: APIEndpoint, isRetry: Bool = false) async throws -> (Data, HTTPURLResponse) {
-        if endpoint.requiresAuth, !isRetry, let token = KeychainService.shared.readAccessToken(), JWT.expiresSoon(token) {
+        if endpoint.requiresAuth, endpoint.bearerToken == nil, !isRetry,
+           let token = KeychainService.shared.readAccessToken(), JWT.expiresSoon(token) {
             _ = await refreshTokens()
         }
         let request = buildRequest(endpoint)
@@ -69,7 +70,7 @@ actor APIClient {
         switch http.statusCode {
         case 200..<300:
             return (data, http)
-        case 401 where endpoint.requiresAuth && !isRetry:
+        case 401 where endpoint.requiresAuth && endpoint.bearerToken == nil && !isRetry:
             if await refreshTokens() {
                 return try await rawSend(endpoint, isRetry: true)
             }
@@ -98,7 +99,7 @@ actor APIClient {
         if endpoint.body != nil {
             request.setValue(endpoint.contentType, forHTTPHeaderField: "Content-Type")
         }
-        if endpoint.requiresAuth, let token = KeychainService.shared.readAccessToken() {
+        if endpoint.requiresAuth, let token = endpoint.bearerToken ?? KeychainService.shared.readAccessToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         return request

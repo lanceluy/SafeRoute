@@ -8,6 +8,7 @@ import com.saferoute.backend.event.dto.HazardChange;
 import com.saferoute.backend.event.dto.HazardUpdatedEvent;
 import com.saferoute.backend.event.dto.SubmissionProcessedEvent;
 import com.saferoute.backend.metrics.SafeRouteMetrics;
+import com.saferoute.backend.push.PushNotificationService;
 import com.saferoute.backend.spatial.GeoUtils;
 import com.saferoute.backend.submission.SubmissionStatus;
 import com.saferoute.backend.websocket.HazardEventFrame;
@@ -38,6 +39,8 @@ import java.util.Set;
  *       alert radius). Other changes — confirmation counts, edits, severity changes, resolution —
  *       update the map silently. Relevance needs a location reported within the last
  *       {@link WebSocketSessionRegistry#LOCATION_MAX_AGE}.</li>
+ *   <li>Alert-worthy changes also go to {@link PushNotificationService}, which sends an APNs push
+ *       to nearby users who aren't connected (app closed or suspended).</li>
  * </ul>
  *
  * <p>Delivery latency is recorded only for frames actually written; failed writes are counted
@@ -54,17 +57,20 @@ public class NotificationConsumer {
     private final WebSocketSessionRegistry registry;
     private final ObjectMapper objectMapper;
     private final SafeRouteMetrics metrics;
+    private final PushNotificationService pushNotifications;
     private final double mapUpdateRadiusMeters;
     private final double routeCorridorMeters;
 
     public NotificationConsumer(WebSocketSessionRegistry registry,
                                 ObjectMapper objectMapper,
                                 SafeRouteMetrics metrics,
+                                PushNotificationService pushNotifications,
                                 @Value("${saferoute.notification.map-update-radius-meters}") double mapUpdateRadiusMeters,
                                 @Value("${saferoute.notification.route-corridor-meters}") double routeCorridorMeters) {
         this.registry = registry;
         this.objectMapper = objectMapper;
         this.metrics = metrics;
+        this.pushNotifications = pushNotifications;
         this.mapUpdateRadiusMeters = mapUpdateRadiusMeters;
         this.routeCorridorMeters = routeCorridorMeters;
     }
@@ -109,6 +115,14 @@ public class NotificationConsumer {
                 if (alert) alerts++;
             }
             log.debug("{} for hazard {} delivered to {} session(s), {} alert(s)", frameType, event.hazardId(), sent, alerts);
+            if (ALERTABLE.contains(event.change())) {
+                try {
+                    pushNotifications.onHazardChanged(event);
+                } catch (RuntimeException e) {
+                    // Frames are already out; a retry would resend them, so push failures stop here.
+                    log.warn("Push notifications for hazard {} failed: {}", event.hazardId(), e.getMessage());
+                }
+            }
         }
     }
 

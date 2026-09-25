@@ -1,9 +1,9 @@
 import Foundation
 import UserNotifications
 
-/// Posts an immediate local notification when an alert-worthy frame arrives over the WebSocket.
-/// This is the explicit substitute for real APNs push per project scope (APNs needs an Apple
-/// Developer account/push certs, which this prototype doesn't require).
+/// Posts an immediate local notification when an alert-worthy frame arrives over the WebSocket
+/// (app open, or navigating in the background). Alerts while the app is closed come from APNs
+/// instead; see PushRegistration.
 @MainActor
 final class NotificationManager {
     static let shared = NotificationManager()

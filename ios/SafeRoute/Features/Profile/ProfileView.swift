@@ -235,6 +235,9 @@ struct AccountView: View {
 }
 
 struct NotificationPreferencesView: View {
+    @AppStorage(PushRegistration.enabledKey) private var backgroundAlerts = false
+    @ObservedObject private var push = PushRegistration.shared
+    @ObservedObject private var location = LocationManager.shared
     @State private var prefs: NotificationPreferences?
     @State private var errorMessage: String?
     @State private var saveTask: Task<Void, Never>?
@@ -270,6 +273,7 @@ struct NotificationPreferencesView: View {
                             .foregroundStyle(SR.Palette.textSecondary)
                     }
                 }
+                backgroundAlertsSection
             } else if let errorMessage {
                 SREmptyState(systemImage: "exclamationmark.triangle", title: "Couldn't load preferences", message: errorMessage)
             } else {
@@ -283,6 +287,39 @@ struct NotificationPreferencesView: View {
                 prefs = try await APIClient.shared.send(.notificationPreferences, as: NotificationPreferences.self)
             } catch {
                 errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private var backgroundAlertsSection: some View {
+        VStack(alignment: .leading, spacing: SR.Space.sectionTitleToCard) {
+            SRSectionHeader(title: "When SafeRoute is closed")
+            SRCard {
+                Toggle("Background hazard alerts", isOn: Binding(
+                    get: { backgroundAlerts },
+                    set: { on in
+                        if on {
+                            Task { backgroundAlerts = await push.enable() }
+                        } else {
+                            push.disable()
+                            backgroundAlerts = false
+                        }
+                    }))
+                    .font(SR.Font.body)
+                Text("Get a notification about new hazards near you even when the app is closed. Your phone sends its approximate location to SafeRoute when you move about 500 m. Only the latest location is kept, and it's deleted after 2 hours.")
+                    .font(SR.Font.meta)
+                    .foregroundStyle(SR.Palette.textSecondary)
+                if backgroundAlerts, location.authorizationStatus != .authorizedAlways {
+                    Button("Set Location to \"Always\" in Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                    }
+                    .font(SR.Font.meta)
+                }
+                if let reason = push.unavailableReason {
+                    Text(reason)
+                        .font(SR.Font.meta)
+                        .foregroundStyle(SR.Palette.textSecondary)
+                }
             }
         }
     }
