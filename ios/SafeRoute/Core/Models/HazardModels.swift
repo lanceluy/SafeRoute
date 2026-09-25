@@ -165,6 +165,17 @@ enum Severity: String, Codable, Comparable, TolerantDecodableEnum {
         }
     }
 
+    /// Map marker palette: strong red only for high severity, muted amber for medium, so the map
+    /// stays readable when many hazards are shown.
+    var markerColor: UIColor {
+        switch self {
+        case .high: return .systemRed
+        case .medium: return UIColor(red: 0.85, green: 0.62, blue: 0.27, alpha: 1)
+        case .low: return UIColor(red: 0.62, green: 0.60, blue: 0.42, alpha: 1)
+        case .unknown: return .systemGray
+        }
+    }
+
     var uiColor: UIColor {
         switch self {
         case .high: return .systemRed

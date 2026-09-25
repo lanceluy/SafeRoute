@@ -180,8 +180,9 @@ and makes no "safer route" claim; it never shows an unchecked route as clear. Ma
 alternates are preferred; waypoint detours (which can pull walkers onto streets) are a last resort
 for medium/high hazards and are assessed with their own query.
 
-App structure: **Map** (clustered hazard map, filters, destination search, safer-route
-comparison, live alerts) · **Reports** (My Reports with processing outcome) · **Alerts** ·
+App structure: **Map** (search and filters on top; a mostly unobstructed, clustered hazard map;
+one bottom panel that is either the nearby summary with a Report button, a selected hazard's
+preview, the safer-route comparison or navigation) · **Reports** (My Reports with processing outcome) · **Alerts** ·
 **Profile** (trust level, contributions, notification preferences).
 
 ## Benchmarks

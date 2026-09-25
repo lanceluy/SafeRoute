@@ -396,12 +396,29 @@ final class RouteLine: MKPolyline {
 
 final class HazardRing: MKCircle {}
 
-/// 38 pt severity disc with the type glyph (46 pt when selected). The type name is shown as a
-/// small label only when it helps: selected, or zoomed in close with few pins.
+/// 38 pt severity disc with the type glyph (46 pt when selected), a light shadow and the calmer
+/// marker palette. The type name is shown as a small label only when it helps: selected, or
+/// zoomed in close with few pins.
 final class HazardPinView: MKAnnotationView {
     static let reuseId = "hazard"
-    private static let normalSize: CGFloat = 38
-    private static let selectedSize: CGFloat = 46
+
+    struct Metrics {
+        /// The view's frame: also the area MapKit uses for collisions, so a frame larger than the
+        /// disc makes neighbouring pins cluster sooner.
+        var viewSize: CGFloat
+        var discSize: CGFloat
+        var selectedDiscSize: CGFloat
+        var glyphPointSize: CGFloat
+        var borderWidth: CGFloat
+        var shadowOpacity: Float
+        var shadowRadius: CGFloat
+    }
+
+    /// The frame is larger than the disc, so MapKit starts clustering neighbouring pins sooner.
+    static let metrics = Metrics(viewSize: 56, discSize: 38, selectedDiscSize: 46, glyphPointSize: 15,
+                                 borderWidth: 2.5, shadowOpacity: 0.08, shadowRadius: 2)
+
+    static func color(for severity: Severity) -> UIColor { severity.markerColor }
 
     private let disc = UIView()
     private let glyph = UIImageView()
@@ -410,20 +427,22 @@ final class HazardPinView: MKAnnotationView {
 
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        frame = CGRect(x: 0, y: 0, width: Self.normalSize, height: Self.normalSize)
-        disc.frame = bounds
-        disc.layer.cornerRadius = Self.normalSize / 2
+        let m = Self.metrics
+        frame = CGRect(x: 0, y: 0, width: m.viewSize, height: m.viewSize)
+        disc.frame = CGRect(x: (m.viewSize - m.discSize) / 2, y: (m.viewSize - m.discSize) / 2,
+                            width: m.discSize, height: m.discSize)
+        disc.layer.cornerRadius = m.discSize / 2
         disc.layer.borderColor = UIColor.white.cgColor
-        disc.layer.borderWidth = 2.5
+        disc.layer.borderWidth = m.borderWidth
         disc.layer.shadowColor = UIColor.black.cgColor
-        disc.layer.shadowOpacity = 0.18
-        disc.layer.shadowRadius = 4
-        disc.layer.shadowOffset = CGSize(width: 0, height: 2)
+        disc.layer.shadowOpacity = m.shadowOpacity
+        disc.layer.shadowRadius = m.shadowRadius
+        disc.layer.shadowOffset = CGSize(width: 0, height: m.shadowRadius / 2)
         disc.isUserInteractionEnabled = false
         addSubview(disc)
         glyph.tintColor = .white
         glyph.contentMode = .center
-        glyph.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+        glyph.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: m.glyphPointSize, weight: .semibold)
         glyph.frame = disc.bounds
         disc.addSubview(glyph)
         label.font = .preferredFont(forTextStyle: .caption2).withWeight(.semibold)
@@ -453,7 +472,7 @@ final class HazardPinView: MKAnnotationView {
     private func configure() {
         guard let hazard = (annotation as? HazardAnnotation)?.hazard else { return }
         clusteringIdentifier = "hazards"
-        disc.backgroundColor = hazard.status.isActive ? hazard.severity.uiColor : .systemGray
+        disc.backgroundColor = hazard.status.isActive ? Self.color(for: hazard.severity) : .systemGray
         glyph.image = UIImage(systemName: hazard.type.symbolName)
         alpha = hazard.status.isActive ? 1 : 0.6
         displayPriority = hazard.severity == .high ? .required : .defaultHigh
@@ -461,7 +480,7 @@ final class HazardPinView: MKAnnotationView {
         label.sizeToFit()
         label.frame.size.width += 12
         label.frame.size.height += 4
-        label.center = CGPoint(x: bounds.midX, y: bounds.maxY + label.bounds.height / 2 + 6)
+        label.center = CGPoint(x: bounds.midX, y: disc.frame.maxY + label.bounds.height / 2 + 6)
         isAccessibilityElement = true
         accessibilityLabel = hazard.accessibilitySummary
         accessibilityHint = "Double tap for a summary"
@@ -472,30 +491,35 @@ final class HazardPinView: MKAnnotationView {
         label.isHidden = !showLabel
         guard selected != isEmphasized else { return }
         isEmphasized = selected
-        let scale = selected ? Self.selectedSize / Self.normalSize : 1
+        let scale = selected ? Self.metrics.selectedDiscSize / Self.metrics.discSize : 1
         let change = { self.disc.transform = CGAffineTransform(scaleX: scale, y: scale) }
         if animated { UIView.animate(withDuration: 0.2, animations: change) } else { change() }
         zPriority = selected ? .defaultSelected : .defaultUnselected
     }
 }
 
-/// Count bubble in the most severe member's color.
+/// Clusters look nothing like single hazards: a white count badge with a ring in the most severe
+/// member's color, instead of a filled disc with a glyph.
 final class HazardClusterView: MKAnnotationView {
-    private let bubble = UILabel()
-    private static let size: CGFloat = 42
+    private let badge = UILabel()
+    private static let viewSize: CGFloat = 56
+    private static let badgeHeight: CGFloat = 38
 
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        frame = CGRect(x: 0, y: 0, width: Self.size, height: Self.size)
-        bubble.frame = bounds
-        bubble.textAlignment = .center
-        bubble.textColor = .white
-        bubble.font = .systemFont(ofSize: 15, weight: .bold)
-        bubble.layer.cornerRadius = Self.size / 2
-        bubble.layer.masksToBounds = true
-        bubble.layer.borderColor = UIColor.white.cgColor
-        bubble.layer.borderWidth = 3
-        addSubview(bubble)
+        frame = CGRect(x: 0, y: 0, width: Self.viewSize, height: Self.viewSize)
+        badge.textAlignment = .center
+        badge.font = .systemFont(ofSize: 15, weight: .bold)
+        badge.textColor = UIColor(SR.Palette.textPrimary)
+        badge.backgroundColor = UIColor(SR.Palette.surface)
+        badge.layer.cornerRadius = Self.badgeHeight / 2
+        badge.layer.masksToBounds = true
+        badge.layer.borderWidth = 2.5
+        addSubview(badge)
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOpacity = 0.10
+        layer.shadowRadius = 3
+        layer.shadowOffset = CGSize(width: 0, height: 1)
         collisionMode = .circle
         displayPriority = .required
     }
@@ -510,10 +534,14 @@ final class HazardClusterView: MKAnnotationView {
         guard let cluster = annotation as? MKClusterAnnotation else { return }
         let members = cluster.memberAnnotations.compactMap { ($0 as? HazardAnnotation)?.hazard }
         let worst = members.map(\.severity).max() ?? .medium
-        bubble.text = "\(cluster.memberAnnotations.count)"
-        bubble.backgroundColor = worst.uiColor
+        let count = cluster.memberAnnotations.count
+        badge.text = "\(count)"
+        badge.layer.borderColor = worst.markerColor.cgColor
+        let width = max(Self.badgeHeight, badge.intrinsicContentSize.width + 16)
+        badge.frame = CGRect(x: (Self.viewSize - width) / 2, y: (Self.viewSize - Self.badgeHeight) / 2,
+                             width: width, height: Self.badgeHeight)
         isAccessibilityElement = true
-        accessibilityLabel = "\(cluster.memberAnnotations.count) hazards, most severe: \(worst.label.lowercased())"
+        accessibilityLabel = "Group of \(count) hazards, most severe: \(worst.label.lowercased())"
         accessibilityHint = "Double tap to zoom in"
         accessibilityTraits = .button
     }

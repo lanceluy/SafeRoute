@@ -1,20 +1,24 @@
 import SwiftUI
 import MapKit
 
-/// Home screen: an edge-to-edge map with glass controls floating over it.
+/// Home screen: an edge-to-edge map with a few glass controls floating over it.
+///
+///   Top     search + filter button (plus status banners only when something is wrong)
+///   Middle  mostly unobstructed map, small recenter control
+///   Bottom  exactly one panel: nearby summary + Report  →  selected hazard preview
+///           →  route comparison  →  navigation. Panels replace each other; they never stack.
 struct MapScreen: View {
     @EnvironmentObject private var appState: AppState
     @ObservedObject var model: MapViewModel
     @ObservedObject private var socket = WebSocketClient.shared
     @ObservedObject private var connectivity = ConnectivityMonitor.shared
     @ObservedObject private var location = LocationManager.shared
-    @ObservedObject private var places = PlaceNameCache.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var isShowingReport = false
     @State private var isShowingFilters = false
     @State private var isShowingPlanner = false
-    @State private var isNearbyExpanded = false
+    @State private var isShowingNearby = false
     @State private var detailHazard: SelectedHazard?
     @State private var isFollowingUser = true
 
@@ -32,29 +36,20 @@ struct MapScreen: View {
             labelledHazardIds: Set(model.navigation?.routeHazards.map(\.id) ?? []),
             onFollowChange: { isFollowingUser = $0 },
             onSelectHazard: { id in
-                // While walking, skip the preview and go straight to details.
                 if model.isNavigating { detailHazard = SelectedHazard(id: id) }
                 else { withAnimation(motion) { model.selectedHazardId = id } }
             },
-            onTapBackground: { withAnimation(motion) { model.selectedHazardId = nil; isNearbyExpanded = false } },
+            onTapBackground: { withAnimation(motion) { model.selectedHazardId = nil } },
             onRegionChange: { model.regionChanged($0) })
         .ignoresSafeArea()
         .accessibilityLabel("Hazard map")
         .safeAreaInset(edge: .top, spacing: 0) {
             if let session = model.navigation {
-                VStack(spacing: SR.Space.sm) {
-                    NavigationTopPanel(session: session, model: model,
-                                       onSelectHazard: { detailHazard = SelectedHazard(id: $0) })
-                    if let alert = model.latestAlert {
-                        AlertBanner(frame: alert,
-                                    onView: { detailHazard = SelectedHazard(id: alert.hazardId); model.dismissAlert() },
-                                    onReroute: { model.dismissAlert(); Task { await model.reroute() } },
-                                    onDismiss: { model.dismissAlert() })
-                            .padding(.horizontal, SR.Space.screenMargin)
-                    }
-                }
+                // Navigation owns the top: directions and the next relevant warning.
+                NavigationTopPanel(session: session, model: model,
+                                   onSelectHazard: { detailHazard = SelectedHazard(id: $0) })
             } else {
-                topControls
+                topBar
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -64,13 +59,24 @@ struct MapScreen: View {
                                       onEnd: { model.endNavigation() },
                                       onFinish: { model.clearRoute() })
             } else {
-                bottomControls
+                bottomArea
             }
         }
         .onChange(of: model.hazards) { _, _ in model.syncNavigationHazards() }
         .sheet(isPresented: $isShowingReport) { ReportFlowView() }
         .sheet(isPresented: $isShowingFilters) { FilterSheet(filters: $model.filters) }
         .sheet(isPresented: $isShowingPlanner) { RoutePlannerView() }
+        .sheet(isPresented: $isShowingNearby) {
+            NearbyHazardsSheet(items: nearby.items, scope: nearby.scope) { id in
+                isShowingNearby = false
+                withAnimation(motion) {
+                    model.selectedHazardId = id
+                    if let hazard = model.hazards[id] { model.command = .init(command: .focus(hazard.coordinate)) }
+                }
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
         .sheet(item: $detailHazard) { selection in
             HazardDetailView(hazardId: selection.id, map: model, onFindSaferRoute: {
                 detailHazard = nil
@@ -87,75 +93,47 @@ struct MapScreen: View {
             if let id { detailHazard = SelectedHazard(id: id); appState.hazardToShow = nil }
         }
         .onAppear {
-            location.onSignificantChange = { coordinate in
-                WebSocketClient.shared.updateLocation(coordinate)
-            }
+            location.onSignificantChange = { coordinate in WebSocketClient.shared.updateLocation(coordinate) }
             location.requestPermission()
-            #if DEBUG
-            // Screenshot automation can't answer the system prompt.
-            if ProcessInfo.processInfo.environment["SAFEROUTE_DEMO_SKIP_PROMPTS"] == nil {
-                NotificationManager.shared.requestPermission()
-            }
-            #else
-            NotificationManager.shared.requestPermission()
-            #endif
             if let here = location.currentLocation { WebSocketClient.shared.updateLocation(here) }
         }
         #if DEBUG
         .task { await runDemoIntent() }
         #endif
         .animation(motion, value: model.latestAlert)
-        .animation(motion, value: model.loadState)
         .animation(motion, value: model.selectedHazardId)
+        .animation(motion, value: model.plan?.id)
     }
+
+    /// "Nearby" in the summary means within this distance of the user (MapViewModel.nearbyActive).
+    static let nearbyRadiusMeters: Double = 1000
 
     private var motion: Animation? { SR.Motion.standard(reduceMotion: reduceMotion) }
 
-    private func startNavigation() {
-        guard location.currentLocation != nil else {
-            appState.show(Toast(message: LocationManager.isSimulator
-                                ? "Navigation needs your location. In the Simulator: Features ▸ Location ▸ Custom Location."
-                                : "Navigation needs your location. Waiting for a position…",
-                                systemImage: "location.slash", style: .warning))
-            location.refresh()
-            return
-        }
-        withAnimation(motion) { model.startNavigation() }
-    }
+    // MARK: Top — search + filters
 
-    // MARK: Top — greeting, safety summary, search
-
-    private var topControls: some View {
-        VStack(spacing: SR.Space.sm) {
-            SRGlassCard(padding: SR.Space.md) {
-                HStack(alignment: .top, spacing: SR.Space.sm) {
-                    VStack(alignment: .leading, spacing: SR.Space.xxs) {
-                        Text(greeting)
-                            .font(SR.Font.greeting)
-                            .foregroundStyle(SR.Palette.textPrimary)
-                        safetySummary
-                    }
-                    Spacer(minLength: 0)
+    private var topBar: some View {
+        VStack(spacing: SR.Space.xs) {
+            HStack(spacing: SR.Space.xs) {
+                SRSearchField(placeholder: "Where are you going?", value: model.plan.map { "To \($0.destinationName)" }) {
+                    isShowingPlanner = true
                 }
-                HStack(spacing: SR.Space.xs) {
-                    SRSearchField(placeholder: "Where are you going?", value: model.plan.map { "To \($0.destinationName)" }) {
-                        isShowingPlanner = true
-                    }
-                    .accessibilityLabel(model.plan == nil ? "Where are you going? Plan a safe walking route" : "Change destination")
+                .accessibilityLabel(model.plan == nil ? "Where are you going? Plan a safe walking route" : "Change destination")
 
-                    Button { isShowingFilters = true } label: {
-                        Image(systemName: "line.3.horizontal.decrease")
-                            .font(SR.Font.cardTitle)
-                            .foregroundStyle(model.filters.isDefault ? SR.Palette.textPrimary : SR.Palette.onNavy)
-                            .frame(width: SR.Layout.minTouchTarget + 4, height: SR.Layout.minTouchTarget + 4)
-                            .background(model.filters.isDefault ? SR.Palette.surface.opacity(0.85) : SR.Palette.navy,
-                                        in: RoundedRectangle(cornerRadius: SR.Radius.button, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: SR.Radius.button, style: .continuous)
-                                .strokeBorder(SR.Palette.border, lineWidth: model.filters.isDefault ? 1 : 0))
-                    }
-                    .accessibilityLabel(model.filters.isDefault ? "Filters" : "Filters, active")
+                Button { isShowingFilters = true } label: {
+                    Image(systemName: "line.3.horizontal.decrease")
+                        .font(SR.Font.body.weight(.semibold))
+                        .foregroundStyle(model.filters.isDefault ? SR.Palette.textPrimary : SR.Palette.onNavy)
+                        .frame(width: SR.Layout.minTouchTarget + 4, height: SR.Layout.minTouchTarget + 4)
+                        .background(model.filters.isDefault ? SR.Palette.surface.opacity(0.85) : SR.Palette.navy,
+                                    in: RoundedRectangle(cornerRadius: SR.Radius.button, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: SR.Radius.button, style: .continuous)
+                            .strokeBorder(SR.Palette.border, lineWidth: model.filters.isDefault ? 1 : 0))
                 }
+                .accessibilityLabel(model.filters.isDefault ? "Filters" : "Filters, active")
             }
+            .padding(SR.Space.xs)
+            .srGlassSurface(radius: SR.Radius.button + SR.Space.xs)
 
             statusBanners
 
@@ -171,44 +149,7 @@ struct MapScreen: View {
         .padding(.top, SR.Space.xxs)
     }
 
-    private var greeting: String {
-        let first = appState.currentUser?.displayName?.split(separator: " ").first.map(String.init)
-        return first.map { "\(Format.greeting()), \($0) 👋" } ?? "\(Format.greeting()) 👋"
-    }
-
-    @ViewBuilder
-    private var safetySummary: some View {
-        let nearby = model.nearbyActive
-        let high = nearby.filter { $0.hazard.severity == .high }.count
-        let area = location.currentLocation.flatMap { places.neighbourhood(for: $0) }
-        if location.currentLocation == nil {
-            Text(locationSummary)
-                .font(SR.Font.secondary).foregroundStyle(SR.Palette.textSecondary)
-        } else if high > 0 {
-            Label("Heads up · \(high) high-severity hazard\(high == 1 ? "" : "s") nearby", systemImage: "exclamationmark.triangle.fill")
-                .font(SR.Font.secondary.weight(.medium))
-                .foregroundStyle(SR.Palette.critical)
-        } else {
-            VStack(alignment: .leading, spacing: 2) {
-                // "No reports" is not "safe": say what we know, not more.
-                Text(nearby.isEmpty ? "No active reports within 1 km" : "\(nearby.count) reported hazard\(nearby.count == 1 ? "" : "s") within 1 km")
-                    .font(SR.Font.secondary)
-                    .foregroundStyle(SR.Palette.textSecondary)
-                if let area {
-                    Text("Stay aware around \(area)").font(SR.Font.meta).foregroundStyle(SR.Palette.textTertiary)
-                }
-            }
-        }
-    }
-
-    private var locationSummary: String {
-        switch location.state {
-        case .denied: return "Allow location access to see hazards near you"
-        case .notDetermined: return "Allow location access to see hazards near you"
-        default: return "Finding your location…"
-        }
-    }
-
+    /// Only shown when something needs attention; a healthy map has no banners.
     @ViewBuilder
     private var statusBanners: some View {
         if !connectivity.isOnline {
@@ -225,8 +166,6 @@ struct MapScreen: View {
         } else if let error = model.loadState.errorMessage {
             StateBanner(text: error, systemImage: "exclamationmark.triangle.fill", tint: SR.Palette.critical,
                         actionTitle: "Try again") { Task { await model.refresh() } }
-        } else if model.loadState.isLoading && model.hazards.isEmpty {
-            StateBanner(text: "Loading nearby hazards…", systemImage: "hourglass")
         }
         switch location.state {
         case .denied:
@@ -235,8 +174,7 @@ struct MapScreen: View {
                 if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
             }
         case .unavailable where LocationManager.isSimulator:
-            // The Simulator has no GPS: it reports nothing until a location is chosen.
-            StateBanner(text: "The Simulator has no location set. In the Simulator menu choose Features ▸ Location ▸ Custom Location (e.g. 14.5547, 121.0244).",
+            StateBanner(text: "The Simulator has no location set. Choose Features ▸ Location ▸ Custom Location (e.g. 14.5547, 121.0244).",
                         systemImage: "location.slash", tint: SR.Palette.warning)
         case .unavailable:
             StateBanner(text: "Can't find your location right now", systemImage: "location.slash", tint: SR.Palette.warning,
@@ -246,121 +184,133 @@ struct MapScreen: View {
         }
     }
 
-    // MARK: Bottom — floating controls
+    // MARK: Bottom — one panel at a time
 
-    private var bottomControls: some View {
-        VStack(spacing: SR.Space.sm) {
-            if let hazard = model.selectedHazard {
-                SRHazardPreviewCard(
-                    hazard: hazard,
-                    distance: Format.distance(from: location.currentLocation, to: hazard.coordinate),
-                    onDetails: { detailHazard = SelectedHazard(id: hazard.id) },
-                    onSafeRoute: { isShowingPlanner = true },
-                    onClose: { model.selectedHazardId = nil })
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            } else if let plan = model.plan {
-                RouteComparisonCard(plan: plan, useSafer: $model.useSaferRoute,
-                                    onClose: { model.clearRoute() },
-                                    onSelectHazard: { model.selectedHazardId = $0 },
-                                    onStart: startNavigation)
-            } else {
-                nearbySummary
-            }
-
-            HStack(spacing: SR.Space.sm) {
-                Button { isShowingReport = true } label: {
-                    Label("Report hazard", systemImage: "plus")
+    private var bottomArea: some View {
+        VStack(alignment: .trailing, spacing: SR.Space.sm) {
+            recenterButton
+            Group {
+                if let hazard = model.selectedHazard {
+                    SRHazardPreviewCard(
+                        hazard: hazard,
+                        distance: Format.distance(from: location.currentLocation, to: hazard.coordinate),
+                        onDetails: { detailHazard = SelectedHazard(id: hazard.id) },
+                        onSafeRoute: { isShowingPlanner = true },
+                        onClose: { model.selectedHazardId = nil })
+                } else if let plan = model.plan {
+                    RouteComparisonCard(plan: plan, useSafer: $model.useSaferRoute,
+                                        onClose: { model.clearRoute() },
+                                        onSelectHazard: { model.selectedHazardId = $0 },
+                                        onStart: startNavigation)
+                } else {
+                    summaryPanel
                 }
-                .buttonStyle(.srPrimary)
-                .accessibilityHint("Starts a guided hazard report")
-
-                Button {
-                    if location.currentLocation != nil {
-                        model.command = .init(command: .recenterOnUser)
-                    } else if location.state == .denied {
-                        appState.show(Toast(message: "Allow location access in Settings to center the map on you.",
-                                            systemImage: "location.slash.fill", style: .warning))
-                    } else {
-                        location.refresh()
-                        appState.show(Toast(message: LocationManager.isSimulator
-                                            ? "No location yet. In the Simulator: Features ▸ Location ▸ Custom Location."
-                                            : "Finding your location…",
-                                            systemImage: "location", style: .info))
-                    }
-                } label: {
-                    Image(systemName: "location.fill")
-                        .font(SR.Font.cardTitle)
-                        .foregroundStyle(SR.Palette.navy)
-                        .frame(width: SR.Layout.buttonHeight, height: SR.Layout.buttonHeight)
-                        .srGlassSurface(radius: SR.Radius.button)
-                }
-                .accessibilityLabel("Center on my location")
             }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
         .padding(.horizontal, SR.Space.screenMargin)
-        .padding(.bottom, SR.Space.sm)
+        .padding(.bottom, SR.Space.xs)
     }
 
-    @ViewBuilder
-    private var nearbySummary: some View {
-        let nearby = model.nearbyActive
-        if !nearby.isEmpty {
-            SRGlassCard(padding: SR.Space.md) {
-                Button {
-                    withAnimation(motion) { isNearbyExpanded.toggle() }
-                } label: {
-                    HStack(spacing: SR.Space.sm) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(nearby.count) hazard\(nearby.count == 1 ? "" : "s") nearby")
-                                .font(SR.Font.cardTitle)
-                                .foregroundStyle(SR.Palette.textPrimary)
-                            Text(severityBreakdown(nearby.map(\.hazard)))
-                                .font(SR.Font.secondary)
-                                .foregroundStyle(SR.Palette.textSecondary)
+    private var summaryPanel: some View {
+        HStack(spacing: SR.Space.sm) {
+            Button { isShowingNearby = true } label: {
+                HStack(spacing: SR.Space.xs) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        // Full wording when it fits, a shorter form on narrow screens or large text.
+                        ViewThatFits(in: .horizontal) {
+                            Text(nearby.headline).lineLimit(1)
+                            Text(nearby.shortHeadline).lineLimit(1)
                         }
-                        Spacer()
-                        Image(systemName: "chevron.up")
-                            .rotationEffect(.degrees(isNearbyExpanded ? 0 : 180))
+                        .font(SR.Font.cardTitle)
+                        .foregroundStyle(SR.Palette.textPrimary)
+                        Text(nearby.scope)
+                            .font(SR.Font.secondary)
                             .foregroundStyle(SR.Palette.textSecondary)
+                            .lineLimit(1)
                     }
-                    .contentShape(Rectangle())
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.up")
+                        .font(SR.Font.meta.weight(.semibold))
+                        .foregroundStyle(SR.Palette.textSecondary)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(nearby.count) hazards within 1 kilometer, \(severityBreakdown(nearby.map(\.hazard)))")
-                .accessibilityHint(isNearbyExpanded ? "Collapses the list" : "Shows the nearest hazards")
-
-                if isNearbyExpanded {
-                    ForEach(nearby.prefix(3), id: \.hazard.id) { item in
-                        Button { model.selectedHazardId = item.hazard.id } label: {
-                            HStack(spacing: SR.Space.sm) {
-                                HazardIcon(type: item.hazard.type, severity: item.hazard.severity, size: 28)
-                                Text(item.hazard.type.displayName).font(SR.Font.body).foregroundStyle(SR.Palette.textPrimary)
-                                Spacer()
-                                Text(Format.distance(item.distance)).font(SR.Font.secondary.monospacedDigit())
-                                    .foregroundStyle(SR.Palette.textSecondary)
-                            }
-                            .frame(minHeight: SR.Layout.minTouchTarget)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("\(item.hazard.accessibilitySummary), \(Format.distance(item.distance)) away")
-                    }
-                }
+                .frame(minHeight: SR.Layout.minTouchTarget + 8)
+                .contentShape(Rectangle())
             }
-        } else if model.loadState == .loaded, location.currentLocation != nil {
-            Label("No active hazards within 1 km", systemImage: "checkmark.shield")
-                .font(SR.Font.secondary)
-                .foregroundStyle(SR.Palette.textSecondary)
-                .frame(maxWidth: .infinity, minHeight: SR.Layout.minTouchTarget)
-                .srGlassSurface(radius: SR.Radius.button)
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(nearby.headline), \(nearby.scope)")
+            .accessibilityHint("Shows the list of nearby hazards")
+
+            Button { isShowingReport = true } label: {
+                Label("Report", systemImage: "plus")
+                    .font(SR.Font.body.weight(.semibold))
+                    .foregroundStyle(SR.Palette.onNavy)
+                    .padding(.horizontal, SR.Space.md)
+                    .frame(minHeight: SR.Layout.minTouchTarget + 4)
+                    .background(SR.Palette.navy, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Report a hazard")
+            .accessibilityHint("Starts a guided hazard report")
         }
+        .padding(.leading, SR.Space.md)
+        .padding(.trailing, SR.Space.sm)
+        .padding(.vertical, SR.Space.sm)
+        .srGlassSurface(radius: SR.Radius.card)
     }
 
-    private func severityBreakdown(_ hazards: [Hazard]) -> String {
-        let counts = [(Severity.high, "high"), (.medium, "medium"), (.low, "low")]
-            .map { severity, name in (hazards.filter { $0.severity == severity }.count, name) }
-            .filter { $0.0 > 0 }
-        return counts.map { "\($0.0) \($0.1)" }.joined(separator: " · ")
+    private var recenterButton: some View {
+        Button {
+            if location.currentLocation != nil {
+                model.command = .init(command: .recenterOnUser)
+            } else if location.state == .denied {
+                appState.show(Toast(message: "Allow location access in Settings to center the map on you.",
+                                    systemImage: "location.slash.fill", style: .warning))
+            } else {
+                location.refresh()
+            }
+        } label: {
+            Image(systemName: "location.fill")
+                .font(SR.Font.body)
+                .foregroundStyle(SR.Palette.navy)
+                .frame(width: SR.Layout.minTouchTarget, height: SR.Layout.minTouchTarget)
+                .srGlassSurface(radius: SR.Layout.minTouchTarget / 2)
+        }
+        .accessibilityLabel("Center on my location")
+    }
+
+    // MARK: Nearby scope
+
+    /// "Nearby" = active hazards within 1 km of the user; without a location, the visible map.
+    private var nearby: (items: [(hazard: Hazard, distance: Double?)], headline: String, shortHeadline: String, scope: String) {
+        let items: [(hazard: Hazard, distance: Double?)]
+        let scope: String
+        if location.currentLocation != nil {
+            items = model.nearbyActive.map { ($0.hazard, Optional($0.distance)) }
+            scope = "Within \(Format.distance(Self.nearbyRadiusMeters)) of you"
+        } else {
+            items = model.visibleHazards.filter { $0.status.isActive }.map { ($0, nil) }
+            scope = "In the visible map area"
+        }
+        guard !items.isEmpty else {
+            let text = model.loadState.isLoading ? "Loading hazards…" : "No active reports"
+            return (items, text, text, scope)
+        }
+        let high = items.filter { $0.hazard.severity == .high }.count
+        return (items, "\(items.count) nearby" + (high > 0 ? " · \(high) high severity" : ""),
+                "\(items.count) hazard\(items.count == 1 ? "" : "s") near you", scope)
+    }
+
+    private func startNavigation() {
+        guard location.currentLocation != nil else {
+            appState.show(Toast(message: LocationManager.isSimulator
+                                ? "Navigation needs your location. In the Simulator: Features ▸ Location ▸ Custom Location."
+                                : "Navigation needs your location. Waiting for a position…",
+                                systemImage: "location.slash", style: .warning))
+            location.refresh()
+            return
+        }
+        withAnimation(motion) { model.startNavigation() }
     }
 
     #if DEBUG
@@ -398,6 +348,88 @@ struct MapScreen: View {
         }
     }
     #endif
+}
+
+/// The expanded nearby summary: severity breakdown and the full list, nearest first.
+private struct NearbyHazardsSheet: View {
+    let items: [(hazard: Hazard, distance: Double?)]
+    let scope: String
+    let onSelect: (UUID) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    severityBreakdown
+                } footer: {
+                    Text(scope)
+                }
+                Section("Hazards") {
+                    if items.isEmpty {
+                        Text("No active reports").foregroundStyle(SR.Palette.textSecondary)
+                    }
+                    ForEach(items, id: \.hazard.id) { item in
+                        Button { onSelect(item.hazard.id) } label: {
+                            HStack(spacing: SR.Space.sm) {
+                                HazardIcon(type: item.hazard.type, severity: item.hazard.severity, size: 28)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.hazard.type.displayName).font(SR.Font.body).foregroundStyle(SR.Palette.textPrimary)
+                                    Text("\(item.hazard.severity.label) · \(item.hazard.status.label)")
+                                        .font(SR.Font.meta).foregroundStyle(SR.Palette.textSecondary)
+                                }
+                                Spacer()
+                                if let distance = item.distance {
+                                    Text(Format.distance(distance)).font(SR.Font.secondary.monospacedDigit())
+                                        .foregroundStyle(SR.Palette.textSecondary)
+                                }
+                            }
+                            .frame(minHeight: SR.Layout.minTouchTarget)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(item.distance.map { "\(item.hazard.accessibilitySummary), \(Format.distance($0)) away" }
+                                            ?? item.hazard.accessibilitySummary)
+                    }
+                }
+            }
+            .navigationTitle("Nearby hazards")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private var severityBreakdown: some View {
+        let levels: [Severity] = [.high, .medium, .low]
+        let counts = levels.map { level in items.filter { $0.hazard.severity == level }.count }
+        let total = max(1, counts.reduce(0, +))
+        return VStack(alignment: .leading, spacing: SR.Space.xs) {
+            GeometryReader { geo in
+                HStack(spacing: 2) {
+                    ForEach(Array(levels.enumerated()), id: \.offset) { index, level in
+                        if counts[index] > 0 {
+                            Rectangle()
+                                .fill(Color(uiColor: level.markerColor))
+                                .frame(width: max(4, geo.size.width * CGFloat(counts[index]) / CGFloat(total)))
+                        }
+                    }
+                }
+                .clipShape(Capsule())
+            }
+            .frame(height: 8)
+            .accessibilityHidden(true)
+            HStack(spacing: SR.Space.md) {
+                ForEach(Array(levels.enumerated()), id: \.offset) { index, level in
+                    HStack(spacing: SR.Space.xxs) {
+                        Circle().fill(Color(uiColor: level.markerColor)).frame(width: 8, height: 8)
+                        Text("\(counts[index]) \(level.label.lowercased())")
+                            .font(SR.Font.secondary)
+                            .foregroundStyle(SR.Palette.textPrimary)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+        }
+        .padding(.vertical, SR.Space.xxs)
+    }
 }
 
 struct SelectedHazard: Identifiable {

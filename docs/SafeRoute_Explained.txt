@@ -502,12 +502,22 @@ Sign in / Register
   refreshed automatically using the refresh token.
 
 Map tab
-  * Clustered hazard map (MKMapView) with color-coded pins by type and severity.
-  * Filters by hazard type and status.
-  * Greeting and hazard preview card, destination search, route planner and
-    comparison card, and navigation overlay.
-  * Updates live from WebSocket frames.
-  * "Report" button to start the report flow.
+  * Top: a "Where are you going?" search bar and a small filter button (type and
+    status). Warning banners appear only when something is wrong (offline, no
+    location, reports waiting to send).
+  * Middle: a mostly unobstructed hazard map (MKMapView). Pins are severity-
+    colored discs with the type icon: strong red for high severity, muted amber
+    for medium, a muted sand color for low. Nearby pins merge early into white
+    numbered badges, so a group never looks like a single hazard. A small button
+    re-centers the map on you. Updates live from WebSocket frames.
+  * Bottom: exactly one panel at a time, never stacked:
+      - the nearby summary ("23 nearby · 11 high severity", or "23 hazards near
+        you" on narrower screens; "nearby" means within 1 km of you) with a
+        compact "+ Report" button. Tapping the summary opens a sheet with a
+        severity breakdown and the full list, nearest first;
+      - a selected hazard's preview (tap a pin);
+      - the safer-route comparison card (after choosing a destination);
+      - directions and the next hazard warning during navigation.
 
 Report flow (5 steps)
   1. What did you see? (hazard type)
