@@ -2,11 +2,14 @@ package com.saferoute.backend.integration;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.saferoute.backend.support.IntegrationTestBase;
+import com.saferoute.backend.user.ModeratorBootstrap;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
@@ -17,6 +20,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 class AuthIntegrationTest extends IntegrationTestBase {
+
+    @Autowired
+    ModeratorBootstrap moderatorBootstrap;
 
     @Value("${saferoute.jwt.secret}")
     String jwtSecret;
@@ -138,6 +144,25 @@ class AuthIntegrationTest extends IntegrationTestBase {
         Integer grants = jdbc.queryForObject("SELECT count(*) FROM role_grants WHERE user_id = ?::uuid",
                 Integer.class, body.get("userId").asText());
         assertThat(grants).isZero();
+    }
+
+    @Test
+    void registeringAnAllowlistedEmailWithTrustEnabledGrantsModerator() throws Exception {
+        // The dev profile's path (trust-unverified-emails: true). Toggled on the shared bean rather
+        // than in a separate context, which would split the Kafka consumer groups.
+        ReflectionTestUtils.setField(moderatorBootstrap, "trustUnverifiedEmails", true);
+        try {
+            JsonNode body = json(mvc.perform(post("/api/auth/register").with(uniqueIp()).contentType(MediaType.APPLICATION_JSON)
+                    .content(toJson(Map.of("email", "promoted-moderator@test.local", "password", "password123",
+                            "displayName", "Dev Moderator")))).andReturn(), 201);
+
+            assertThat(body.get("role").asText()).isEqualTo("MODERATOR");
+            Integer grants = jdbc.queryForObject("SELECT count(*) FROM role_grants WHERE user_id = ?::uuid",
+                    Integer.class, body.get("userId").asText());
+            assertThat(grants).isEqualTo(1);
+        } finally {
+            ReflectionTestUtils.setField(moderatorBootstrap, "trustUnverifiedEmails", false);
+        }
     }
 
     @Test

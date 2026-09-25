@@ -114,7 +114,7 @@ actor APIClient {
             do {
                 let data = try await rawSendUnauthenticated(.refresh(refreshToken))
                 let response = try JSONDecoder.api.decode(AuthResponse.self, from: data)
-                KeychainService.shared.save(accessToken: response.token, refreshToken: response.refreshToken)
+                try KeychainService.shared.save(accessToken: response.token, refreshToken: response.refreshToken)
                 return true
             } catch APIError.server(let status, _, _) where status == 401 {
                 await MainActor.run { NotificationCenter.default.post(name: .sessionExpired, object: nil) }

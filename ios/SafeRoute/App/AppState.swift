@@ -96,8 +96,8 @@ final class AppState: ObservableObject {
         startSession()
     }
 
-    func handleAuthSuccess(_ response: AuthResponse) {
-        KeychainService.shared.save(accessToken: response.token, refreshToken: response.refreshToken)
+    func handleAuthSuccess(_ response: AuthResponse) throws {
+        try KeychainService.shared.save(accessToken: response.token, refreshToken: response.refreshToken)
         setUser(CurrentUser(id: response.userId, email: response.email, displayName: response.displayName, role: response.role))
         startSession()
     }
@@ -177,7 +177,7 @@ final class AppState: ObservableObject {
         guard let email = env["SAFEROUTE_DEMO_EMAIL"], let password = env["SAFEROUTE_DEMO_PASSWORD"],
               let response = try? await APIClient.shared.send(.login(LoginRequest(email: email, password: password)), as: AuthResponse.self)
         else { return false }
-        handleAuthSuccess(response)
+        guard (try? handleAuthSuccess(response)) != nil else { return false }
         switch env["SAFEROUTE_DEMO_TAB"] {
         case "reports": selectedTab = .reports
         case "alerts": selectedTab = .alerts
