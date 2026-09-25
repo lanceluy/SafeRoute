@@ -1,0 +1,243 @@
+import SwiftUI
+ 
+// MARK: - View
+ 
+struct ConsentView: View {
+ 
+   /// Called with `true` if the user agreed, `false` if they declined.
+   /// The caller decides what "declined" means for the rest of onboarding
+   /// (e.g. limited, no-location browsing — see the privacy doc, Section 11).
+   var onDecision: (Bool) -> Void
+ 
+   @State private var hasAgreed = false
+ 
+   var body: some View {
+       ScrollView {
+           VStack(alignment: .leading, spacing: 20) {
+ 
+               header
+ 
+               permissionRow(
+                   systemImage: "location.fill",
+                   titleKey: "consent.location.title",
+                   bodyKey: "consent.location.body"
+               )
+ 
+               permissionRow(
+                   systemImage: "camera.fill",
+                   titleKey: "consent.photos.title",
+                   bodyKey: "consent.photos.body"
+               )
+ 
+               permissionRow(
+                   systemImage: "map.fill",
+                   titleKey: "consent.reports.title",
+                   bodyKey: "consent.reports.body"
+               )
+ 
+               legalNotice
+ 
+               privacyPolicyLink
+ 
+               agreeToggle
+ 
+               actionButtons
+           }
+           .padding(24)
+       }
+       // Groups the whole screen as one region for VoiceOver so a user
+       // swiping through doesn't have to traverse every decorative icon
+       // separately before reaching the content that matters.
+       .accessibilityElement(children: .contain)
+   }
+ 
+   // MARK: - Subviews
+ 
+   private var header: some View {
+       VStack(alignment: .leading, spacing: 4) {
+           Text("consent.title", comment: "Consent screen heading, e.g. 'Before you start'")
+               .font(.title2.bold())
+               .accessibilityAddTraits(.isHeader)
+ 
+           Text("consent.subtitle", comment: "Short explanation of why this screen exists")
+               .font(.subheadline)
+               .foregroundStyle(.secondary)
+       }
+   }
+ 
+   private func permissionRow(systemImage: String, titleKey: String, bodyKey: String) -> some View {
+       HStack(alignment: .top, spacing: 12) {
+           Image(systemName: systemImage)
+               .font(.title3)
+               .foregroundStyle(.tint)
+               // Decorative — the meaning is carried by the text next to it,
+               // so VoiceOver should skip the icon itself.
+               .accessibilityHidden(true)
+               .frame(width: 28)
+ 
+           VStack(alignment: .leading, spacing: 4) {
+               Text(LocalizedStringKey(titleKey))
+                   .font(.headline)
+               Text(LocalizedStringKey(bodyKey))
+                   .font(.body)
+                   .foregroundStyle(.secondary)
+                   .fixedSize(horizontal: false, vertical: true) // wrap correctly at large Dynamic Type sizes
+           }
+       }
+       // Combine icon + title + body into a single VoiceOver stop instead
+       // of three, so the row reads as one coherent sentence.
+       .accessibilityElement(children: .combine)
+   }
+ 
+   private var legalNotice: some View {
+       Text("consent.legal_notice", comment: "One-line note that data handling follows RA 10173")
+           .font(.footnote)
+           .foregroundStyle(.secondary)
+   }
+ 
+   private var privacyPolicyLink: some View {
+       Button {
+           // Present the full SafeRoute_Privacy_Policy_and_Consent content
+           // (e.g. as a sheet rendering the same text as the markdown doc).
+       } label: {
+           Text("consent.view_full_policy", comment: "Link button to the full privacy policy")
+               .font(.body.weight(.medium))
+       }
+       .accessibilityHint(Text("consent.view_full_policy.hint", comment: "VoiceOver hint: opens the full policy in a new screen"))
+   }
+ 
+   private var agreeToggle: some View {
+       Toggle(isOn: $hasAgreed) {
+           Text("consent.agree_checkbox", comment: "Checkbox label: 'I understand and agree to the above.'")
+               .font(.body)
+               .fixedSize(horizontal: false, vertical: true)
+       }
+       .toggleStyle(.switch)
+       .accessibilityHint(Text("consent.agree_checkbox.hint", comment: "VoiceOver hint explaining what agreeing enables"))
+   }
+ 
+   private var actionButtons: some View {
+       HStack(spacing: 16) {
+           Button(role: .cancel) {
+               onDecision(false)
+           } label: {
+               Text("consent.decline", comment: "Decline button")
+                   .frame(maxWidth: .infinity)
+           }
+           .buttonStyle(.bordered)
+           .accessibilityHint(Text("consent.decline.hint", comment: "VoiceOver hint: continues in limited mode without location sharing"))
+ 
+           Button {
+               onDecision(true)
+           } label: {
+               Text("consent.agree_continue", comment: "Primary continue button")
+                   .frame(maxWidth: .infinity)
+           }
+           .buttonStyle(.borderedProminent)
+           .disabled(!hasAgreed)
+           // Disabled state needs its own VoiceOver explanation — otherwise
+           // a screen reader user just hears "dimmed" with no reason why.
+           .accessibilityHint(
+               Text(hasAgreed
+                    ? "consent.agree_continue.hint_enabled"
+                    : "consent.agree_continue.hint_disabled",
+                    comment: "VoiceOver hint for the continue button, changes once the checkbox is on")
+           )
+       }
+       .font(.body.weight(.semibold))
+   }
+}
+ 
+// MARK: - Preview
+ 
+#Preview {
+   ConsentView { agreed in
+       print("User \(agreed ? "agreed" : "declined")")
+   }
+}
+ 
+/*
+=======================================================================
+String Catalog (Localizable.xcstrings) — English + Filipino entries
+=======================================================================
+ 
+Add these keys via Xcode's String Catalog editor (Task 1.1), or paste the
+equivalent into Localizable.xcstrings directly. Filipino strings below are
+a first-pass translation — have a Filipino-speaking teammate review before
+shipping, especially "consent.agree_checkbox" and the button labels, which
+need to read naturally rather than literally.
+ 
+consent.title
+  en: "Before you start"
+  fil: "Bago magsimula"
+ 
+consent.subtitle
+  en: "SafeRoute needs a few things from you to help keep your walk safe."
+  fil: "Kailangan ng SafeRoute ng ilang impormasyon mula sa iyo para tulungan kang maging ligtas sa paglalakad."
+ 
+consent.location.title
+  en: "Your location"
+  fil: "Ang iyong lokasyon"
+ 
+consent.location.body
+  en: "Used to show nearby hazards and alert you before you reach them. You can turn this off anytime in Settings."
+  fil: "Ginagamit upang ipakita ang mga malapit na panganib at bigyan ka ng babala bago mo ito marating. Puwede mong i-off ito anumang oras sa Settings."
+ 
+consent.photos.title
+  en: "Photos you submit"
+  fil: "Mga larawang isinusumite mo"
+ 
+consent.photos.body
+  en: "Used to verify hazard reports. Faces are automatically blurred before your photo is shared."
+  fil: "Ginagamit upang i-verify ang mga ulat ng panganib. Awtomatikong nilalabo ang mga mukha bago i-share ang iyong larawan."
+ 
+consent.reports.title
+  en: "Your reports and routes"
+  fil: "Ang iyong mga ulat at ruta"
+ 
+consent.reports.body
+  en: "Shared with SafeRoute so we can map hazards and, in de-identified form, help local officials prioritize repairs."
+  fil: "Ibinabahagi sa SafeRoute upang mai-mapa ang mga panganib at, sa anyong hindi nakakakilanlan, matulungan ang mga lokal na opisyal na unahin ang mga kailangang ayusin."
+ 
+consent.legal_notice
+  en: "Your data is handled under the Philippine Data Privacy Act (RA 10173)."
+  fil: "Pinangangasiwaan ang iyong datos alinsunod sa Data Privacy Act of the Philippines (RA 10173)."
+ 
+consent.view_full_policy
+  en: "View Full Privacy Policy"
+  fil: "Tingnan ang Buong Patakaran sa Privacy"
+ 
+consent.view_full_policy.hint
+  en: "Opens the full privacy policy."
+  fil: "Binubuksan ang buong patakaran sa privacy."
+ 
+consent.agree_checkbox
+  en: "I understand and agree to the above."
+  fil: "Nauunawaan ko at sumasang-ayon ako sa nasa itaas."
+ 
+consent.agree_checkbox.hint
+  en: "Turning this on allows SafeRoute to collect your location and report data as described above."
+  fil: "Kapag ito ay ni-on, papayagan ng SafeRoute na kolektahin ang iyong lokasyon at datos ng ulat gaya ng inilarawan sa itaas."
+ 
+consent.decline
+  en: "Not Now"
+  fil: "Huwag Muna"
+ 
+consent.decline.hint
+  en: "Continues with limited features and no location sharing."
+  fil: "Magpapatuloy nang may limitadong tampok at walang pagbabahagi ng lokasyon."
+ 
+consent.agree_continue
+  en: "Agree & Continue"
+  fil: "Sumang-ayon at Magpatuloy"
+ 
+consent.agree_continue.hint_enabled
+  en: "Continues to SafeRoute."
+  fil: "Magpapatuloy sa SafeRoute."
+ 
+consent.agree_continue.hint_disabled
+  en: "Check the box above to enable this button."
+  fil: "Lagyan ng check ang kahon sa itaas upang paganahin ang button na ito."
+ 
+=======================================================================
+*/
