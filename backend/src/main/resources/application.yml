@@ -90,6 +90,20 @@ saferoute:
     map-update-radius-meters: 5000
     # A hazard within this distance of the commuter's active route (and ahead of them) is "on route".
     route-corridor-meters: 40
+  push:
+    # Background alerts. A device's last background location triggers alerts only while it is
+    # younger than this, and is deleted after it (significant-change updates can be far apart).
+    location-max-age: ${SAFEROUTE_PUSH_LOCATION_MAX_AGE:PT2H}
+    apns:
+      # Needs a paid Apple Developer account. Off by default: alerts are then only logged.
+      enabled: ${APNS_ENABLED:false}
+      team-id: ${APNS_TEAM_ID:}
+      key-id: ${APNS_KEY_ID:}
+      # Path to the AuthKey_XXXXXXXXXX.p8 file downloaded from the Apple Developer portal.
+      private-key-path: ${APNS_PRIVATE_KEY_PATH:}
+      bundle-id: ${APNS_BUNDLE_ID:com.saferoute.app}
+      # sandbox for Xcode/debug builds, production for TestFlight/App Store builds.
+      environment: ${APNS_ENVIRONMENT:sandbox}
   hazard:
     duplicate-radius-meters: 30
     verification-threshold: 2

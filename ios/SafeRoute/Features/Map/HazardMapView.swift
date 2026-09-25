@@ -17,6 +17,8 @@ struct HazardMapView: UIViewRepresentable {
     var followHeading: CLLocationDirection?
     /// Hazards that always show their name (the ones on the route while navigating).
     var labelledHazardIds: Set<UUID> = []
+    /// Whether the camera is following the user (browsing or navigating). Paused by a drag or
+    /// pinch; the locate / Re-center button resumes it.
     var onFollowChange: (Bool) -> Void = { _ in }
     let onSelectHazard: (UUID) -> Void
     let onTapBackground: () -> Void
@@ -64,6 +66,10 @@ struct HazardMapView: UIViewRepresentable {
         private var wasNavigating = false
         /// Navigation camera follows the walker until they pan the map themselves.
         private var isFollowing = false
+        /// While browsing, the map stays centered on the user as they move (at the zoom they
+        /// chose) until they pan it themselves.
+        private var isBrowseFollowing = true
+        private var lastBrowseCenter: CLLocation?
         private var lastFollowCoordinate: CLLocationCoordinate2D?
         private var renderedLabelled: Set<UUID> = []
 
@@ -155,6 +161,10 @@ struct HazardMapView: UIViewRepresentable {
                 wasNavigating = parent.isNavigating
                 if !parent.isNavigating {
                     isFollowing = false
+                    // Back to browsing, still centered on the walker.
+                    isBrowseFollowing = true
+                    lastBrowseCenter = nil
+                    parent.onFollowChange(true)
                     let camera = map.camera.copy() as! MKMapCamera
                     camera.pitch = 0
                     camera.heading = 0
@@ -185,14 +195,25 @@ struct HazardMapView: UIViewRepresentable {
 
         /// A drag/pinch/rotate by the user pauses following (the Re-center button resumes it).
         func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
-            guard parent.isNavigating, isFollowing else { return }
+            let following = parent.isNavigating ? isFollowing : isBrowseFollowing
+            guard following else { return }
             let userGesture = mapView.subviews.first?.gestureRecognizers?.contains {
                 $0.state == .began || $0.state == .changed
             } ?? false
-            if userGesture {
-                isFollowing = false
-                parent.onFollowChange(false)
-            }
+            if userGesture { pauseFollowing() }
+        }
+
+        private func pauseFollowing() {
+            if parent.isNavigating { isFollowing = false } else { isBrowseFollowing = false }
+            parent.onFollowChange(false)
+        }
+
+        /// Keeps the browsing map centered on the user. Moves under a few meters are GPS jitter.
+        private func followWhileBrowsing(_ location: CLLocation, on map: MKMapView) {
+            guard !parent.isNavigating, isBrowseFollowing else { return }
+            if let last = lastBrowseCenter, location.distance(from: last) < 5 { return }
+            lastBrowseCenter = location
+            map.setCenter(location.coordinate, animated: animate)
         }
 
         @objc func handleBackgroundTap(_ recognizer: UITapGestureRecognizer) {
@@ -283,13 +304,19 @@ struct HazardMapView: UIViewRepresentable {
             switch request.command {
             case .recenterOnUser:
                 if let user = LocationManager.shared.currentLocation {
+                    isBrowseFollowing = true
+                    lastBrowseCenter = CLLocation(latitude: user.latitude, longitude: user.longitude)
+                    parent.onFollowChange(true)
                     map.setRegion(MKCoordinateRegion(center: user, latitudinalMeters: 1200, longitudinalMeters: 1200), animated: animate)
                 }
             case .focus(let coordinate):
+                // Looking at a hazard elsewhere: don't snap back to the user on the next fix.
+                if !parent.isNavigating, isBrowseFollowing { pauseFollowing() }
                 map.setRegion(MKCoordinateRegion(center: coordinate, latitudinalMeters: 400, longitudinalMeters: 400), animated: animate)
             case .followUser:
                 followUser(on: map)
             case .showRoute:
+                if !parent.isNavigating, isBrowseFollowing { pauseFollowing() }
                 let rect = map.overlays.reduce(MKMapRect.null) { $0.union($1.boundingMapRect) }
                 if !rect.isNull {
                     map.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 140, left: 40, bottom: 320, right: 40), animated: animate)
@@ -343,9 +370,14 @@ struct HazardMapView: UIViewRepresentable {
 
         func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
             raiseUserLocation(mapView.view(for: userLocation))
-            guard !hasCenteredOnUser, let location = userLocation.location else { return }
-            hasCenteredOnUser = true
-            mapView.setRegion(MKCoordinateRegion(center: location.coordinate, latitudinalMeters: 1500, longitudinalMeters: 1500), animated: false)
+            guard let location = userLocation.location else { return }
+            guard hasCenteredOnUser else {
+                hasCenteredOnUser = true
+                lastBrowseCenter = location
+                mapView.setRegion(MKCoordinateRegion(center: location.coordinate, latitudinalMeters: 1500, longitudinalMeters: 1500), animated: false)
+                return
+            }
+            followWhileBrowsing(location, on: mapView)
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {

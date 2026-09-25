@@ -3,7 +3,8 @@ saferoute:
     secret: test-only-signing-key-for-integration-tests-0123456789
   bootstrap:
     # Allowlisted, but trust-unverified-emails stays false: registering it must not grant MODERATOR.
-    moderator-emails: allowlisted-moderator@test.local
+    # (AuthIntegrationTest switches the flag on briefly to cover the promotion path.)
+    moderator-emails: allowlisted-moderator@test.local,promoted-moderator@test.local
   hazard:
     expiry-check-interval: PT1H   # tests trigger expiry explicitly
   uploads:

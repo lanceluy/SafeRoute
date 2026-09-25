@@ -23,7 +23,7 @@ final class AuthViewModel: ObservableObject {
             case .register:
                 response = try await APIClient.shared.send(.register(RegisterRequest(email: email, password: password, displayName: displayName)), as: AuthResponse.self)
             }
-            appState.handleAuthSuccess(response)
+            try appState.handleAuthSuccess(response)
         } catch {
             errorMessage = error.localizedDescription
         }

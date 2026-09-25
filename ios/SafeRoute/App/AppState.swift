@@ -24,6 +24,7 @@ final class AppState: ObservableObject {
 
     private let userKey = "saferoute.currentUser"
     private var sessionObserver: NSObjectProtocol?
+    private var openHazardObserver: NSObjectProtocol?
     private var cancellables = Set<AnyCancellable>()
 
     init() {
@@ -58,6 +59,14 @@ final class AppState: ObservableObject {
                 self.show(Toast(message: "Your session expired. Please log in again.", systemImage: "lock.fill", style: .warning))
             }
         }
+        openHazardObserver = NotificationCenter.default.addObserver(forName: .openHazardFromNotification, object: nil, queue: .main) { [weak self] note in
+            guard let hazardId = note.object as? UUID else { return }
+            Task { @MainActor in
+                guard let self, self.currentUser != nil else { return }
+                self.selectedTab = .map
+                self.hazardToShow = hazardId
+            }
+        }
         // Nested ObservableObjects don't propagate changes on their own.
         for publisher in [alerts.objectWillChange, reports.objectWillChange, offlineQueue.objectWillChange] {
             publisher.sink { [weak self] in self?.objectWillChange.send() }.store(in: &cancellables)
@@ -87,8 +96,8 @@ final class AppState: ObservableObject {
         startSession()
     }
 
-    func handleAuthSuccess(_ response: AuthResponse) {
-        KeychainService.shared.save(accessToken: response.token, refreshToken: response.refreshToken)
+    func handleAuthSuccess(_ response: AuthResponse) throws {
+        try KeychainService.shared.save(accessToken: response.token, refreshToken: response.refreshToken)
         setUser(CurrentUser(id: response.userId, email: response.email, displayName: response.displayName, role: response.role))
         startSession()
     }
@@ -97,6 +106,7 @@ final class AppState: ObservableObject {
         if callServer, let refresh = KeychainService.shared.readRefreshToken() {
             Task { try? await APIClient.shared.send(.logout(refresh)) }
         }
+        PushRegistration.shared.sessionEnded(accessToken: callServer ? KeychainService.shared.readAccessToken() : nil)
         KeychainService.shared.deleteTokens()
         UserDefaults.standard.removeObject(forKey: userKey)
         WebSocketClient.shared.disconnect()
@@ -167,7 +177,7 @@ final class AppState: ObservableObject {
         guard let email = env["SAFEROUTE_DEMO_EMAIL"], let password = env["SAFEROUTE_DEMO_PASSWORD"],
               let response = try? await APIClient.shared.send(.login(LoginRequest(email: email, password: password)), as: AuthResponse.self)
         else { return false }
-        handleAuthSuccess(response)
+        guard (try? handleAuthSuccess(response)) != nil else { return false }
         switch env["SAFEROUTE_DEMO_TAB"] {
         case "reports": selectedTab = .reports
         case "alerts": selectedTab = .alerts
@@ -192,6 +202,7 @@ final class AppState: ObservableObject {
 
     private func startSession() {
         WebSocketClient.shared.connect()
+        PushRegistration.shared.sessionStarted()
         Task { await meta.refresh() }
         Task { await reports.load(reset: true) }
         Task { await flushOfflineQueue() }

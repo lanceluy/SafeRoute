@@ -63,7 +63,8 @@ public class AuthService {
                 .displayName(request.displayName().trim())
                 .role(Role.USER)
                 .build();
-        user = userRepository.save(user);
+        // Flushed so the row exists for ModeratorBootstrap's role_grants insert (plain JDBC, FK to users).
+        user = userRepository.saveAndFlush(user);
         moderatorBootstrap.onRegistered(user);
         return issueTokens(user);
     }

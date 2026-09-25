@@ -4,6 +4,14 @@ import Security
 /// Stores the access and refresh tokens. displayName/email are non-sensitive and live in
 /// AppState/UserDefaults instead.
 final class KeychainService: @unchecked Sendable {
+    /// Signing in without a saved token would look like success while every request fails with 401.
+    struct SaveError: LocalizedError {
+        let status: OSStatus
+        var errorDescription: String? {
+            "SafeRoute couldn't save your sign-in on this device (Keychain error \(status)). Please try again."
+        }
+    }
+
     static let shared = KeychainService()
 
     private let service = "com.saferoute.app.jwt"
@@ -12,9 +20,10 @@ final class KeychainService: @unchecked Sendable {
 
     private init() {}
 
-    func save(accessToken: String, refreshToken: String) {
-        write(accessToken, account: accessAccount)
-        write(refreshToken, account: refreshAccount)
+    /// Throws if either token could not be stored, e.g. in a build without Keychain access.
+    func save(accessToken: String, refreshToken: String) throws {
+        try write(accessToken, account: accessAccount)
+        try write(refreshToken, account: refreshAccount)
     }
 
     func readAccessToken() -> String? { read(account: accessAccount) }
@@ -25,12 +34,13 @@ final class KeychainService: @unchecked Sendable {
         delete(account: refreshAccount)
     }
 
-    private func write(_ value: String, account: String) {
+    private func write(_ value: String, account: String) throws {
         delete(account: account)
         var attributes = baseQuery(account)
         attributes[kSecValueData as String] = Data(value.utf8)
         attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(attributes as CFDictionary, nil)
+        let status = SecItemAdd(attributes as CFDictionary, nil)
+        guard status == errSecSuccess else { throw SaveError(status: status) }
     }
 
     private func read(account: String) -> String? {

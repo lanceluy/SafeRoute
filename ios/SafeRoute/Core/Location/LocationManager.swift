@@ -68,10 +68,33 @@ final class LocationManager: NSObject, ObservableObject {
     }
 
     /// Walking navigation wants frequent, fitness-tuned fixes; normal browsing doesn't.
+    ///
+    /// While navigating, updates (and with them the WebSocket and on-route alerts) keep running
+    /// with the screen locked, behind the blue status-bar indicator. Only then: continuous GPS in
+    /// the background would drain the battery. Needs `UIBackgroundModes: location` (project.yml);
+    /// without it setting `allowsBackgroundLocationUpdates` crashes.
     func setNavigationMode(_ navigating: Bool) {
         manager.activityType = navigating ? .fitness : .other
         manager.distanceFilter = navigating ? 5 : 10
+        manager.allowsBackgroundLocationUpdates = navigating
+        manager.showsBackgroundLocationIndicator = navigating
         if navigating { refresh() }
+    }
+
+    /// Background alerts need "Always": significant-change updates reach a closed app only then.
+    func requestAlwaysPermission() {
+        manager.requestAlwaysAuthorization()
+    }
+
+    /// Significant-change monitoring (~500 m moves) is cheap on battery and relaunches the app
+    /// in the background, so PushRegistration can keep the server's copy of the location current.
+    func setBackgroundAlerts(enabled: Bool) {
+        guard CLLocationManager.significantLocationChangeMonitoringAvailable() else { return }
+        if enabled {
+            manager.startMonitoringSignificantLocationChanges()
+        } else {
+            manager.stopMonitoringSignificantLocationChanges()
+        }
     }
 
     var isAuthorized: Bool {
@@ -113,6 +136,7 @@ extension LocationManager: CLLocationManagerDelegate {
             self.currentFix = newest
             if newest.course >= 0 && newest.speed > 0.3 { self.course = newest.course }
             self.state = .available
+            PushRegistration.shared.locationChanged(newest)
             if self.lastPublishedLocation == nil || newest.distance(from: self.lastPublishedLocation!) >= self.minimumMoveMeters {
                 self.lastPublishedLocation = newest
                 self.onSignificantChange?(newest.coordinate)

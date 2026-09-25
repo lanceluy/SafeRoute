@@ -89,6 +89,10 @@ Useful settings (environment variables):
 | `SAFEROUTE_COVERAGE_ENABLED` | `true` | Only accept reports inside the Metro Manila pilot area |
 | `SAFEROUTE_RATE_LIMIT_ENABLED` | `true` | Disable only for load tests (`benchmark` profile does this) |
 | `JWT_SECRET` | *(none)* | Required outside the `dev` profile; startup fails without it |
+| `APNS_ENABLED` | `false` | Send background hazard alerts through Apple Push Notification service (needs a paid Apple Developer account); when off, pushes are only logged |
+| `APNS_TEAM_ID`, `APNS_KEY_ID`, `APNS_PRIVATE_KEY_PATH` | *(none)* | Team id, key id and path to the `AuthKey_XXXXXXXXXX.p8` file from the Apple Developer portal; required when `APNS_ENABLED=true` |
+| `APNS_ENVIRONMENT` | `sandbox` | `sandbox` for Xcode builds, `production` for TestFlight/App Store |
+| `SAFEROUTE_PUSH_LOCATION_MAX_AGE` | `PT2H` | How long a device's last background location may trigger alerts before it is deleted |
 
 ### Quick smoke test
 
@@ -185,6 +189,18 @@ one bottom panel that is either the nearby summary with a Report button, a selec
 preview, the safer-route comparison or navigation) · **Reports** (My Reports with processing outcome) · **Alerts** ·
 **Profile** (trust level, contributions, notification preferences).
 
+## Municipal portal
+
+`portal/` is a static page for moderators and municipal officials: a map of the hazards in view
+and the moderation queue, with resolve, reopen and remove. With the backend running:
+
+```bash
+cd portal && python3 -m http.server 5500
+# open http://localhost:5500 (add ?api=http://host:8080/api for another backend)
+```
+
+Log in with a `MODERATOR` or `MUNICIPAL_OFFICIAL` account; other roles are turned away.
+
 ## Benchmarks
 
 See [`benchmark/README.md`](benchmark/README.md) — event-driven vs polling latency, load
@@ -192,8 +208,11 @@ scenarios, fault-tolerance test — and [`docs/METRICS.md`](docs/METRICS.md) for
 
 ## Known limitations (prototype scope)
 
-- Alerts are delivered while the app's WebSocket is connected, as local notifications — no APNs
-  and no background location. A suspended app gets no alerts.
+- Background alerts (app closed) use APNs, which needs a paid Apple Developer account: set the
+  `APNS_*` variables and uncomment `CODE_SIGN_ENTITLEMENTS` in `ios/project.yml`. Without it,
+  alerts arrive only while the app is open or navigating (the app keeps its WebSocket and location
+  updates running in the background during navigation). Background alerts are nearby-only; on-route
+  alerts need the navigation session.
 - Rate-limit buckets and WebSocket sessions are in memory (single backend instance). Idle buckets
   are evicted. With several instances, the outbox relay avoids double-sends but not cross-instance
   reordering; clients apply hazard snapshots by version to cope.
