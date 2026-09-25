@@ -324,9 +324,8 @@ struct MapScreen: View {
         case "planner": isShowingPlanner = true
         case "filters": isShowingFilters = true
         case "navigate":
-            // SAFEROUTE_DEMO_ROUTE_TO="lat,lon,Name": plan a route and start navigation. The route's
-            // coordinates are written to Documents/demo-route.txt so a walk can be simulated with
-            // `xcrun simctl location <id> start`.
+            // SAFEROUTE_DEMO_ROUTE_TO="lat,lon,Name": plan a route and start navigation. With
+            // ios/scripts/simulate-walks.sh running, the Simulator then walks it (SimulatedWalk).
             let parts = (ProcessInfo.processInfo.environment["SAFEROUTE_DEMO_ROUTE_TO"] ?? "").split(separator: ",")
             guard parts.count >= 2, let lat = Double(parts[0]), let lon = Double(parts[1]) else { return }
             for _ in 0..<40 where location.currentLocation == nil { try? await Task.sleep(for: .milliseconds(250)) }
@@ -335,11 +334,6 @@ struct MapScreen: View {
                     from: here, to: CLLocationCoordinate2D(latitude: lat, longitude: lon),
                     destinationName: parts.count > 2 ? String(parts[2]) : "Destination") else { return }
             model.setPlan(plan)
-            if let route = model.activeRoute {
-                let text = route.coordinates.map { "\($0.latitude),\($0.longitude)" }.joined(separator: "\n")
-                let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("demo-route.txt")
-                try? text.write(to: url, atomically: true, encoding: .utf8)
-            }
             try? await Task.sleep(for: .seconds(1))
             startNavigation()
         case "preview", "detail":

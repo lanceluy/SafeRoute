@@ -281,6 +281,7 @@ final class MapViewModel: ObservableObject {
         let session = NavigationSession(plan: plan, option: option, knownHazards: Array(hazards.values))
         navigation = session
         session.start()
+        SimulatedWalk.started(from: userLocation, route: option.coordinates)
         onNavigationChange?(true)
         command = CommandRequest(command: .followUser)
     }
@@ -289,6 +290,7 @@ final class MapViewModel: ObservableObject {
         guard let session = navigation else { return }
         session.stop()
         navigation = nil
+        SimulatedWalk.ended(at: userLocation)
         onNavigationChange?(false)
         if plan != nil { command = CommandRequest(command: .showRoute) }
     }
@@ -312,6 +314,7 @@ final class MapViewModel: ObservableObject {
         session.voiceEnabled = voice
         navigation = session
         session.start()
+        SimulatedWalk.started(from: userLocation, route: option.coordinates)
         command = CommandRequest(command: .followUser)
     }
 

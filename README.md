@@ -172,8 +172,22 @@ xcodegen generate       # (re)generates SafeRoute.xcodeproj from project.yml —
 open SafeRoute.xcodeproj
 ```
 
-Run on an iOS Simulator with the backend running locally. Set the Simulator's location inside
-the pilot area (**Features ▸ Location ▸ Custom Location…**, e.g. 14.5547, 121.0244).
+Run on an iOS Simulator with the backend running locally. Put the Simulator inside the pilot
+area, e.g. Mapúa University Makati:
+
+```bash
+xcrun simctl location booted set 14.56628,121.01542
+```
+
+To have the Simulator walk whenever you start navigation, keep this running while you test:
+
+```bash
+ios/scripts/simulate-walks.sh             # SAFEROUTE_WALK_SPEED=3 for a faster walk (m/s)
+```
+
+It walks the route at 1.4 m/s from the moment you tap Start, and when you tap End it stops you
+where you are. Between walks the location stays put. (Debug Simulator builds only; see
+`SimulatedWalk.swift`.)
 
 Debug builds can log in automatically for demos: set `SAFEROUTE_DEMO_EMAIL`,
 `SAFEROUTE_DEMO_PASSWORD` (and optionally `SAFEROUTE_DEMO_TAB`) in the scheme's environment.
