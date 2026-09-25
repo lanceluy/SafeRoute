@@ -270,13 +270,15 @@ struct MapScreen: View {
                 location.refresh()
             }
         } label: {
-            Image(systemName: "location.fill")
+            // Filled while the map follows you (Apple Maps convention); outline once you've panned away.
+            Image(systemName: isFollowingUser ? "location.fill" : "location")
                 .font(SR.Font.body)
                 .foregroundStyle(SR.Palette.navy)
                 .frame(width: SR.Layout.minTouchTarget, height: SR.Layout.minTouchTarget)
                 .srGlassSurface(radius: SR.Layout.minTouchTarget / 2)
         }
-        .accessibilityLabel("Center on my location")
+        .accessibilityLabel(isFollowingUser ? "Following your location" : "Follow my location")
+        .accessibilityHint(isFollowingUser ? "The map moves with you. Drag the map to stop following." : "Centers the map on you and keeps it there as you move.")
     }
 
     // MARK: Nearby scope

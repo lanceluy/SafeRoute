@@ -58,6 +58,10 @@ final class MapViewModel: ObservableObject {
     var onNavigationChange: ((Bool) -> Void)?
 
     private var lastRegion: MKCoordinateRegion?
+    /// The padded box of the last complete (untruncated) load. Moving the map inside it — e.g.
+    /// the camera following a walking user — needs no new request: hazards in it stay current
+    /// through the WebSocket.
+    private var loadedBox: LoadedBox?
     private var loadTask: Task<Void, Never>?
     /// Bumped on sign-out so responses to the previous session's requests are dropped.
     private var generation = 0
@@ -99,8 +103,21 @@ final class MapViewModel: ObservableObject {
 
     // MARK: Loading
 
+    struct LoadedBox: Equatable {
+        let minLat: Double, minLon: Double, maxLat: Double, maxLon: Double
+        let statuses: Set<HazardStatus>
+
+        func covers(_ region: MKCoordinateRegion, statuses wanted: Set<HazardStatus>) -> Bool {
+            guard wanted == statuses else { return false }
+            let halfLat = region.span.latitudeDelta / 2, halfLon = region.span.longitudeDelta / 2
+            return region.center.latitude - halfLat >= minLat && region.center.latitude + halfLat <= maxLat
+                && region.center.longitude - halfLon >= minLon && region.center.longitude + halfLon <= maxLon
+        }
+    }
+
     func regionChanged(_ region: MKCoordinateRegion) {
         lastRegion = region
+        if loadState == .loaded, loadedBox?.covers(region, statuses: filters.statuses) == true { return }
         loadTask?.cancel()
         loadTask = Task { await load(region: region) }
     }
@@ -138,12 +155,17 @@ final class MapViewModel: ObservableObject {
             // Only a complete snapshot says anything about hazards it doesn't contain.
             if response.value(forHTTPHeaderField: "X-Result-Truncated") != "true" {
                 reconcile(snapshot: fresh, box: box, statuses: statuses, sequenceAtStart: sequenceAtStart)
+                loadedBox = LoadedBox(minLat: box.minLat, minLon: box.minLon, maxLat: box.maxLat, maxLon: box.maxLon,
+                                      statuses: statuses)
+            } else {
+                loadedBox = nil
             }
             loadState = .loaded
         } catch is CancellationError {
             return
         } catch {
             guard !Task.isCancelled, generation == self.generation else { return }
+            loadedBox = nil
             loadState = .failed("Couldn't load nearby hazards.")
         }
     }
@@ -333,6 +355,7 @@ final class MapViewModel: ObservableObject {
         endNavigation()
         hazards = [:]
         lastLiveUpdate = [:]
+        loadedBox = nil
         plan = nil
         latestAlert = nil
         selectedHazardId = nil
