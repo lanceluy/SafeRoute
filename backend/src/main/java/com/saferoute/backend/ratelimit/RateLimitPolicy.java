@@ -1,6 +1,6 @@
 package com.saferoute.backend.ratelimit;
 
-/** The limits promised by the paper (Section 1.4) and specified in the engineering review §6. */
+/** The rate limits promised by the paper (Section 1.4). */
 public enum RateLimitPolicy {
     LOGIN_FAILURE("login attempts"),
     REGISTER("registrations"),

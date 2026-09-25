@@ -19,12 +19,12 @@ import com.saferoute.backend.user.ReputationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -35,7 +35,12 @@ import java.util.UUID;
  *
  * <p>Every handler is idempotent: the event id is recorded in processed_events inside the same
  * transaction, and status is recomputed from counts rather than incremented, so a Kafka
- * redelivery cannot double-apply a side effect.
+ * redelivery cannot double-apply a side effect. Outcome events are written to the outbox in the
+ * same transaction, so a committed change always yields its outcome.
+ *
+ * <p>Concurrency: the hazard row is locked for the whole evaluation of a command (votes change
+ * child rows, which the hazard's @Version alone would not serialize), and hazard creation takes a
+ * per-type advisory lock so two reports of the same hazard can't both miss each other.
  */
 @Component
 public class HazardProcessingConsumer {
@@ -46,6 +51,9 @@ public class HazardProcessingConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(HazardProcessingConsumer.class);
     private static final String CONSUMER = "hazard-processing";
+
+    /** What an opinion command did to the user's stored opinion. */
+    private enum OpinionUpdate { CHANGED, REPEATED }
 
     private final HazardRepository hazardRepository;
     private final HazardSubmissionRepository submissionRepository;
@@ -59,8 +67,8 @@ public class HazardProcessingConsumer {
     private final ReputationService reputationService;
     private final HazardEventProducer eventProducer;
     private final SafeRouteMetrics metrics;
+    private final JdbcTemplate jdbc;
     private final double duplicateRadiusMeters;
-    private final long duplicateLookbackHours;
     private final int resolutionThreshold;
 
     public HazardProcessingConsumer(HazardRepository hazardRepository,
@@ -75,8 +83,8 @@ public class HazardProcessingConsumer {
                                     ReputationService reputationService,
                                     HazardEventProducer eventProducer,
                                     SafeRouteMetrics metrics,
+                                    JdbcTemplate jdbc,
                                     @Value("${saferoute.hazard.duplicate-radius-meters}") double duplicateRadiusMeters,
-                                    @Value("${saferoute.hazard.duplicate-lookback-hours}") long duplicateLookbackHours,
                                     @Value("${saferoute.hazard.resolution-threshold}") int resolutionThreshold) {
         this.hazardRepository = hazardRepository;
         this.submissionRepository = submissionRepository;
@@ -90,8 +98,8 @@ public class HazardProcessingConsumer {
         this.reputationService = reputationService;
         this.eventProducer = eventProducer;
         this.metrics = metrics;
+        this.jdbc = jdbc;
         this.duplicateRadiusMeters = duplicateRadiusMeters;
-        this.duplicateLookbackHours = duplicateLookbackHours;
         this.resolutionThreshold = resolutionThreshold;
     }
 
@@ -113,21 +121,23 @@ public class HazardProcessingConsumer {
                 throw new NonRetryableEventException("Invalid hazard_reported payload for submission " + event.submissionId());
             }
 
+            // Serializes "find duplicate, else create" per hazard type, across consumer threads and instances.
+            jdbc.query("SELECT pg_advisory_xact_lock(hashtext(?))", rs -> null, "hazard-dedup:" + event.type().name());
             List<Hazard> duplicates = hazardRepository.findPotentialDuplicates(
-                    event.latitude(), event.longitude(), event.type().name(),
-                    duplicateRadiusMeters, Instant.now().minus(duplicateLookbackHours, ChronoUnit.HOURS));
+                    event.latitude(), event.longitude(), event.type().name(), duplicateRadiusMeters);
 
+            Instant observedAt = observedAt(event);
             if (duplicates.isEmpty()) {
-                createHazard(submission, event);
+                createHazard(submission, event, observedAt);
             } else {
-                mergeIntoExistingHazard(duplicates.get(0), submission, event);
+                Hazard existing = hazardRepository.findByIdForUpdate(duplicates.get(0).getId()).orElseThrow();
+                mergeIntoExistingHazard(existing, submission, event, observedAt);
             }
             metrics.recordProcessingLatency(event.metadata().occurredAt());
         }
     }
 
-    private void createHazard(HazardSubmission submission, HazardReportedEvent event) {
-        Instant now = Instant.now();
+    private void createHazard(HazardSubmission submission, HazardReportedEvent event, Instant observedAt) {
         Hazard hazard = hazardRepository.save(Hazard.builder()
                 .id(UUID.randomUUID())
                 .type(event.type())
@@ -137,8 +147,8 @@ public class HazardProcessingConsumer {
                 .severity(classifier.classify(event.type(), event.severityAnswer()))
                 .severityAnswer(event.severityAnswer())
                 .reporterId(event.reporterUserId())
-                .lastConfirmedAt(now)
-                .expiresAt(expiryPolicy.expiryFrom(event.type(), now))
+                .lastConfirmedAt(observedAt)
+                .expiresAt(expiryPolicy.expiryFrom(event.type(), observedAt))
                 .build());
         audit.record(hazard.getId(), event.reporterUserId(), HazardAuditLog.Action.CREATED,
                 "type", null, hazard.getType(), "Severity " + hazard.getSeverity());
@@ -150,14 +160,14 @@ public class HazardProcessingConsumer {
         eventProducer.publishCreated(hazard, event.reporterUserId());
     }
 
-    private void mergeIntoExistingHazard(Hazard existing, HazardSubmission submission, HazardReportedEvent event) {
+    private void mergeIntoExistingHazard(Hazard existing, HazardSubmission submission, HazardReportedEvent event,
+                                         Instant observedAt) {
         UUID reporter = event.reporterUserId();
         HazardChange change = HazardChange.DUPLICATE_MERGED;
         if (existing.getReporterId().equals(reporter)) {
             // Re-reporting your own hazard is a "still here", not an independent confirmation.
-            touchConfirmed(existing);
-        } else {
-            upsertConfirmation(existing, reporter, ConfirmationAction.VERIFY);
+            touchConfirmed(existing, observedAt);
+        } else if (upsertConfirmation(existing, reporter, ConfirmationAction.VERIFY, observedAt) == OpinionUpdate.CHANGED) {
             change = recountAndEvaluate(existing, reporter, "Duplicate report merged", HazardChange.DUPLICATE_MERGED);
         }
         if (existing.getPhotoUrl() == null && event.photoUrl() != null) {
@@ -189,14 +199,18 @@ public class HazardProcessingConsumer {
     public void onHazardVerified(HazardVerifiedEvent event) {
         try (var ignored = EventContext.enter(event.metadata())) {
             if (!firstDelivery(event.metadata())) return;
-            Hazard hazard = activeHazard(event.hazardId());
+            Hazard hazard = lockActiveHazard(event.hazardId(), event.hazardRevision());
             if (hazard == null) return;
             if (hazard.getReporterId().equals(event.verifierUserId())) {
                 log.warn("Ignoring self-confirmation on hazard {}", hazard.getId());
                 return;
             }
-            if (!upsertConfirmation(hazard, event.verifierUserId(), event.action())) return;
-
+            if (upsertConfirmation(hazard, event.verifierUserId(), event.action(), Instant.now()) == OpinionUpdate.REPEATED) {
+                // Same opinion again: a VERIFY is a fresh sighting (already applied to expiry above),
+                // but it is not another vote and earns nothing.
+                hazardRepository.save(hazard);
+                return;
+            }
             HazardChange change = recountAndEvaluate(hazard, event.verifierUserId(), null, HazardChange.CONFIRMATIONS_CHANGED);
             hazardRepository.save(hazard);
             eventProducer.publishUpdated(hazard, change, event.verifierUserId());
@@ -210,13 +224,14 @@ public class HazardProcessingConsumer {
     public void onResolutionRequested(ResolutionRequestedEvent event) {
         try (var ignored = EventContext.enter(event.metadata())) {
             if (!firstDelivery(event.metadata())) return;
-            Hazard hazard = activeHazard(event.hazardId());
+            Hazard hazard = lockActiveHazard(event.hazardId(), event.hazardRevision());
             if (hazard == null) return;
 
             ResolutionVote vote = resolutionVoteRepository.findByHazardIdAndUserId(hazard.getId(), event.userId())
                     .orElseGet(() -> ResolutionVote.builder().hazardId(hazard.getId()).userId(event.userId()).build());
             ResolutionAction previous = vote.getAction();
             vote.setAction(event.action());
+            vote.setHazardRevision(hazard.getContentRevision());
             vote.setUpdatedAt(Instant.now());
             resolutionVoteRepository.save(vote);
             audit.record(hazard.getId(), event.userId(), HazardAuditLog.Action.RESOLUTION_VOTE,
@@ -224,7 +239,7 @@ public class HazardProcessingConsumer {
 
             HazardChange change = HazardChange.CONFIRMATIONS_CHANGED;
             if (event.action() == ResolutionAction.STILL_PRESENT) {
-                touchConfirmed(hazard);
+                touchConfirmed(hazard, Instant.now());
             } else {
                 long gone = resolutionVoteRepository.countByHazardIdAndAction(hazard.getId(), ResolutionAction.NO_LONGER_PRESENT);
                 long still = resolutionVoteRepository.countByHazardIdAndAction(hazard.getId(), ResolutionAction.STILL_PRESENT);
@@ -245,7 +260,7 @@ public class HazardProcessingConsumer {
     public void onHazardResolved(HazardResolvedEvent event) {
         try (var ignored = EventContext.enter(event.metadata())) {
             if (!firstDelivery(event.metadata())) return;
-            Hazard hazard = activeHazard(event.hazardId());
+            Hazard hazard = lockActiveHazard(event.hazardId(), event.hazardRevision());
             if (hazard == null) return;
             resolve(hazard, event.resolvedByUserId(), event.resolutionNote());
             audit.record(hazard.getId(), event.resolvedByUserId(), HazardAuditLog.Action.MODERATOR_RESOLVED, event.resolutionNote());
@@ -268,8 +283,13 @@ public class HazardProcessingConsumer {
         return true;
     }
 
-    private Hazard activeHazard(UUID hazardId) {
-        Hazard hazard = hazardRepository.findById(hazardId).orElse(null);
+    /**
+     * Locks the hazard for this transaction. Returns null (command dropped) if the hazard is gone,
+     * inactive, or its content changed since the command was accepted — e.g. a vote accepted
+     * before a moderator removed and then reopened it, or before the reporter changed its type.
+     */
+    private Hazard lockActiveHazard(UUID hazardId, Integer acceptedRevision) {
+        Hazard hazard = hazardRepository.findByIdForUpdate(hazardId).orElse(null);
         if (hazard == null) {
             log.warn("Ignoring event for unknown hazard {}", hazardId);
             return null;
@@ -278,24 +298,33 @@ public class HazardProcessingConsumer {
             log.info("Ignoring event for {} hazard {}", hazard.getStatus(), hazardId);
             return null;
         }
+        if (acceptedRevision != null && acceptedRevision != hazard.getContentRevision()) {
+            log.info("Ignoring stale command for hazard {}: accepted at revision {}, hazard is at {}",
+                    hazardId, acceptedRevision, hazard.getContentRevision());
+            return null;
+        }
         return hazard;
     }
 
-    /** @return false if the user's opinion was already {@code action} (no-op). */
-    private boolean upsertConfirmation(Hazard hazard, UUID userId, ConfirmationAction action) {
+    /**
+     * Upserts the user's single opinion. A VERIFY is also a sighting, so it refreshes the hazard's
+     * freshness even when the opinion itself is unchanged.
+     */
+    private OpinionUpdate upsertConfirmation(Hazard hazard, UUID userId, ConfirmationAction action, Instant observedAt) {
+        if (action == ConfirmationAction.VERIFY) touchConfirmed(hazard, observedAt);
         HazardConfirmation confirmation = confirmationRepository.findByHazardIdAndUserId(hazard.getId(), userId).orElse(null);
         ConfirmationAction previous = confirmation != null ? confirmation.getAction() : null;
-        if (previous == action) return false;
+        if (previous == action) return OpinionUpdate.REPEATED;
         if (confirmation == null) {
             confirmation = HazardConfirmation.builder().hazardId(hazard.getId()).userId(userId).action(action).build();
         } else {
             confirmation.setAction(action);
             confirmation.setUpdatedAt(Instant.now());
         }
+        confirmation.setHazardRevision(hazard.getContentRevision());
         confirmationRepository.save(confirmation);
-        if (action == ConfirmationAction.VERIFY) touchConfirmed(hazard);
         audit.record(hazard.getId(), userId, HazardAuditLog.Action.CONFIRMATION_CHANGED, "confirmation", previous, action, null);
-        return true;
+        return OpinionUpdate.CHANGED;
     }
 
     private HazardChange recountAndEvaluate(Hazard hazard, UUID actorId, String note, HazardChange noStatusChange) {
@@ -322,10 +351,10 @@ public class HazardProcessingConsumer {
         };
     }
 
-    private void touchConfirmed(Hazard hazard) {
-        Instant now = Instant.now();
-        hazard.setLastConfirmedAt(now);
-        Instant extended = expiryPolicy.expiryFrom(hazard.getType(), now);
+    /** Records a sighting at {@code at}; never moves freshness backwards. */
+    private void touchConfirmed(Hazard hazard, Instant at) {
+        if (at.isAfter(hazard.getLastConfirmedAt())) hazard.setLastConfirmedAt(at);
+        Instant extended = expiryPolicy.expiryFrom(hazard.getType(), at);
         if (extended.isAfter(hazard.getExpiresAt())) hazard.setExpiresAt(extended);
     }
 
@@ -334,6 +363,12 @@ public class HazardProcessingConsumer {
         hazard.setStatus(HazardStatus.RESOLVED);
         hazard.setResolvedAt(Instant.now());
         audit.statusChanged(hazard.getId(), actorId, oldStatus, HazardStatus.RESOLVED, note);
+    }
+
+    /** The reporter's observation time, falling back to now for legacy events. */
+    private static Instant observedAt(HazardReportedEvent event) {
+        Instant now = Instant.now();
+        return event.observedAt() != null && event.observedAt().isBefore(now) ? event.observedAt() : now;
     }
 
     private static boolean validCoordinates(double lat, double lon) {

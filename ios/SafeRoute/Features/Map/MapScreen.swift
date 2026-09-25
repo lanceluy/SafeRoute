@@ -1,7 +1,7 @@
 import SwiftUI
 import MapKit
 
-/// Home screen: an edge-to-edge map with glass controls floating over it (UI review §4–6, §42).
+/// Home screen: an edge-to-edge map with glass controls floating over it.
 struct MapScreen: View {
     @EnvironmentObject private var appState: AppState
     @ObservedObject var model: MapViewModel
@@ -123,7 +123,7 @@ struct MapScreen: View {
         withAnimation(motion) { model.startNavigation() }
     }
 
-    // MARK: Top — greeting, safety summary, search (review §6, §38)
+    // MARK: Top — greeting, safety summary, search
 
     private var topControls: some View {
         VStack(spacing: SR.Space.sm) {
@@ -190,7 +190,8 @@ struct MapScreen: View {
                 .foregroundStyle(SR.Palette.critical)
         } else {
             VStack(alignment: .leading, spacing: 2) {
-                Text(nearby.isEmpty ? "Your area looks clear" : "Your area looks mostly clear · \(nearby.count) hazard\(nearby.count == 1 ? "" : "s") within 1 km")
+                // "No reports" is not "safe": say what we know, not more.
+                Text(nearby.isEmpty ? "No active reports within 1 km" : "\(nearby.count) reported hazard\(nearby.count == 1 ? "" : "s") within 1 km")
                     .font(SR.Font.secondary)
                     .foregroundStyle(SR.Palette.textSecondary)
                 if let area {
@@ -245,7 +246,7 @@ struct MapScreen: View {
         }
     }
 
-    // MARK: Bottom — floating controls (review §4, §28, §29)
+    // MARK: Bottom — floating controls
 
     private var bottomControls: some View {
         VStack(spacing: SR.Space.sm) {
@@ -403,7 +404,7 @@ struct SelectedHazard: Identifiable {
     let id: UUID
 }
 
-/// Floating preview shown when a pin is tapped, before the full detail sheet (review §28).
+/// Floating preview shown when a pin is tapped, before the full detail sheet.
 struct SRHazardPreviewCard: View {
     let hazard: Hazard
     let distance: Double?
@@ -486,7 +487,7 @@ struct AlertBanner: View {
     }
 }
 
-/// Map filters as chips (review §19, §46). Presented as a glass sheet.
+/// Map filters as chips. Presented as a glass sheet.
 struct FilterSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var filters: MapFilters

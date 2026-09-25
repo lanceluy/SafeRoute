@@ -2,8 +2,8 @@ import SwiftUI
 import MapKit
 import PhotosUI
 
-/// Guided report: WHAT → WHERE → EVIDENCE → DETAILS → REVIEW (review §26), with a duplicate
-/// check before submitting (review §11).
+/// Guided report: WHAT → WHERE → EVIDENCE → DETAILS → REVIEW, with a duplicate
+/// check before submitting.
 struct ReportFlowView: View {
     enum Step: Int, CaseIterable {
         case what, location, evidence, details, review

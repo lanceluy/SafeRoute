@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Floating glass tab bar (UI review §10, §31): selected tab gets a soft navy tint, the rest are
+/// Floating glass tab bar: selected tab gets a soft navy tint, the rest are
 /// charcoal. Replaces the system tab bar so the look is identical on iOS 17 and iOS 26.
 struct SRBottomNavigation: View {
     struct Item: Identifiable {

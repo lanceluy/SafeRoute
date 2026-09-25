@@ -3,7 +3,7 @@ import CoreLocation
 
 /// "My Reports" plus the lifecycle of reports still being processed. A just-submitted report is
 /// shown as a temporary pin until the backend says whether it CREATED a hazard or MERGED into
-/// an existing one; the pin is then replaced with the canonical hazard (review §10).
+/// an existing one; the pin is then replaced with the canonical hazard.
 @MainActor
 final class ReportsStore: ObservableObject {
     struct PendingSubmission: Identifiable {
@@ -22,8 +22,11 @@ final class ReportsStore: ObservableObject {
     /// Called with (outcome, canonical hazard id, message) when a submission finishes.
     var onSubmissionFinished: ((SubmissionStatus, UUID?, String) -> Void)?
 
+    /// The last page successfully loaded.
     private var page = 0
     private var pollTasks: [UUID: Task<Void, Never>] = [:]
+    /// Bumped on sign-out so responses to the previous session's requests are dropped.
+    private var generation = 0
 
     func track(_ submission: HazardSubmission, request: HazardSubmissionRequest) {
         pending[submission.submissionId] = PendingSubmission(id: submission.submissionId, request: request, submittedAt: Date())
@@ -39,6 +42,11 @@ final class ReportsStore: ObservableObject {
                     return
                 }
             }
+            // Still queued after ~2 minutes (e.g. the event bus is down; the report is safe in the
+            // server's outbox). Stop the temporary pin; My Reports keeps showing it as Processing.
+            guard let self, self.pending.removeValue(forKey: submission.submissionId) != nil else { return }
+            self.pollTasks[submission.submissionId] = nil
+            await self.load(reset: true)
         }
         Task { await load(reset: true) }
     }
@@ -61,26 +69,37 @@ final class ReportsStore: ObservableObject {
     }
 
     func load(reset: Bool) async {
-        if loadState.isLoading { return }
-        if reset { page = 0 }
-        loadState = .loading
-        do {
-            let result = try await APIClient.shared.send(.myReports(page: page), as: PageResponse<MyReport>.self)
-            reports = reset ? result.items : reports + result.items
-            hasMore = result.hasMore
-            loadState = .loaded
-        } catch {
-            loadState = .failed(error.localizedDescription)
-        }
+        await load(page: reset ? 0 : page + 1)
     }
 
     func loadMore() async {
         guard hasMore, !loadState.isLoading else { return }
-        page += 1
         await load(reset: false)
     }
 
+    /// The page cursor only advances when the page actually arrived, so a failed "load more"
+    /// retries the same page instead of skipping it.
+    private func load(page requested: Int) async {
+        if loadState.isLoading { return }
+        let generation = self.generation
+        loadState = .loading
+        do {
+            let result = try await APIClient.shared.send(.myReports(page: requested), as: PageResponse<MyReport>.self)
+            guard generation == self.generation else { return }
+            reports = requested == 0 ? result.items : reports + result.items
+            page = requested
+            hasMore = result.hasMore
+            loadState = .loaded
+        } catch {
+            guard generation == self.generation else { return }
+            loadState = .failed(error.localizedDescription)
+        }
+    }
+
     func reset() {
+        generation += 1
+        page = 0
+        hasMore = false
         pollTasks.values.forEach { $0.cancel() }
         pollTasks = [:]
         pending = [:]

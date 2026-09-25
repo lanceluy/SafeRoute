@@ -81,7 +81,7 @@ struct AlertsView: View {
         }
     }
 
-    /// Review §16: a useful state, not a dead end.
+    /// A useful state, not a dead end.
     private var allClear: some View {
         SREmptyState(systemImage: "checkmark.shield", title: "You're all clear",
                      message: "No active hazards are affecting your route right now. We'll let you know if that changes.") {
@@ -108,7 +108,7 @@ struct AlertsView: View {
     }
 }
 
-/// One primary data point per card: how far the hazard is (review §17, §35).
+/// One primary data point per card: how far the hazard is.
 private struct AlertCard: View {
     let item: AlertsStore.AlertItem
 

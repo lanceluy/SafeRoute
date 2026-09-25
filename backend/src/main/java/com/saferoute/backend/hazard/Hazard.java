@@ -81,6 +81,15 @@ public class Hazard {
     @Builder.Default
     private boolean reporterRewarded = false;
 
+    /**
+     * Incremented when the assessed content changes (moderator reopen, type/location/severity
+     * edit). Community commands carry the revision they were accepted under and are dropped if
+     * it no longer matches, so an opinion is never applied to content its author didn't see.
+     */
+    @Column(name = "content_revision", nullable = false)
+    @Builder.Default
+    private int contentRevision = 0;
+
     /** Null until first persisted, which is how Spring Data tells new hazards from existing ones. */
     @Version
     @Column(nullable = false)

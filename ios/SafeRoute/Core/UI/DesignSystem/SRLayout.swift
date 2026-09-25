@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Page title + subtitle placed at the top of scrolling content (Reports, Alerts, Profile).
-/// The Map uses its personalized greeting instead (UI review §25).
+/// The Map uses its personalized greeting instead.
 struct SRPageHeader<Accessory: View>: View {
     let title: String
     let subtitle: String?

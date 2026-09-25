@@ -32,6 +32,6 @@ public class UploadController {
     public ResponseEntity<ImageUploadService.StoredImage> uploadHazardImage(@RequestParam("file") MultipartFile file,
                                                                             @AuthenticationPrincipal AuthenticatedUser principal) {
         rateLimitService.consume(RateLimitPolicy.IMAGE_UPLOAD, principal.id().toString());
-        return ResponseEntity.status(HttpStatus.CREATED).body(uploadService.storeHazardImage(file));
+        return ResponseEntity.status(HttpStatus.CREATED).body(uploadService.storeHazardImage(file, principal.id()));
     }
 }

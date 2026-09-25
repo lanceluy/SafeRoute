@@ -76,7 +76,14 @@ class AuthIntegrationTest extends IntegrationTestBase {
         String second = refreshed.get("refreshToken").asText();
         assertThat(second).isNotEqualTo(user.refreshToken());
 
-        // Replaying the rotated token is treated as theft: it fails and revokes the newer one too.
+        // A replay within seconds is almost certainly the same client racing itself: refused, but
+        // the session it just rotated to survives.
+        json(mvc.perform(post("/api/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+                .content(toJson(Map.of("refreshToken", user.refreshToken())))).andReturn(), 401);
+
+        // A replay long after rotation is treated as theft: it fails and revokes the newer token too.
+        jdbc.update("UPDATE refresh_tokens SET revoked_at = now() - interval '1 hour' WHERE revoked_at IS NOT NULL AND user_id = ?",
+                user.id());
         json(mvc.perform(post("/api/auth/refresh").contentType(MediaType.APPLICATION_JSON)
                 .content(toJson(Map.of("refreshToken", user.refreshToken())))).andReturn(), 401);
         json(mvc.perform(post("/api/auth/refresh").contentType(MediaType.APPLICATION_JSON)
@@ -118,5 +125,45 @@ class AuthIntegrationTest extends IntegrationTestBase {
         json(mvc.perform(post("/api/auth/register").with(ip(ip)).contentType(MediaType.APPLICATION_JSON)
                 .content(toJson(Map.of("email", "r4-" + System.nanoTime() + "@test.local",
                         "password", "password123", "displayName", "R")))).andReturn(), 429);
+    }
+
+    @Test
+    void registeringAnAllowlistedButUnverifiedEmailDoesNotGrantModerator() throws Exception {
+        // application-test.yml allowlists this address but leaves trust-unverified-emails off.
+        JsonNode body = json(mvc.perform(post("/api/auth/register").with(uniqueIp()).contentType(MediaType.APPLICATION_JSON)
+                .content(toJson(Map.of("email", "allowlisted-moderator@test.local", "password", "password123",
+                        "displayName", "Impostor")))).andReturn(), 201);
+
+        assertThat(body.get("role").asText()).isEqualTo("USER");
+        Integer grants = jdbc.queryForObject("SELECT count(*) FROM role_grants WHERE user_id = ?::uuid",
+                Integer.class, body.get("userId").asText());
+        assertThat(grants).isZero();
+    }
+
+    @Test
+    void concurrentRefreshesOfOneTokenRotateItExactlyOnce() throws Exception {
+        TestUser user = registerUser();
+        String request = toJson(Map.of("refreshToken", user.refreshToken()));
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(4);
+        try {
+            var start = new java.util.concurrent.CountDownLatch(1);
+            java.util.List<java.util.concurrent.Future<Integer>> results = new java.util.ArrayList<>();
+            for (int i = 0; i < 4; i++) {
+                results.add(pool.submit(() -> {
+                    start.await();
+                    return mvc.perform(post("/api/auth/refresh").contentType(MediaType.APPLICATION_JSON).content(request))
+                            .andReturn().getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+            int ok = 0;
+            for (var result : results) if (result.get() == 200) ok++;
+            assertThat(ok).isEqualTo(1);
+        } finally {
+            pool.shutdownNow();
+        }
+        Integer live = jdbc.queryForObject(
+                "SELECT count(*) FROM refresh_tokens WHERE user_id = ? AND revoked_at IS NULL", Integer.class, user.id());
+        assertThat(live).isEqualTo(1);
     }
 }

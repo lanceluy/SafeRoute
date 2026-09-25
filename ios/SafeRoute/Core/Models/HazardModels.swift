@@ -263,6 +263,9 @@ struct Hazard: Codable, Identifiable, Hashable {
     var lastConfirmedAt: Date?
     var expiresAt: Date?
     var resolvedAt: Date?
+    /// Server row version. Snapshots can arrive out of order (REST vs WebSocket, two Kafka
+    /// topics), so the store keeps the highest version it has seen.
+    var version: Int64?
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -373,6 +376,7 @@ struct HazardSubmission: Codable, Identifiable {
     let failureReason: String?
     let createdAt: Date
     let processedAt: Date?
+    var clientRequestId: UUID?
 
     var id: UUID { submissionId }
 }
@@ -384,6 +388,11 @@ struct HazardSubmissionRequest: Codable, Equatable {
     var description: String?
     var photoUrl: String?
     var severityAnswer: String?
+    /// Idempotency key, generated once per logical report: retries (including from the offline
+    /// queue) return the original submission instead of creating another.
+    var clientRequestId: UUID?
+    /// When the reporter saw the hazard; freshness is measured from it, not from upload time.
+    var observedAt: Date?
 }
 
 struct MyReport: Codable, Identifiable {
@@ -393,7 +402,7 @@ struct MyReport: Codable, Identifiable {
 
     var id: UUID { submission.submissionId }
 
-    /// The single state shown to the reporter (review §15).
+    /// The single state shown to the reporter.
     var displayState: (label: String, symbol: String, color: Color) {
         switch submission.status {
         case .queued: return ("Processing", "hourglass", SR.Palette.textSecondary)

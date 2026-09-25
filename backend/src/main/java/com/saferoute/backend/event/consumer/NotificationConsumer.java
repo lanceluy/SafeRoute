@@ -22,6 +22,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.EnumSet;
 import java.util.Set;
 
@@ -32,16 +33,23 @@ import java.util.Set;
  *   <li>Map updates go to every session within {@code map-update-radius-meters} so visible map
  *       state stays live for every status change, not just new hazards.</li>
  *   <li>A frame is flagged {@code alert} only when it is worth interrupting the user: a hazard
- *       that is new or newly verified, of an enabled type, and on the commuter's route ahead of
- *       them (or, with no route, within their personal alert radius).</li>
+ *       that is new, newly verified or reinstated (reopened / back from DISPUTED), of an enabled
+ *       type, and on the commuter's route ahead of them (or, with no route, within their personal
+ *       alert radius). Other changes — confirmation counts, edits, severity changes, resolution —
+ *       update the map silently. Relevance needs a location reported within the last
+ *       {@link WebSocketSessionRegistry#LOCATION_MAX_AGE}.</li>
  * </ul>
+ *
+ * <p>Delivery latency is recorded only for frames actually written; failed writes are counted
+ * separately. A written frame is not proof that the client displayed it.
  */
 @Component
 public class NotificationConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationConsumer.class);
     private static final String GROUP_ID = "notification-service-group";
-    private static final Set<HazardChange> ALERTABLE = EnumSet.of(HazardChange.CREATED, HazardChange.VERIFIED);
+    private static final Set<HazardChange> ALERTABLE =
+            EnumSet.of(HazardChange.CREATED, HazardChange.VERIFIED, HazardChange.REINSTATED);
 
     private final WebSocketSessionRegistry registry;
     private final ObjectMapper objectMapper;
@@ -65,9 +73,11 @@ public class NotificationConsumer {
     public void onHazardChanged(HazardUpdatedEvent event) {
         try (var ignored = EventContext.enter(event.metadata())) {
             String frameType = frameType(event.change());
+            Instant now = Instant.now();
             int sent = 0, alerts = 0;
             for (WebSocketSessionRegistry.SessionInfo info : registry.activeSessions()) {
                 if (!info.hasLocation()) continue;
+                boolean freshLocation = info.hasFreshLocation(now);
                 double distance = GeoUtils.distanceMeters(info.lat(), info.lon(), event.latitude(), event.longitude());
 
                 boolean onRoute = false;
@@ -84,15 +94,16 @@ public class NotificationConsumer {
                 }
                 if (distance > mapUpdateRadiusMeters && !onRoute) continue;
 
-                boolean relevant = route != null ? onRoute : distance <= info.preferences().radiusMeters();
+                boolean relevant = freshLocation && (route != null ? onRoute : distance <= info.preferences().radiusMeters());
                 boolean alert = ALERTABLE.contains(event.change())
                         && info.preferences().enabledTypes().contains(event.type())
                         && relevant;
 
-                send(info, new HazardEventFrame(frameType, event.change(), event.hazardId(), event.type(),
+                boolean written = send(info, new HazardEventFrame(frameType, event.change(), event.hazardId(), event.type(),
                         event.latitude(), event.longitude(), event.status(), event.severity(),
                         event.confirmationCount(), event.disputeCount(), distance, alert, onRoute, distanceAhead,
-                        event.metadata().occurredAt()));
+                        event.metadata().occurredAt(), event.version()));
+                if (!written) continue;
                 metrics.recordNotificationLatency(event.metadata().occurredAt());
                 sent++;
                 if (alert) alerts++;
@@ -112,10 +123,9 @@ public class NotificationConsumer {
             };
             var frame = new SubmissionProcessedFrame(event.submissionId(), event.status(), event.hazardId(), message);
             for (WebSocketSessionRegistry.SessionInfo info : registry.sessionsFor(event.reporterUserId())) {
-                send(info, frame);
-            }
-            if (event.status() != SubmissionStatus.QUEUED) {
-                metrics.recordNotificationLatency(event.metadata().occurredAt());
+                if (send(info, frame) && event.status() != SubmissionStatus.QUEUED) {
+                    metrics.recordNotificationLatency(event.metadata().occurredAt());
+                }
             }
         }
     }
@@ -131,13 +141,17 @@ public class NotificationConsumer {
         };
     }
 
-    private void send(WebSocketSessionRegistry.SessionInfo info, Object frame) {
+    /** @return true if the frame was written to the session. */
+    private boolean send(WebSocketSessionRegistry.SessionInfo info, Object frame) {
         try {
             info.session().sendMessage(new TextMessage(objectMapper.writeValueAsString(frame)));
+            return true;
         } catch (JsonProcessingException e) {
             log.error("Could not serialize WebSocket frame", e);
         } catch (IOException | IllegalStateException e) {
             log.warn("Failed to send WebSocket frame to user {}: {}", info.userId(), e.getMessage());
         }
+        metrics.notificationFailed();
+        return false;
     }
 }

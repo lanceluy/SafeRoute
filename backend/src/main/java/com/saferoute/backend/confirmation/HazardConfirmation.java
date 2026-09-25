@@ -10,7 +10,7 @@ import lombok.Setter;
 import java.time.Instant;
 import java.util.UUID;
 
-/** A user's single current opinion about a hazard (UNIQUE(hazard_id, user_id), review §3). */
+/** A user's single current opinion about a hazard (UNIQUE(hazard_id, user_id)). */
 @Entity
 @Table(name = "hazard_confirmations", uniqueConstraints = {
         @UniqueConstraint(name = "uq_confirmation_hazard_user", columnNames = {"hazard_id", "user_id"})
@@ -39,6 +39,11 @@ public class HazardConfirmation {
     @Column(name = "reputation_awarded", nullable = false)
     @Builder.Default
     private boolean reputationAwarded = false;
+
+    /** The hazard content revision this opinion assessed. */
+    @Column(name = "hazard_revision", nullable = false)
+    @Builder.Default
+    private int hazardRevision = 0;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default

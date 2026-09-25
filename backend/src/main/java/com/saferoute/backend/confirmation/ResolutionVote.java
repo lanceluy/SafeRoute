@@ -33,6 +33,11 @@ public class ResolutionVote {
     @Column(nullable = false, length = 20)
     private ResolutionAction action;
 
+    /** The hazard content revision this opinion assessed. */
+    @Column(name = "hazard_revision", nullable = false)
+    @Builder.Default
+    private int hazardRevision = 0;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private Instant createdAt = Instant.now();

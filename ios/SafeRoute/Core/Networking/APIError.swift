@@ -15,6 +15,8 @@ enum APIError: Error, LocalizedError {
     case server(status: Int, code: String, message: String)
     case decoding(Error)
     case transport(Error)
+    /// The signed-in account changed while work queued by another account was being sent.
+    case sessionChanged
     case unknown
 
     var errorDescription: String? {
@@ -31,6 +33,8 @@ enum APIError: Error, LocalizedError {
             return "Received an unexpected response from the server."
         case .transport:
             return "Couldn't reach SafeRoute. Try again in a moment."
+        case .sessionChanged:
+            return "You signed in as someone else, so this wasn't sent."
         case .unknown:
             return "Something went wrong."
         }

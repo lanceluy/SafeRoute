@@ -76,7 +76,10 @@ springdoc:
 
 saferoute:
   jwt:
-    secret: ${JWT_SECRET:dev-only-insecure-secret-change-me-please-must-be-32-bytes-min}
+    # Required. There is deliberately no fallback: startup fails without a real secret. Local
+    # development, tests and benchmarks use the dev profile's throwaway key instead.
+    secret: ${JWT_SECRET:}
+    allow-dev-secret: false
     access-token-expiration-ms: ${JWT_ACCESS_TTL_MS:1800000} # 30 minutes
     refresh-token-ttl: ${JWT_REFRESH_TTL:P30D}
   websocket:
@@ -89,7 +92,6 @@ saferoute:
     route-corridor-meters: 40
   hazard:
     duplicate-radius-meters: 30
-    duplicate-lookback-hours: 72
     verification-threshold: 2
     dispute-threshold: 2
     resolution-threshold: 2
@@ -106,10 +108,22 @@ saferoute:
   uploads:
     dir: ${SAFEROUTE_UPLOADS_DIR:./uploads}
   bootstrap:
-    # Comma-separated emails promoted to MODERATOR at startup/registration.
+    # Controlled provisioning: account ids (UUIDs) promoted to MODERATOR at startup. Look the id up
+    # after the person has registered and their identity has been checked out of band.
+    moderator-user-ids: ${SAFEROUTE_MODERATOR_USER_IDS:}
+    # Email allowlist. Registration does not verify email ownership, so this is honoured only
+    # when trust-unverified-emails is true — local development and benchmarks, never a shared pilot.
     moderator-emails: ${SAFEROUTE_MODERATOR_EMAILS:}
+    trust-unverified-emails: false
   benchmark:
     consumer-control-enabled: ${SAFEROUTE_BENCHMARK_CONSUMER_CONTROL:false}
+  outbox:
+    # Backstop sweep; normally a commit wakes the relay immediately.
+    poll-interval: PT1S
+    send-timeout: PT10S
+  uploads-cleanup:
+    # Photos uploaded but never attached to a report are deleted after this long.
+    orphan-ttl: PT24H
 
 logging:
   pattern:

@@ -48,7 +48,7 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: Identity (review §20–21)
+    // MARK: Identity
 
     private func identityCard(_ profile: Profile) -> some View {
         let progress = TierProgress(score: profile.reputationScore, level: profile.trustLevel)
@@ -117,7 +117,7 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: Settings — one flat grouped container (review §19, §24)
+    // MARK: Settings — one flat grouped container
 
     private var settings: some View {
         SRCard(padding: SR.Space.md) {

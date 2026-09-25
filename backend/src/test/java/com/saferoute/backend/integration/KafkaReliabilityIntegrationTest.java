@@ -45,7 +45,7 @@ class KafkaReliabilityIntegrationTest extends IntegrationTestBase {
         TestUser carol = registerUser();
         UUID hazardId = reportAndAwaitHazard(alice, "OPEN_MANHOLE", freshLocation());
 
-        var event = new HazardVerifiedEvent(EventMetadata.create(KafkaTopics.HAZARD_VERIFIED), hazardId, bob.id(), ConfirmationAction.VERIFY);
+        var event = new HazardVerifiedEvent(EventMetadata.create(KafkaTopics.HAZARD_VERIFIED), hazardId, bob.id(), ConfirmationAction.VERIFY, null);
         kafkaTemplate.send(KafkaTopics.HAZARD_VERIFIED, hazardId.toString(), event).get();
         kafkaTemplate.send(KafkaTopics.HAZARD_VERIFIED, hazardId.toString(), event).get(); // redelivery
         // A later, distinct event acts as a barrier: once it is applied, both copies above were consumed.
@@ -68,7 +68,7 @@ class KafkaReliabilityIntegrationTest extends IntegrationTestBase {
         // Replay the same submission under a *new* event id (e.g. a producer retry after a timeout):
         // the submission's terminal status still prevents a duplicate side effect.
         var replay = new HazardReportedEvent(EventMetadata.create(KafkaTopics.HAZARD_REPORTED), submissionId,
-                HazardType.POOR_LIGHTING, at.lat(), at.lon(), null, null, null, alice.id());
+                HazardType.POOR_LIGHTING, at.lat(), at.lon(), null, null, null, alice.id(), null);
         kafkaTemplate.send(KafkaTopics.HAZARD_REPORTED, submissionId.toString(), replay).get();
         await().atMost(Duration.ofSeconds(20)).until(() -> Integer.valueOf(1).equals(jdbc.queryForObject(
                 "SELECT count(*) FROM processed_events WHERE event_id = ?", Integer.class, replay.metadata().eventId())));
@@ -87,7 +87,7 @@ class KafkaReliabilityIntegrationTest extends IntegrationTestBase {
                 VALUES (?, ?, 'FLOODING', 14.55, 121.02, 'QUEUED')""", submissionId, alice.id());
 
         var poison = new HazardReportedEvent(EventMetadata.create(KafkaTopics.HAZARD_REPORTED), submissionId,
-                HazardType.FLOODING, 999, 121.02, null, null, null, alice.id());
+                HazardType.FLOODING, 999, 121.02, null, null, null, alice.id(), null);
         kafkaTemplate.send(KafkaTopics.HAZARD_REPORTED, submissionId.toString(), poison).get();
 
         var failed = awaitSubmission(alice, submissionId);

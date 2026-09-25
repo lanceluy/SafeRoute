@@ -12,7 +12,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * One user report, tracked separately from the canonical hazard it ends up as (review §10).
+ * One user report, tracked separately from the canonical hazard it ends up as.
  * Several submissions may point at the same {@code canonicalHazardId} after dedup merging.
  */
 @Entity
@@ -59,6 +59,14 @@ public class HazardSubmission {
 
     @Column(name = "failure_reason", columnDefinition = "text")
     private String failureReason;
+
+    /** Client-generated idempotency key; a retry with the same key returns this submission. */
+    @Column(name = "client_request_id")
+    private UUID clientRequestId;
+
+    /** When the reporter saw the hazard (may be earlier than createdAt for offline reports). */
+    @Column(name = "observed_at")
+    private Instant observedAt;
 
     @Column(name = "correlation_id", length = 64)
     private String correlationId;

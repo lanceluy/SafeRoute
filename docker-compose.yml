@@ -66,11 +66,14 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      # "dev" allows the public development JWT key and email-based moderator promotion. Drop it
+      # (and set JWT_SECRET) for anything other than a local machine.
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker,dev}
       DB_NAME: ${DB_NAME:-saferoute}
       DB_USER: ${DB_USER:-saferoute}
       DB_PASSWORD: ${DB_PASSWORD:-saferoute}
-      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-change-me-please-must-be-32-bytes-min}
+      JWT_SECRET: ${JWT_SECRET:-}
+      SAFEROUTE_MODERATOR_USER_IDS: ${SAFEROUTE_MODERATOR_USER_IDS:-}
       SAFEROUTE_UPLOADS_DIR: /app/uploads
       SAFEROUTE_MODERATOR_EMAILS: ${SAFEROUTE_MODERATOR_EMAILS:-}
       SAFEROUTE_COVERAGE_ENABLED: ${SAFEROUTE_COVERAGE_ENABLED:-true}

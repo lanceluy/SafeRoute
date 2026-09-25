@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// ORIGINAL vs SAFER, and *why* the safer one is safer (review §12). A floating glass layer.
+/// ORIGINAL vs SAFER, and *why* the safer one is safer. A floating glass layer. When the hazard
+/// assessment is incomplete or unavailable the card says so and makes no safety claim.
 struct RouteComparisonCard: View {
     let plan: RoutePlan
     @Binding var useSafer: Bool
@@ -56,6 +57,13 @@ struct RouteComparisonCard: View {
                 if safer.hasHighSeverityHazard {
                     warning("The safer route still passes a high-severity hazard.")
                 }
+            } else if let notice = plan.assessment.notice {
+                Text("\(Format.duration(plan.original.expectedTravelTime)) · \(Format.distance(plan.original.distance))")
+                    .font(SR.Font.secondary).foregroundStyle(SR.Palette.textSecondary)
+                Label(notice, systemImage: "questionmark.diamond.fill")
+                    .font(SR.Font.metaStrong)
+                    .foregroundStyle(SR.Palette.warning)
+                hazardList(plan.original)
             } else if plan.original.hazards.isEmpty {
                 Label("No reported hazards on this route · \(Format.duration(plan.original.expectedTravelTime))",
                       systemImage: "checkmark.shield.fill")
@@ -64,16 +72,8 @@ struct RouteComparisonCard: View {
             } else {
                 Text("\(Format.duration(plan.original.expectedTravelTime)) · \(Format.distance(plan.original.distance))")
                     .font(SR.Font.secondary).foregroundStyle(SR.Palette.textSecondary)
-                warning("No walkable alternative avoids \(hazardCount(plan.original).lowercased()) on this route. Take care.")
-                ForEach(plan.original.hazards) { rh in
-                    Button { onSelectHazard(rh.id) } label: {
-                        Label("\(rh.hazard.type.displayName) · \(Format.distance(rh.distanceFromPath)) from path",
-                              systemImage: rh.hazard.type.symbolName)
-                            .font(SR.Font.secondary)
-                            .foregroundStyle(SR.Palette.textPrimary)
-                    }
-                    .buttonStyle(.plain)
-                }
+                warning("No lower-risk alternative was found for \(hazardCount(plan.original).lowercased()) on this route. Take care.")
+                hazardList(plan.original)
             }
 
             if let onStart {
@@ -83,6 +83,19 @@ struct RouteComparisonCard: View {
                 .buttonStyle(.srPrimary)
                 .accessibilityHint("Starts walking navigation with hazard warnings")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func hazardList(_ option: RouteOption) -> some View {
+        ForEach(option.hazards) { rh in
+            Button { onSelectHazard(rh.id) } label: {
+                Label("\(rh.hazard.type.displayName) · \(Format.distance(rh.distanceFromPath)) from path",
+                      systemImage: rh.hazard.type.symbolName)
+                    .font(SR.Font.secondary)
+                    .foregroundStyle(SR.Palette.textPrimary)
+            }
+            .buttonStyle(.plain)
         }
     }
 

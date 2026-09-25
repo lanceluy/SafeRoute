@@ -27,8 +27,10 @@ final class MapViewModel: ObservableObject {
         let command: MapCommand
     }
 
-    /// Anything wider than this isn't a pedestrian's map; the server also rejects it.
+    /// Anything wider than this isn't a pedestrian's map.
     nonisolated static let maxSpanDegrees = 0.45
+    /// The server rejects bounding boxes wider than this; padded queries are clamped to it.
+    nonisolated static let maxQuerySpanDegrees = 0.5
 
     @Published private(set) var hazards: [UUID: Hazard] = [:]
     @Published var filters = MapFilters.load() {
@@ -57,6 +59,12 @@ final class MapViewModel: ObservableObject {
 
     private var lastRegion: MKCoordinateRegion?
     private var loadTask: Task<Void, Never>?
+    /// Bumped on sign-out so responses to the previous session's requests are dropped.
+    private var generation = 0
+    /// Per-hazard sequence of the last live (WebSocket) update, so a snapshot that was already in
+    /// flight can't remove a hazard that appeared or changed after it was taken.
+    private(set) var liveSequence = 0
+    private var lastLiveUpdate: [UUID: Int] = [:]
 
     // MARK: Derived
 
@@ -112,41 +120,85 @@ final class MapViewModel: ObservableObject {
         }
         isZoomedOutTooFar = false
         loadState = .loading
+        let generation = self.generation
+        let sequenceAtStart = liveSequence
+        // Slight padding so panning a little doesn't immediately reveal empty edges, clamped to
+        // the server's limit.
+        let latSpan = min(region.span.latitudeDelta * 1.2, Self.maxQuerySpanDegrees)
+        let lonSpan = min(region.span.longitudeDelta * 1.2, Self.maxQuerySpanDegrees)
+        let box = (minLat: region.center.latitude - latSpan / 2, minLon: region.center.longitude - lonSpan / 2,
+                   maxLat: region.center.latitude + latSpan / 2, maxLon: region.center.longitude + lonSpan / 2)
+        let statuses = filters.statuses
         do {
-            // Slight padding so panning a little doesn't immediately reveal empty edges.
-            let latPad = region.span.latitudeDelta * 0.1, lonPad = region.span.longitudeDelta * 0.1
-            let fresh = try await APIClient.shared.send(.inBbox(
-                minLat: region.center.latitude - region.span.latitudeDelta / 2 - latPad,
-                minLon: region.center.longitude - region.span.longitudeDelta / 2 - lonPad,
-                maxLat: region.center.latitude + region.span.latitudeDelta / 2 + latPad,
-                maxLon: region.center.longitude + region.span.longitudeDelta / 2 + lonPad,
-                statuses: filters.statuses), as: [Hazard].self)
-            guard !Task.isCancelled else { return }
-            for hazard in fresh { hazards[hazard.id] = hazard }
+            let (fresh, response) = try await APIClient.shared.sendWithResponse(.inBbox(
+                minLat: box.minLat, minLon: box.minLon, maxLat: box.maxLat, maxLon: box.maxLon,
+                statuses: statuses), as: [Hazard].self)
+            guard !Task.isCancelled, generation == self.generation else { return }
+            for hazard in fresh { upsert(hazard) }
+            // Only a complete snapshot says anything about hazards it doesn't contain.
+            if response.value(forHTTPHeaderField: "X-Result-Truncated") != "true" {
+                reconcile(snapshot: fresh, box: box, statuses: statuses, sequenceAtStart: sequenceAtStart)
+            }
             loadState = .loaded
         } catch is CancellationError {
             return
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             loadState = .failed("Couldn't load nearby hazards.")
         }
     }
 
+    /// Removes cached hazards the server no longer returns for exactly this box and status set
+    /// (resolved, expired or changed while we weren't listening).
+    func reconcile(snapshot: [Hazard],
+                           box: (minLat: Double, minLon: Double, maxLat: Double, maxLon: Double),
+                           statuses: Set<HazardStatus>, sequenceAtStart: Int) {
+        let returned = Set(snapshot.map(\.id))
+        let stale = hazards.values.filter { hazard in
+            !returned.contains(hazard.id)
+                && statuses.contains(hazard.status)
+                && (box.minLat...box.maxLat).contains(hazard.latitude)
+                && (box.minLon...box.maxLon).contains(hazard.longitude)
+                && (lastLiveUpdate[hazard.id] ?? 0) <= sequenceAtStart
+        }.map(\.id)
+        guard !stale.isEmpty else { return }
+        for id in stale { hazards[id] = nil }
+        // A hazard on the walker's route must not silently vanish from guidance: its absence may
+        // only mean it left the selected status filter. Look up its real state.
+        if let session = navigation {
+            let onRoute = Set(session.routeHazards.map(\.id))
+            for id in stale where onRoute.contains(id) {
+                Task {
+                    await fetchAndUpsert(id)
+                    syncNavigationHazards()
+                }
+            }
+        }
+    }
+
     func fetchAndUpsert(_ hazardId: UUID) async {
-        if let detail = try? await APIClient.shared.send(.hazard(id: hazardId), as: HazardDetail.self) {
+        let generation = self.generation
+        if let detail = try? await APIClient.shared.send(.hazard(id: hazardId), as: HazardDetail.self),
+           generation == self.generation {
             upsert(detail.hazard)
         }
     }
 
+    /// Stores a snapshot unless a newer version of the hazard is already known.
     func upsert(_ hazard: Hazard) {
+        if let existing = hazards[hazard.id], (existing.version ?? 0) > (hazard.version ?? 0) { return }
         hazards[hazard.id] = hazard
     }
 
     // MARK: Real-time
 
-    /// Patch local state immediately from a WebSocket frame (review §23).
+    /// Patch local state immediately from a WebSocket frame.
     func apply(_ frame: HazardEventFrame) {
+        liveSequence += 1
+        lastLiveUpdate[frame.hazardId] = liveSequence
         if var existing = hazards[frame.hazardId] {
+            // Frames can arrive out of order (two topics, reconnects): never go back in time.
+            if let known = existing.version, let incoming = frame.version, incoming < known { return }
             existing.status = frame.status
             existing.severity = frame.severity
             existing.confirmationCount = frame.confirmationCount
@@ -155,6 +207,7 @@ final class MapViewModel: ObservableObject {
             existing.longitude = frame.longitude
             existing.type = frame.hazardType
             existing.updatedAt = frame.occurredAt ?? Date()
+            existing.version = frame.version ?? existing.version
             hazards[frame.hazardId] = existing
         } else {
             hazards[frame.hazardId] = Hazard(
@@ -162,7 +215,7 @@ final class MapViewModel: ObservableObject {
                 description: nil, photoUrl: nil, status: frame.status, severity: frame.severity, severityAnswer: nil,
                 confirmationCount: frame.confirmationCount, disputeCount: frame.disputeCount, confidence: nil,
                 reporterId: nil, createdAt: frame.occurredAt ?? Date(), updatedAt: frame.occurredAt ?? Date(),
-                lastConfirmedAt: nil, expiresAt: nil, resolvedAt: nil)
+                lastConfirmedAt: nil, expiresAt: nil, resolvedAt: nil, version: frame.version)
         }
     }
 
@@ -182,6 +235,8 @@ final class MapViewModel: ObservableObject {
 
     func setPlan(_ plan: RoutePlan) {
         self.plan = plan
+        // Everything the assessment saw along the route, so the map and guidance agree with the card.
+        for hazard in plan.assessedHazards { upsert(hazard) }
         useSaferRoute = plan.safer != nil
         publishActiveRoute()
         command = CommandRequest(command: .showRoute)
@@ -222,10 +277,12 @@ final class MapViewModel: ObservableObject {
         isRerouting = true
         defer { isRerouting = false }
         guard let fresh = try? await RouteAvoidanceService.shared.plan(from: here, to: plan.destination,
-                                                                       destinationName: plan.destinationName) else { return }
+                                                                       destinationName: plan.destinationName,
+                                                                       destinationItem: plan.destinationItem) else { return }
         let voice = navigation?.voiceEnabled ?? true
         navigation?.stop()
         self.plan = fresh
+        for hazard in fresh.assessedHazards { upsert(hazard) }
         useSaferRoute = fresh.safer != nil
         publishActiveRoute()
         guard let option = activeRoute else { return }
@@ -239,6 +296,19 @@ final class MapViewModel: ObservableObject {
     /// Keeps the session's hazard list in sync with live WebSocket updates.
     func syncNavigationHazards() {
         navigation?.refreshHazards(Array(hazards.values))
+    }
+
+    /// After a gap in live updates (reconnect), re-assesses the whole active route so guidance
+    /// converges on the server's state, including hazards resolved while disconnected.
+    func reassessActiveRoute() async {
+        guard let session = navigation, let route = activeRoute else { return }
+        let generation = self.generation
+        let points = RouteAvoidanceService.downsample(route.coordinates, maxPoints: 4000)
+        guard let response = try? await APIClient.shared.send(
+                .alongRoute([points], corridorMeters: RoutingSettings.corridorMeters + 20), as: RouteHazardsResponse.self),
+              response.complete, generation == self.generation, navigation === session else { return }
+        for hazard in response.hazards { upsert(hazard) }
+        session.replaceHazards(withCompleteAssessment: response.hazards)
     }
 
     /// While navigating, show only what matters: hazards on the route and anything right next to the user.
@@ -258,8 +328,11 @@ final class MapViewModel: ObservableObject {
     }
 
     func reset() {
+        generation += 1
+        loadTask?.cancel()
         endNavigation()
         hazards = [:]
+        lastLiveUpdate = [:]
         plan = nil
         latestAlert = nil
         selectedHazardId = nil

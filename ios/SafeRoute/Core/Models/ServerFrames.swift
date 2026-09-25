@@ -18,6 +18,8 @@ struct HazardEventFrame: Codable, Identifiable, Hashable {
     let onRoute: Bool
     let distanceAheadMeters: Double?
     let occurredAt: Date?
+    /// Hazard row version; older frames than the stored snapshot are ignored.
+    let version: Int64?
 
     var id: String { "\(hazardId.uuidString)-\(change)-\(occurredAt?.timeIntervalSince1970 ?? 0)" }
 

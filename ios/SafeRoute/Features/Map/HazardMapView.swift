@@ -2,7 +2,7 @@ import SwiftUI
 import MapKit
 
 /// MKMapView wrapper — SwiftUI's `Map` has no annotation clustering on iOS 17, and clustering is
-/// required once many hazards overlap (review §18). Reports the visible region (debounced) so
+/// required once many hazards overlap. Reports the visible region (debounced) so
 /// only hazards in view are fetched.
 struct HazardMapView: UIViewRepresentable {
     let hazards: [Hazard]
@@ -117,7 +117,7 @@ struct HazardMapView: UIViewRepresentable {
             }
         }
 
-        // MARK: Selection & labels (review §27: no label under every pin)
+        // MARK: Selection & labels
 
         func syncSelection(on map: MKMapView) {
             guard parent.selectedHazardId != renderedSelection else { return }
@@ -397,7 +397,7 @@ final class RouteLine: MKPolyline {
 final class HazardRing: MKCircle {}
 
 /// 38 pt severity disc with the type glyph (46 pt when selected). The type name is shown as a
-/// small label only when it helps: selected, or zoomed in close with few pins (review §27).
+/// small label only when it helps: selected, or zoomed in close with few pins.
 final class HazardPinView: MKAnnotationView {
     static let reuseId = "hazard"
     private static let normalSize: CGFloat = 38

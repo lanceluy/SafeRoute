@@ -12,6 +12,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Component
@@ -36,7 +37,8 @@ public class NotificationWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionEstablished(@NonNull WebSocketSession session) {
         UUID userId = userId(session);
         session.setTextMessageSizeLimit(64 * 1024);
-        registry.register(userId, session, preferencesService.alertPreferences(userId));
+        registry.register(userId, session, preferencesService.alertPreferences(userId),
+                (Instant) session.getAttributes().get("tokenExpiresAt"));
         log.info("WebSocket connected: user={} session={}", userId, session.getId());
     }
 

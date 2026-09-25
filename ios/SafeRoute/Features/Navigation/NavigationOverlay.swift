@@ -180,10 +180,18 @@ struct NavigationBottomPanel: View {
                 .accessibilityLabel("End navigation")
             }
             let ahead = session.hazardsAhead.count
-            Label(ahead == 0 ? "No reported hazards ahead" : "\(ahead) hazard\(ahead == 1 ? "" : "s") ahead on this route",
-                  systemImage: ahead == 0 ? "checkmark.shield.fill" : "exclamationmark.triangle.fill")
-                .font(SR.Font.meta.weight(.medium))
-                .foregroundStyle(ahead == 0 ? SR.Palette.safe : SR.Palette.warning)
+            if !session.assessment.isComplete {
+                // Never a green shield when the route's hazards weren't fully checked.
+                Label(ahead == 0 ? "Hazard check incomplete" : "\(ahead) known hazard\(ahead == 1 ? "" : "s") ahead · check incomplete",
+                      systemImage: "questionmark.diamond.fill")
+                    .font(SR.Font.meta.weight(.medium))
+                    .foregroundStyle(SR.Palette.warning)
+            } else {
+                Label(ahead == 0 ? "No reported hazards ahead" : "\(ahead) hazard\(ahead == 1 ? "" : "s") ahead on this route",
+                      systemImage: ahead == 0 ? "checkmark.shield.fill" : "exclamationmark.triangle.fill")
+                    .font(SR.Font.meta.weight(.medium))
+                    .foregroundStyle(ahead == 0 ? SR.Palette.safe : SR.Palette.warning)
+            }
         }
     }
 

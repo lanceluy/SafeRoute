@@ -16,7 +16,7 @@ struct RoutePlannerView: View {
                 if let current = appState.map.plan {
                     Section {
                         Button {
-                            Task { await replan(to: current.destination, name: current.destinationName) }
+                            Task { await replan(to: current.destination, name: current.destinationName, item: current.destinationItem) }
                         } label: {
                             Label("Re-check route to \(current.destinationName)", systemImage: "arrow.clockwise")
                                 .foregroundStyle(SR.Palette.navy)
@@ -81,10 +81,10 @@ struct RoutePlannerView: View {
             errorMessage = "That place couldn't be found."
             return
         }
-        await replan(to: item.placemark.coordinate, name: suggestion.title)
+        await replan(to: item.placemark.coordinate, name: suggestion.title, item: item)
     }
 
-    private func replan(to destination: CLLocationCoordinate2D, name: String) async {
+    private func replan(to destination: CLLocationCoordinate2D, name: String, item: MKMapItem?) async {
         guard let source = LocationManager.shared.currentLocation else {
             errorMessage = "Your current location isn't available yet. Check that Location Services are on."
             return
@@ -92,7 +92,8 @@ struct RoutePlannerView: View {
         isPlanning = true
         defer { isPlanning = false }
         do {
-            let plan = try await RouteAvoidanceService.shared.plan(from: source, to: destination, destinationName: name)
+            let plan = try await RouteAvoidanceService.shared.plan(from: source, to: destination, destinationName: name,
+                                                                  destinationItem: item)
             appState.map.setPlan(plan)
             dismiss()
         } catch {

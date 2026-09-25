@@ -62,7 +62,7 @@ public abstract class IntegrationTestBase {
     protected record TestUser(UUID id, String email, String password, String token, String refreshToken) {
     }
 
-    protected record Location(double lat, double lon) {
+    public record Location(double lat, double lon) {
         public Location offsetMeters(double north, double east) {
             return new Location(lat + north / 111_320.0, lon + east / (111_320.0 * Math.cos(Math.toRadians(lat))));
         }

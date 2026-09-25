@@ -6,7 +6,7 @@ import org.springframework.stereotype.Repository;
 import java.util.UUID;
 
 /**
- * Consumer idempotency ledger (review §22). Call inside the consumer's transaction: if the
+ * Consumer idempotency ledger. Call inside the consumer's transaction: if the
  * handler later fails, the insert rolls back with it and the redelivery is processed normally.
  */
 @Repository

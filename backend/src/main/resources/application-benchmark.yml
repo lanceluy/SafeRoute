@@ -2,6 +2,11 @@
 # Synthetic load uses hundreds of simulated users from one IP, so the per-user/per-IP limits
 # that protect a real deployment would throttle the experiment itself.
 saferoute:
+  jwt:
+    allow-dev-secret: true
+  bootstrap:
+    trust-unverified-emails: true
+    moderator-emails: ${SAFEROUTE_MODERATOR_EMAILS:mod@saferoute.local}
   rate-limit:
     enabled: false
   coverage:

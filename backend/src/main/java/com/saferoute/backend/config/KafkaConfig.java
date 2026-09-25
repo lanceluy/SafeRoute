@@ -21,7 +21,6 @@ import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaOperations;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.CommonErrorHandler;
-import org.springframework.kafka.listener.CommonLoggingErrorHandler;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.listener.RetryListener;
@@ -38,6 +37,8 @@ public class KafkaConfig {
     private static final short REPLICATION_FACTOR = 1; // single-broker local dev
     private static final long RETRY_INTERVAL_MS = 500;
     private static final long RETRY_ATTEMPTS = 2; // 1 delivery + 2 retries, then DLQ
+    private static final long DLQ_RETRY_INTERVAL_MS = 5_000;
+    private static final long DLQ_RETRY_ATTEMPTS = 12;
 
     @Bean public NewTopic hazardReportedTopic() { return topic(KafkaTopics.HAZARD_REPORTED); }
     @Bean public NewTopic hazardVerifiedTopic() { return topic(KafkaTopics.HAZARD_VERIFIED); }
@@ -61,7 +62,7 @@ public class KafkaConfig {
     }
 
     /**
-     * Retry, then dead-letter (review §22). Transient failures (optimistic-lock conflicts, a
+     * Retry, then dead-letter. Transient failures (optimistic-lock conflicts, a
      * unique-constraint race, a DB blip) get two more attempts; events that can never succeed
      * ({@link NonRetryableEventException}, deserialization errors) go straight to
      * {@code <topic>.dlq}.
@@ -95,13 +96,20 @@ public class KafkaConfig {
         return handler;
     }
 
-    /** The DLQ monitor must never dead-letter its own failures (that would loop), so it only logs. */
+    /**
+     * The DLQ monitors must never dead-letter their own failures (that would loop). A failure is
+     * usually transient (the database was briefly unavailable), so it is retried for about a
+     * minute before the record is logged and skipped.
+     */
     @Bean
     public ConcurrentKafkaListenerContainerFactory<Object, Object> deadLetterListenerContainerFactory(
             ConsumerFactory<Object, Object> consumerFactory) {
         var factory = new ConcurrentKafkaListenerContainerFactory<Object, Object>();
         factory.setConsumerFactory(consumerFactory);
-        factory.setCommonErrorHandler(new CommonLoggingErrorHandler());
+        factory.setCommonErrorHandler(new DefaultErrorHandler(
+                (record, ex) -> log.error("Giving up on dead-letter record {}-{}@{}: {}",
+                        record.topic(), record.partition(), record.offset(), ex.getMessage()),
+                new FixedBackOff(DLQ_RETRY_INTERVAL_MS, DLQ_RETRY_ATTEMPTS)));
         return factory;
     }
 

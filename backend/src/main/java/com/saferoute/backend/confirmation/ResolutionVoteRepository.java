@@ -14,6 +14,8 @@ public interface ResolutionVoteRepository extends JpaRepository<ResolutionVote, 
 
     long countByHazardIdAndAction(UUID hazardId, ResolutionAction action);
 
+    boolean existsByHazardId(UUID hazardId);
+
     @Modifying
     @Query("DELETE FROM ResolutionVote v WHERE v.hazardId = :hazardId")
     int deleteByHazardId(@Param("hazardId") UUID hazardId);

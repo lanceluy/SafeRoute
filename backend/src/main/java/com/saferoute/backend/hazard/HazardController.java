@@ -24,6 +24,7 @@ import java.util.UUID;
 public class HazardController {
 
     static final String MODERATOR_ONLY = "hasAnyRole('MODERATOR','MUNICIPAL_OFFICIAL')";
+    public static final String TRUNCATED_HEADER = "X-Result-Truncated";
 
     private final HazardService hazardService;
     private final RateLimitService rateLimitService;
@@ -48,15 +49,29 @@ public class HazardController {
 
     @GetMapping("/in-bbox")
     @Operation(summary = "Hazards inside the visible map region",
-            description = "Requires minLat < maxLat and minLon < maxLon, at most 0.5° per side; limit 1–250 (default 100).")
-    public List<HazardResponse> inBbox(@RequestParam double minLat,
-                                       @RequestParam double minLon,
-                                       @RequestParam double maxLat,
-                                       @RequestParam double maxLon,
-                                       @RequestParam(required = false) String types,
-                                       @RequestParam(required = false) String statuses,
-                                       @RequestParam(required = false) Integer limit) {
-        return hazardService.findInBbox(minLat, minLon, maxLat, maxLon, types, statuses, limit);
+            description = "Requires minLat < maxLat and minLon < maxLon, at most 0.5° per side; limit 1–250 (default 100). "
+                    + "Most recently updated first. The response header X-Result-Truncated: true means more hazards "
+                    + "matched than were returned, so the list must not be treated as a complete snapshot of the area.")
+    public ResponseEntity<List<HazardResponse>> inBbox(@RequestParam double minLat,
+                                                       @RequestParam double minLon,
+                                                       @RequestParam double maxLat,
+                                                       @RequestParam double maxLon,
+                                                       @RequestParam(required = false) String types,
+                                                       @RequestParam(required = false) String statuses,
+                                                       @RequestParam(required = false) Integer limit) {
+        HazardService.HazardPage page = hazardService.findInBbox(minLat, minLon, maxLat, maxLon, types, statuses, limit);
+        return ResponseEntity.ok()
+                .header(TRUNCATED_HEADER, Boolean.toString(page.truncated()))
+                .body(page.hazards());
+    }
+
+    @PostMapping("/along-route")
+    @Operation(summary = "Every active hazard along candidate routes",
+            description = "For route assessment. Returns all active hazards within corridorMeters (default: the "
+                    + "server's route corridor) of any route, not a recency-ordered sample. complete=false means the "
+                    + "result was capped or a route leaves the pilot area; absence of hazards is then not evidence of safety.")
+    public RouteHazardsResponse alongRoute(@Valid @RequestBody RouteHazardsRequest request) {
+        return hazardService.findAlongRoutes(request);
     }
 
     @GetMapping("/{id}")

@@ -1,7 +1,7 @@
 import Foundation
 import CoreLocation
 
-/// Human-readable data everywhere (UI review §32): "Just now", "4 min ago", "220 m ahead".
+/// Human-readable data everywhere: "Just now", "4 min ago", "220 m ahead".
 enum Format {
     static func distance(_ meters: Double) -> String {
         if meters < 1000 { return "\(Int((meters / 10).rounded() * 10)) m" }

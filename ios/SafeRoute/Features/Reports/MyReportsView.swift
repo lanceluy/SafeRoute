@@ -61,7 +61,7 @@ struct MyReportsView: View {
         }
     }
 
-    // MARK: Chips with counts (review §13)
+    // MARK: Chips with counts
 
     private var chips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -126,7 +126,7 @@ struct MyReportsView: View {
         }
     }
 
-    /// Explains what to expect and points to where the reports are (review §14).
+    /// Explains what to expect and points to where the reports are.
     private var segmentEmptyState: some View {
         let copy: (title: String, message: String) = switch segment {
         case .processing: ("Nothing processing", "New reports show here for a moment while SafeRoute checks whether someone already reported the same hazard.")
@@ -332,7 +332,7 @@ struct MyReportsView: View {
     }
 }
 
-/// Hierarchy: type + status → street → time → community (review §34–35).
+/// Hierarchy: type + status → street → time → community.
 private struct ReportCard: View {
     let report: MyReport
     let place: String?

@@ -67,13 +67,14 @@ class DeduplicationIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    void outsideLookbackWindowDoesNotMerge() throws Exception {
+    void anInactiveHazardDoesNotAbsorbANewReport() throws Exception {
         TestUser alice = registerUser();
         TestUser bob = registerUser();
         Location at = freshLocation();
         UUID first = reportAndAwaitHazard(alice, "ACCESSIBILITY_BARRIER", at);
-        jdbc.update("UPDATE hazards SET created_at = now() - interval '80 hours' WHERE id = ?", first);
+        jdbc.update("UPDATE hazards SET status = 'RESOLVED', resolved_at = now() WHERE id = ?", first);
 
+        // The barrier came back after being fixed: that is a new hazard, not a confirmation of the old one.
         UUID second = reportAndAwaitHazard(bob, "ACCESSIBILITY_BARRIER", at);
         assertThat(second).isNotEqualTo(first);
     }

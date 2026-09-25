@@ -6,10 +6,10 @@ import java.util.Set;
 public enum HazardStatus {
     REPORTED,
     VERIFIED,
-    /** Community reports disagree — shown, never hidden (review §8). */
+    /** Community reports disagree — shown, never hidden. */
     DISPUTED,
     RESOLVED,
-    /** No recent confirmation within the type's expiry window (review §9). */
+    /** No recent confirmation within the type's expiry window. */
     EXPIRED,
     /** Removed by a moderator as false/spam. */
     REMOVED;

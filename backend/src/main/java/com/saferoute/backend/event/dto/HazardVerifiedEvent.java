@@ -10,6 +10,8 @@ public record HazardVerifiedEvent(
         EventMetadata metadata,
         UUID hazardId,
         UUID verifierUserId,
-        ConfirmationAction action
+        ConfirmationAction action,
+        /** The hazard's content revision when the command was accepted; null for legacy events. */
+        Integer hazardRevision
 ) {
 }

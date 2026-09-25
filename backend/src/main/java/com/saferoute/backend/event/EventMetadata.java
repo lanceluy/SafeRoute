@@ -5,7 +5,7 @@ import com.saferoute.backend.common.Correlation;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Envelope fields carried by every event (review §22, §59). */
+/** Envelope fields carried by every event. */
 public record EventMetadata(
         UUID eventId,
         String eventType,

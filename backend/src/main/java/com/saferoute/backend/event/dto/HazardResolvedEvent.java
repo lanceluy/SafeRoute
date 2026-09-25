@@ -9,6 +9,8 @@ public record HazardResolvedEvent(
         EventMetadata metadata,
         UUID hazardId,
         UUID resolvedByUserId,
-        String resolutionNote
+        String resolutionNote,
+        /** The hazard's content revision when the command was accepted; null for legacy events. */
+        Integer hazardRevision
 ) {
 }

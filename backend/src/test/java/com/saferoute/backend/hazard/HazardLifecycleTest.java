@@ -16,7 +16,6 @@ class HazardLifecycleTest {
 
     @Test
     void disagreementIsSurfacedNotHidden() {
-        // Review §8 examples.
         assertThat(lifecycle.evaluate(HazardStatus.VERIFIED, 6, 1)).isEqualTo(HazardStatus.VERIFIED);
         assertThat(lifecycle.evaluate(HazardStatus.VERIFIED, 3, 4)).isEqualTo(HazardStatus.DISPUTED);
         assertThat(lifecycle.evaluate(HazardStatus.REPORTED, 2, 2)).isEqualTo(HazardStatus.DISPUTED);

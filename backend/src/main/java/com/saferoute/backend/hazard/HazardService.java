@@ -50,6 +50,10 @@ public class HazardService {
     static final double MAX_BBOX_SPAN_DEGREES = 0.5;
     static final double REPORTER_MAX_MOVE_METERS = 50;
     static final String ACTIVE_STATUSES = "REPORTED,VERIFIED,DISPUTED";
+    static final int MAX_ROUTE_POINTS = 5000;
+    private static final Set<String> STRUCTURAL_FIELDS = Set.of("type", "location", "severity");
+    static final int MAX_ROUTE_HAZARDS = 1000;
+    static final double MAX_ROUTE_CORRIDOR_METERS = 200;
 
     private final HazardRepository hazardRepository;
     private final HazardConfirmationRepository confirmationRepository;
@@ -66,6 +70,7 @@ public class HazardService {
     private final CoverageArea coverageArea;
     private final ImageUploadService imageUploadService;
     private final int resolutionThreshold;
+    private final double routeCorridorMeters;
 
     public HazardService(HazardRepository hazardRepository,
                          HazardConfirmationRepository confirmationRepository,
@@ -81,7 +86,8 @@ public class HazardService {
                          ReputationService reputationService,
                          CoverageArea coverageArea,
                          ImageUploadService imageUploadService,
-                         @Value("${saferoute.hazard.resolution-threshold}") int resolutionThreshold) {
+                         @Value("${saferoute.hazard.resolution-threshold}") int resolutionThreshold,
+                         @Value("${saferoute.notification.route-corridor-meters}") double routeCorridorMeters) {
         this.hazardRepository = hazardRepository;
         this.confirmationRepository = confirmationRepository;
         this.resolutionVoteRepository = resolutionVoteRepository;
@@ -97,6 +103,7 @@ public class HazardService {
         this.coverageArea = coverageArea;
         this.imageUploadService = imageUploadService;
         this.resolutionThreshold = resolutionThreshold;
+        this.routeCorridorMeters = routeCorridorMeters;
     }
 
     // ------------------------------------------------------------------ queries
@@ -112,8 +119,12 @@ public class HazardService {
                 .stream().map(HazardResponse::from).toList();
     }
 
-    public List<HazardResponse> findInBbox(double minLat, double minLon, double maxLat, double maxLon,
-                                           String types, String statuses, Integer limit) {
+    /** A query result plus whether the limit cut it short (more matching hazards exist). */
+    public record HazardPage(List<HazardResponse> hazards, boolean truncated) {
+    }
+
+    public HazardPage findInBbox(double minLat, double minLon, double maxLat, double maxLon,
+                                 String types, String statuses, Integer limit) {
         requireCoordinates(minLat, minLon);
         requireCoordinates(maxLat, maxLon);
         if (minLat >= maxLat || minLon >= maxLon) {
@@ -122,8 +133,50 @@ public class HazardService {
         if (maxLat - minLat > MAX_BBOX_SPAN_DEGREES || maxLon - minLon > MAX_BBOX_SPAN_DEGREES) {
             throw badRequest("Bounding box is too large (max " + MAX_BBOX_SPAN_DEGREES + "° per side); zoom in");
         }
-        return hazardRepository.findInBbox(minLat, minLon, maxLat, maxLon, parseTypes(types), parseStatuses(statuses), parseLimit(limit))
-                .stream().map(HazardResponse::from).toList();
+        int max = parseLimit(limit);
+        List<Hazard> found = hazardRepository.findInBbox(minLat, minLon, maxLat, maxLon, parseTypes(types), parseStatuses(statuses), max + 1);
+        boolean truncated = found.size() > max;
+        return new HazardPage(found.stream().limit(max).map(HazardResponse::from).toList(), truncated);
+    }
+
+    /**
+     * Every active hazard within the corridor of any of the given routes — the complete input a
+     * route assessment needs. Unlike the viewport queries this is not ordered by recency and cut
+     * short: it returns everything up to {@link #MAX_ROUTE_HAZARDS} and says so if there were more.
+     * Points outside the pilot coverage area are reported, because the absence of reports there
+     * means "not tracked", not "no hazards".
+     */
+    public RouteHazardsResponse findAlongRoutes(RouteHazardsRequest request) {
+        List<List<double[]>> routes = request.routes();
+        int points = 0;
+        boolean leavesCoverage = false;
+        StringBuilder wkt = new StringBuilder("MULTILINESTRING(");
+        for (int r = 0; r < routes.size(); r++) {
+            List<double[]> route = routes.get(r);
+            if (route == null || route.size() < 2) throw badRequest("Each route needs at least 2 points");
+            if (r > 0) wkt.append(',');
+            wkt.append('(');
+            for (int i = 0; i < route.size(); i++) {
+                double[] p = route.get(i);
+                if (p == null || p.length != 2) throw badRequest("Route points must be [latitude, longitude]");
+                requireCoordinates(p[0], p[1]);
+                if (coverageArea.isEnabled() && !coverageArea.contains(p[0], p[1])) leavesCoverage = true;
+                if (i > 0) wkt.append(',');
+                wkt.append(String.format(Locale.ROOT, "%.7f %.7f", p[1], p[0]));
+            }
+            wkt.append(')');
+            points += route.size();
+        }
+        wkt.append(')');
+        if (points > MAX_ROUTE_POINTS) throw badRequest("Routes may have at most " + MAX_ROUTE_POINTS + " points in total");
+        double corridor = request.corridorMeters() != null ? request.corridorMeters() : routeCorridorMeters;
+        if (corridor < 1 || corridor > MAX_ROUTE_CORRIDOR_METERS) {
+            throw badRequest("corridorMeters must be between 1 and " + (int) MAX_ROUTE_CORRIDOR_METERS);
+        }
+        List<Hazard> found = hazardRepository.findAlongLines(wkt.toString(), corridor, MAX_ROUTE_HAZARDS + 1);
+        boolean truncated = found.size() > MAX_ROUTE_HAZARDS;
+        return new RouteHazardsResponse(found.stream().limit(MAX_ROUTE_HAZARDS).map(HazardResponse::from).toList(),
+                !truncated && !leavesCoverage, truncated, leavesCoverage, corridor);
     }
 
     public HazardDetailResponse getDetail(UUID id, AuthenticatedUser viewer) {
@@ -178,6 +231,7 @@ public class HazardService {
 
     // ------------------------------------------------------------------ community commands (async)
 
+    @Transactional
     public CommandAccepted setConfirmation(UUID hazardId, UUID userId, ConfirmationAction action) {
         Hazard hazard = requireActive(hazardId);
         if (hazard.getReporterId().equals(userId)) {
@@ -185,14 +239,16 @@ public class HazardService {
                     "You cannot verify or dispute your own hazard report.");
         }
         eventProducer.publishVerified(new HazardVerifiedEvent(
-                EventMetadata.create(KafkaTopics.HAZARD_VERIFIED), hazardId, userId, action));
+                EventMetadata.create(KafkaTopics.HAZARD_VERIFIED), hazardId, userId, action, hazard.getContentRevision()));
         return CommandAccepted.queued(hazardId, action);
     }
 
+    @Transactional
     public CommandAccepted requestResolution(UUID hazardId, UUID userId, ResolutionAction action) {
-        requireActive(hazardId);
+        Hazard hazard = requireActive(hazardId);
         eventProducer.publishResolutionRequested(new ResolutionRequestedEvent(
-                EventMetadata.create(KafkaTopics.HAZARD_RESOLUTION_REQUESTED), hazardId, userId, action));
+                EventMetadata.create(KafkaTopics.HAZARD_RESOLUTION_REQUESTED), hazardId, userId, action,
+                hazard.getContentRevision()));
         return CommandAccepted.queued(hazardId, action);
     }
 
@@ -200,7 +256,7 @@ public class HazardService {
 
     @Transactional
     public HazardResponse update(UUID hazardId, AuthenticatedUser actor, UpdateHazardRequest request) {
-        Hazard hazard = requireHazard(hazardId);
+        Hazard hazard = requireHazardForUpdate(hazardId);
         boolean isReporter = hazard.getReporterId().equals(actor.id());
         boolean isModerator = actor.canModerate();
         if (!isReporter && !isModerator) {
@@ -211,9 +267,13 @@ public class HazardService {
         }
         boolean structural = request.type() != null || request.latitude() != null || request.longitude() != null
                 || request.severityAnswer() != null;
-        if (structural && !isModerator && hazard.getStatus() != HazardStatus.REPORTED) {
+        // Any community opinion — even a single VERIFY that left the hazard REPORTED — assessed the
+        // current content, so the reporter may no longer change what it describes.
+        boolean hasOpinions = hazard.getConfirmationCount() > 0 || hazard.getDisputeCount() > 0
+                || confirmationRepository.existsByHazardId(hazardId) || resolutionVoteRepository.existsByHazardId(hazardId);
+        if (structural && !isModerator && (hazard.getStatus() != HazardStatus.REPORTED || hasOpinions)) {
             throw new ApiException(HttpStatus.FORBIDDEN, "EDIT_LOCKED",
-                    "Type, location and severity can't be changed after the community has confirmed or disputed the report");
+                    "Type, location and severity can't be changed after the community has confirmed, disputed or voted on the report");
         }
         if ((request.latitude() == null) != (request.longitude() == null)) {
             throw badRequest("latitude and longitude must be provided together");
@@ -227,7 +287,8 @@ public class HazardService {
             changed.add("description");
         }
         if (request.photoUrl() != null && !request.photoUrl().equals(hazard.getPhotoUrl())) {
-            imageUploadService.requireExistingUpload(request.photoUrl());
+            imageUploadService.requireOwnedUpload(request.photoUrl(), actor.id());
+            imageUploadService.markAttached(request.photoUrl());
             audit.record(hazardId, actor.id(), HazardAuditLog.Action.FIELD_EDITED, "photoUrl", hazard.getPhotoUrl(), request.photoUrl(), null);
             hazard.setPhotoUrl(request.photoUrl());
             changed.add("photoUrl");
@@ -257,6 +318,12 @@ public class HazardService {
             audit.record(hazardId, actor.id(), HazardAuditLog.Action.FIELD_EDITED, "type", hazard.getType(), newType, null);
             hazard.setType(newType);
             changed.add("type");
+            // Expiry follows the new type's lifetime from the last real sighting; an edit is not
+            // itself fresh evidence. If that moment has passed, the next expiry sweep retires it.
+            Instant expiresAt = expiryPolicy.expiryFrom(newType, hazard.getLastConfirmedAt());
+            audit.record(hazardId, actor.id(), HazardAuditLog.Action.FIELD_EDITED, "expiresAt", hazard.getExpiresAt(), expiresAt,
+                    "Recomputed for " + newType + " from the last confirmation");
+            hazard.setExpiresAt(expiresAt);
         }
         if (!Objects.equals(newAnswer, hazard.getSeverityAnswer()) || changed.contains("type")) {
             Severity severity = classifier.classify(newType, newAnswer);
@@ -269,6 +336,17 @@ public class HazardService {
         }
         if (changed.isEmpty()) return HazardResponse.from(hazard);
 
+        if (changed.stream().anyMatch(STRUCTURAL_FIELDS::contains)) {
+            // New content: commands accepted against the old content are dropped by the consumer,
+            // and existing opinions keep the revision they assessed.
+            hazard.setContentRevision(hazard.getContentRevision() + 1);
+            if (hasOpinions) {
+                audit.record(hazardId, actor.id(), HazardAuditLog.Action.FIELD_EDITED, "contentRevision",
+                        hazard.getContentRevision() - 1, hazard.getContentRevision(),
+                        "Moderator changed content after community opinions; those opinions assessed revision "
+                                + (hazard.getContentRevision() - 1));
+            }
+        }
         hazard = hazardRepository.save(hazard);
         eventProducer.publishUpdated(hazard, HazardChange.EDITED, actor.id());
         return HazardResponse.from(hazard);
@@ -276,17 +354,18 @@ public class HazardService {
 
     // ------------------------------------------------------------------ moderation
 
+    @Transactional
     public CommandAccepted resolve(UUID hazardId, UUID moderatorId, String note) {
-        requireActive(hazardId);
+        Hazard hazard = requireActive(hazardId);
         eventProducer.publishResolved(new HazardResolvedEvent(
                 EventMetadata.create(KafkaTopics.HAZARD_RESOLVED), hazardId, moderatorId,
-                note != null && !note.isBlank() ? note : "Resolved by moderator"));
+                note != null && !note.isBlank() ? note : "Resolved by moderator", hazard.getContentRevision()));
         return new CommandAccepted(hazardId, "RESOLVE", "QUEUED");
     }
 
     @Transactional
     public HazardResponse reopen(UUID hazardId, UUID moderatorId, String note) {
-        Hazard hazard = requireHazard(hazardId);
+        Hazard hazard = requireHazardForUpdate(hazardId);
         if (hazard.getStatus().isActive()) {
             throw new ApiException(HttpStatus.CONFLICT, "HAZARD_ALREADY_ACTIVE", "Hazard is already " + hazard.getStatus());
         }
@@ -296,6 +375,8 @@ public class HazardService {
         Instant now = Instant.now();
         hazard.setStatus(newStatus);
         hazard.setResolvedAt(null);
+        // A new lifecycle: votes and moderator commands accepted before the reopen no longer apply.
+        hazard.setContentRevision(hazard.getContentRevision() + 1);
         hazard.setLastConfirmedAt(now);
         hazard.setExpiresAt(expiryPolicy.expiryFrom(hazard.getType(), now));
         audit.statusChanged(hazardId, moderatorId, oldStatus, newStatus, note);
@@ -308,7 +389,7 @@ public class HazardService {
     /** Removes a false/spam report; the reporter loses reputation and correct disputers gain it. */
     @Transactional
     public HazardResponse remove(UUID hazardId, UUID moderatorId, String note) {
-        Hazard hazard = requireHazard(hazardId);
+        Hazard hazard = requireHazardForUpdate(hazardId);
         if (hazard.getStatus() == HazardStatus.REMOVED) {
             throw new ApiException(HttpStatus.CONFLICT, "HAZARD_ALREADY_REMOVED", "Hazard was already removed");
         }
@@ -327,6 +408,11 @@ public class HazardService {
 
     private Hazard requireHazard(UUID id) {
         return hazardRepository.findById(id)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "HAZARD_NOT_FOUND", "Hazard not found: " + id));
+    }
+
+    private Hazard requireHazardForUpdate(UUID id) {
+        return hazardRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "HAZARD_NOT_FOUND", "Hazard not found: " + id));
     }
 

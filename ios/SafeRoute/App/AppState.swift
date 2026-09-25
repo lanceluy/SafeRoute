@@ -30,6 +30,12 @@ final class AppState: ObservableObject {
         let socket = WebSocketClient.shared
         socket.onHazardFrame = { [weak self] frame in self?.handle(frame) }
         socket.onSubmissionFrame = { [weak self] frame in self?.reports.handle(frame) }
+        // Frames sent while the socket was down are lost: re-fetch what they would have changed.
+        socket.onReconnected = { [weak self] in
+            guard let self, self.currentUser != nil else { return }
+            Task { await self.map.refresh() }
+            Task { await self.map.reassessActiveRoute() }
+        }
         map.onNavigationChange = { [weak self] navigating in self?.isNavigating = navigating }
         reports.onSubmissionFinished = { [weak self] status, hazardId, message in
             guard let self else { return }
@@ -40,8 +46,10 @@ final class AppState: ObservableObject {
         }
         ConnectivityMonitor.shared.onReconnect = { [weak self] in
             guard let self, self.currentUser != nil else { return }
+            WebSocketClient.shared.connect() // idempotent; restarts a socket that gave up
             Task { await self.flushOfflineQueue() }
             Task { await self.map.refresh() }
+            Task { await self.map.reassessActiveRoute() }
         }
         sessionObserver = NotificationCenter.default.addObserver(forName: .sessionExpired, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
@@ -94,6 +102,9 @@ final class AppState: ObservableObject {
         WebSocketClient.shared.disconnect()
         map.reset()
         reports.reset()
+        // Per-account data stays on disk for its owner but is no longer visible or sendable.
+        offlineQueue.deactivate()
+        alerts.deactivate()
         currentUser = nil
         selectedTab = .map
     }
@@ -109,8 +120,12 @@ final class AppState: ObservableObject {
 
     /// Submit a report; if the network is down, queue it for automatic retry.
     func submitReport(_ request: HazardSubmissionRequest, imageData: Data?) async -> Bool {
+        var request = request
+        // One key per logical report: a retry after an ambiguous failure (or from the offline
+        // queue) returns the original submission instead of creating a second one.
+        request.clientRequestId = request.clientRequestId ?? UUID()
+        request.observedAt = request.observedAt ?? Date()
         do {
-            var request = request
             if let imageData {
                 let stored = try await APIClient.shared.send(.uploadHazardImage(jpeg: imageData), as: StoredImage.self)
                 request.photoUrl = stored.url
@@ -121,7 +136,12 @@ final class AppState: ObservableObject {
                        systemImage: "hourglass", style: .info))
             return true
         } catch let error as APIError where error.isConnectivityProblem {
-            offlineQueue.enqueue(request, imageData: imageData)
+            do {
+                try offlineQueue.enqueue(request, imageData: imageData)
+            } catch {
+                show(Toast(message: error.localizedDescription, systemImage: "exclamationmark.triangle.fill", style: .error))
+                return false
+            }
             show(Toast(message: "Report queued. It will be sent automatically when you're back online.",
                        systemImage: "tray.and.arrow.up.fill", style: .warning))
             return true
@@ -132,9 +152,11 @@ final class AppState: ObservableObject {
     }
 
     func flushOfflineQueue() async {
-        await offlineQueue.flush { [weak self] submission, request in
+        await offlineQueue.flush(onSubmitted: { [weak self] submission, request in
             self?.reports.track(submission, request: request)
-        }
+        }, onDropped: { [weak self] _, message in
+            self?.show(Toast(message: message, systemImage: "clock.badge.exclamationmark", style: .warning))
+        })
     }
 
     #if DEBUG
@@ -157,8 +179,15 @@ final class AppState: ObservableObject {
     #endif
 
     private func setUser(_ user: CurrentUser) {
+        if currentUser?.id != user.id {
+            // A different account: nothing from the previous one may leak into this session.
+            map.reset()
+            reports.reset()
+        }
         currentUser = user
         UserDefaults.standard.set(try? JSONEncoder.api.encode(user), forKey: userKey)
+        offlineQueue.activate(ownerId: user.id)
+        alerts.activate(userId: user.id)
     }
 
     private func startSession() {

@@ -109,7 +109,7 @@ struct SRSearchField: View {
     }
 }
 
-// MARK: Badges — status is subtle; severity keeps its semantic color (review §36)
+// MARK: Badges — status is subtle; severity keeps its semantic color
 
 struct SRStatusBadge: View {
     let status: HazardStatus
@@ -222,7 +222,7 @@ struct SRListRow: View {
     }
 }
 
-// MARK: Empty state — a soft card placed in the upper part of the page (review §15)
+// MARK: Empty state — a soft card placed in the upper part of the page
 
 struct SREmptyState<Actions: View>: View {
     let systemImage: String

@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 
 struct APIEndpoint {
     let path: String
@@ -7,6 +8,15 @@ struct APIEndpoint {
     var body: Data?
     var contentType: String = "application/json"
     var requiresAuth: Bool = true
+    /// If set, the request is sent only while the signed-in account is this user — so work
+    /// queued by one account (offline reports, photo uploads) can never go out as another.
+    var actingUserId: UUID?
+
+    func acting(as userId: UUID?) -> APIEndpoint {
+        var copy = self
+        copy.actingUserId = userId
+        return copy
+    }
 
     private static func json<T: Encodable>(_ path: String, _ method: String, _ body: T, auth: Bool = true) -> APIEndpoint {
         APIEndpoint(path: path, method: method, body: try? JSONEncoder.api.encode(body), requiresAuth: auth)
@@ -47,6 +57,12 @@ struct APIEndpoint {
             query.append(URLQueryItem(name: "statuses", value: statuses.map(\.rawValue).sorted().joined(separator: ",")))
         }
         return APIEndpoint(path: "/hazards/in-bbox", query: query)
+    }
+
+    /// All active hazards along candidate routes, for route assessment (never recency-sampled).
+    static func alongRoute(_ routes: [[CLLocationCoordinate2D]], corridorMeters: Double? = nil) -> APIEndpoint {
+        json("/hazards/along-route", "POST", RouteHazardsRequest(routes: routes.map { $0.map { [$0.latitude, $0.longitude] } },
+                                                                 corridorMeters: corridorMeters))
     }
 
     static func hazard(id: UUID) -> APIEndpoint { APIEndpoint(path: "/hazards/\(id.uuidString)") }
@@ -96,6 +112,7 @@ struct APIEndpoint {
 
     static let coverage = APIEndpoint(path: "/meta/coverage")
     static let severityQuestions = APIEndpoint(path: "/meta/severity-questions")
+    static let routing = APIEndpoint(path: "/meta/routing")
 
     static func uploadHazardImage(jpeg: Data) -> APIEndpoint {
         let boundary = "SafeRoute-\(UUID().uuidString)"

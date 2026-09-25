@@ -19,6 +19,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 
 /**
  * Closes the loop for reports that exhausted their retries: the submission is marked FAILED and
@@ -52,19 +54,39 @@ public class DeadLetterConsumer {
             return;
         }
         try (var ignored = EventContext.enter(event.metadata())) {
+            UUID submissionId = event.submissionId();
+            UUID reporterId = event.reporterUserId();
+            // Conditional: a submission that already reached an outcome is never overwritten.
+            int updated = submissionRepository.markFailedIfPending(submissionId, USER_MESSAGE, Instant.now(),
+                    SubmissionStatus.FAILED, List.of(SubmissionStatus.QUEUED));
+            if (updated == 0) {
+                log.info("Dead-lettered report for submission {} ignored: already terminal or unknown", submissionId);
+                return;
+            }
             metrics.reportFailed();
-            submissionRepository.findById(event.submissionId()).ifPresent(submission -> {
-                if (submission.getProcessingStatus().isTerminal()) return;
-                submission.setProcessingStatus(SubmissionStatus.FAILED);
-                // The raw exception text stays in the log; the reporter gets a plain explanation.
-                submission.setFailureReason(USER_MESSAGE);
-                submission.setProcessedAt(Instant.now());
-                log.error("Submission {} FAILED after retries: {}", submission.getId(), reason);
-                eventProducer.publishSubmissionProcessed(new SubmissionProcessedEvent(
-                        EventMetadata.create(KafkaTopics.SUBMISSION_PROCESSED),
-                        submission.getId(), submission.getReporterId(), SubmissionStatus.FAILED, null,
-                        USER_MESSAGE));
-            });
+            // The raw exception text stays in the log; the reporter gets a plain explanation.
+            log.error("Submission {} FAILED after retries: {}", submissionId, reason);
+            eventProducer.publishSubmissionProcessed(new SubmissionProcessedEvent(
+                    EventMetadata.create(KafkaTopics.SUBMISSION_PROCESSED),
+                    submissionId, reporterId, SubmissionStatus.FAILED, null, USER_MESSAGE));
         }
+    }
+
+    /**
+     * Every other dead-letter topic: nothing can be repaired automatically, but each record is
+     * logged with its failure reason and counted, so dead-lettering is visible in metrics.
+     */
+    @KafkaListener(topics = {
+            KafkaTopics.HAZARD_VERIFIED + KafkaTopics.DLQ_SUFFIX,
+            KafkaTopics.HAZARD_RESOLUTION_REQUESTED + KafkaTopics.DLQ_SUFFIX,
+            KafkaTopics.HAZARD_RESOLVED + KafkaTopics.DLQ_SUFFIX,
+            KafkaTopics.HAZARD_CREATED + KafkaTopics.DLQ_SUFFIX,
+            KafkaTopics.HAZARD_UPDATED + KafkaTopics.DLQ_SUFFIX,
+            KafkaTopics.SUBMISSION_PROCESSED + KafkaTopics.DLQ_SUFFIX},
+            groupId = "dead-letter-monitor-group", containerFactory = "deadLetterListenerContainerFactory")
+    public void onOtherDeadLetter(ConsumerRecord<String, Object> record,
+                                  @Header(name = KafkaHeaders.DLT_EXCEPTION_MESSAGE, required = false) String reason) {
+        metrics.deadLettered(record.topic());
+        log.error("Dead-lettered record on {} (key={}, offset={}): {}", record.topic(), record.key(), record.offset(), reason);
     }
 }

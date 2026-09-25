@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Rule-based severity from one structured, type-specific question (review §27) — easier to
+ * Rule-based severity from one structured, type-specific question — easier to
  * defend than ML and yields structured data. Falls back to a per-type default when skipped.
  */
 @Component

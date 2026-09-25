@@ -19,6 +19,8 @@ final class LocationManager: NSObject, ObservableObject {
     static let shared = LocationManager()
 
     @Published private(set) var currentLocation: CLLocationCoordinate2D?
+    /// The latest fix with its accuracy and timestamp; navigation needs both to judge it.
+    @Published private(set) var currentFix: CLLocation?
     /// Direction of travel in degrees (nil when not moving / unknown). Used by the navigation camera.
     @Published private(set) var course: CLLocationDirection?
     @Published private(set) var authorizationStatus: CLAuthorizationStatus
@@ -108,6 +110,7 @@ extension LocationManager: CLLocationManagerDelegate {
         guard let newest = locations.last else { return }
         Task { @MainActor in
             self.currentLocation = newest.coordinate
+            self.currentFix = newest
             if newest.course >= 0 && newest.speed > 0.3 { self.course = newest.course }
             self.state = .available
             if self.lastPublishedLocation == nil || newest.distance(from: self.lastPublishedLocation!) >= self.minimumMoveMeters {

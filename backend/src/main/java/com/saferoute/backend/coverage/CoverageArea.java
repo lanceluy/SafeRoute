@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.http.HttpStatus;
 
 /**
- * The pilot service area (review §51). Defaults to a Metro Manila bounding box; set
+ * The pilot service area. Defaults to a Metro Manila bounding box; set
  * {@code saferoute.coverage.enabled=false} to accept reports anywhere (e.g. for a Simulator
  * sitting at Apple Park).
  */

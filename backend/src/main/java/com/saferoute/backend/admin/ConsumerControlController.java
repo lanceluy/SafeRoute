@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * Fault-tolerance experiment support (paper methodology; review §44): stop the Hazard Processing
+ * Fault-tolerance experiment support (paper methodology): stop the Hazard Processing
  * consumer while reports keep arriving, then start it again and measure backlog recovery.
  * Because the processing module lives inside the same Spring Boot app as the API, stopping the
  * listener container is how "disable the consumer" is modelled without also killing the API.

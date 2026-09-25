@@ -88,7 +88,7 @@ export async function prometheus() {
   };
 }
 
-/** avg / median / p95 / p99 / max, as the paper requires (review §45). */
+/** avg / median / p95 / p99 / max, as the paper requires. */
 export function stats(values) {
   if (!values.length) return { n: 0 };
   const s = [...values].sort((a, b) => a - b);

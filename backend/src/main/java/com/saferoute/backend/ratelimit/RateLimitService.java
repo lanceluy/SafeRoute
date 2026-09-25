@@ -3,8 +3,10 @@ package com.saferoute.backend.ratelimit;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.ConsumptionProbe;
 import io.github.bucket4j.EstimationProbe;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -12,12 +14,26 @@ import java.util.concurrent.TimeUnit;
 /**
  * In-memory token buckets (Bucket4j), keyed by policy + caller (user id or client IP).
  * Single-instance prototype: buckets are not shared across backend replicas.
+ *
+ * <p>A bucket idle for longer than its policy's refill period is full again, so evicting it
+ * changes nothing observable; {@link #evictIdleBuckets} does that so the map can't grow forever.
  */
 @Service
 public class RateLimitService {
 
     private final RateLimitProperties properties;
-    private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
+    private static final class Entry {
+        final Bucket bucket;
+        final Duration period;
+        volatile long lastUsedNanos = System.nanoTime();
+
+        Entry(Bucket bucket, Duration period) {
+            this.bucket = bucket;
+            this.period = period;
+        }
+    }
+
+    private final Map<String, Entry> buckets = new ConcurrentHashMap<>();
 
     public RateLimitService(RateLimitProperties properties) {
         this.properties = properties;
@@ -56,12 +72,25 @@ public class RateLimitService {
     }
 
     private Bucket bucket(RateLimitPolicy policy, String key) {
-        return buckets.computeIfAbsent(policy.name() + ":" + key, k -> {
+        Entry entry = buckets.computeIfAbsent(policy.name() + ":" + key, k -> {
             RateLimitProperties.Limit limit = properties.getLimits().get(policy);
-            return Bucket.builder()
+            return new Entry(Bucket.builder()
                     .addLimit(l -> l.capacity(limit.capacity()).refillGreedy(limit.capacity(), limit.period()))
-                    .build();
+                    .build(), limit.period());
         });
+        entry.lastUsedNanos = System.nanoTime();
+        return entry.bucket;
+    }
+
+    @Scheduled(fixedDelayString = "PT10M", initialDelayString = "PT10M")
+    public void evictIdleBuckets() {
+        long now = System.nanoTime();
+        buckets.values().removeIf(e -> now - e.lastUsedNanos > e.period.toNanos());
+    }
+
+    /** Visible for tests. */
+    int bucketCount() {
+        return buckets.size();
     }
 
     private RateLimitExceededException exceeded(RateLimitPolicy policy, long nanosToWait) {

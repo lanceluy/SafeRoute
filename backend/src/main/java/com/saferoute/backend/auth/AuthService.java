@@ -2,6 +2,7 @@ package com.saferoute.backend.auth;
 
 import com.saferoute.backend.common.ApiException;
 import com.saferoute.backend.user.ModeratorBootstrap;
+import com.saferoute.backend.user.Role;
 import com.saferoute.backend.user.User;
 import com.saferoute.backend.user.UserRepository;
 import org.slf4j.Logger;
@@ -27,6 +28,7 @@ public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
     private static final SecureRandom RANDOM = new SecureRandom();
+    static final Duration REUSE_GRACE = Duration.ofSeconds(30);
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -59,9 +61,10 @@ public class AuthService {
                 .email(email)
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .displayName(request.displayName().trim())
-                .role(moderatorBootstrap.initialRoleFor(email))
+                .role(Role.USER)
                 .build();
         user = userRepository.save(user);
+        moderatorBootstrap.onRegistered(user);
         return issueTokens(user);
     }
 
@@ -77,16 +80,20 @@ public class AuthService {
     }
 
     /**
-     * Rotates the refresh token. Presenting an already-rotated token is treated as theft: every
-     * refresh token for that user is revoked, forcing a fresh login.
+     * Rotates the refresh token. The row is locked, so concurrent refreshes of one token serialize
+     * and exactly one of them rotates it. Presenting an already-rotated token is treated as theft
+     * (every session for that user is revoked) — except within {@link #REUSE_GRACE} of the
+     * rotation, where it is almost certainly a benign duplicate request from the same client and
+     * is simply refused.
      */
     @Transactional(noRollbackFor = ApiException.class)
     public AuthResponse refresh(String presentedToken) {
-        RefreshToken stored = refreshTokenRepository.findByTokenHash(hash(presentedToken))
+        RefreshToken stored = refreshTokenRepository.findByTokenHashForUpdate(hash(presentedToken))
                 .orElseThrow(AuthService::invalidRefreshToken);
         Instant now = Instant.now();
         if (stored.getRevokedAt() != null) {
-            if (stored.getReplacedBy() != null) {
+            boolean justRotated = stored.getReplacedBy() != null && stored.getRevokedAt().isAfter(now.minus(REUSE_GRACE));
+            if (stored.getReplacedBy() != null && !justRotated) {
                 log.warn("Refresh token reuse detected for user {}; revoking all sessions", stored.getUserId());
                 refreshTokenRepository.revokeAllForUser(stored.getUserId(), now);
             }

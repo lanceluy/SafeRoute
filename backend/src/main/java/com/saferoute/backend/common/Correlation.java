@@ -6,7 +6,7 @@ import java.util.UUID;
 
 /**
  * One correlation id follows a request through REST -> Kafka event -> consumer -> DB mutation
- * -> WebSocket delivery (review §32). Stored in the SLF4J MDC so every log line carries it.
+ * -> WebSocket delivery. Stored in the SLF4J MDC so every log line carries it.
  */
 public final class Correlation {
 

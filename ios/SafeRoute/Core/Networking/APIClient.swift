@@ -19,9 +19,14 @@ actor APIClient {
     private var refreshTask: Task<Bool, Never>?
 
     func send<T: Decodable>(_ endpoint: APIEndpoint, as type: T.Type) async throws -> T {
-        let data = try await rawSend(endpoint)
+        try await sendWithResponse(endpoint, as: type).value
+    }
+
+    /// Also returns the HTTP response, for endpoints that report metadata in headers.
+    func sendWithResponse<T: Decodable>(_ endpoint: APIEndpoint, as type: T.Type) async throws -> (value: T, response: HTTPURLResponse) {
+        let (data, response) = try await rawSend(endpoint)
         do {
-            return try JSONDecoder.api.decode(T.self, from: data)
+            return (try JSONDecoder.api.decode(T.self, from: data), response)
         } catch {
             throw APIError.decoding(error)
         }
@@ -40,11 +45,17 @@ actor APIClient {
         return token
     }
 
-    private func rawSend(_ endpoint: APIEndpoint, isRetry: Bool = false) async throws -> Data {
+    private func rawSend(_ endpoint: APIEndpoint, isRetry: Bool = false) async throws -> (Data, HTTPURLResponse) {
         if endpoint.requiresAuth, !isRetry, let token = KeychainService.shared.readAccessToken(), JWT.expiresSoon(token) {
             _ = await refreshTokens()
         }
         let request = buildRequest(endpoint)
+        // Checked against the token actually attached, right before sending: no suspension point
+        // lies between this check and the request leaving with that token.
+        if let actingUserId = endpoint.actingUserId {
+            let attached = request.value(forHTTPHeaderField: "Authorization").map { String($0.dropFirst("Bearer ".count)) }
+            guard let attached, JWT.subject(attached) == actingUserId else { throw APIError.sessionChanged }
+        }
         let (data, response): (Data, URLResponse)
         do {
             (data, response) = try await session.data(for: request)
@@ -57,7 +68,7 @@ actor APIClient {
 
         switch http.statusCode {
         case 200..<300:
-            return data
+            return (data, http)
         case 401 where endpoint.requiresAuth && !isRetry:
             if await refreshTokens() {
                 return try await rawSend(endpoint, isRetry: true)
@@ -130,13 +141,21 @@ actor APIClient {
 /// Minimal JWT payload reader — only used to decide *when* to refresh, never to trust claims.
 enum JWT {
     static func expiresSoon(_ token: String, within seconds: TimeInterval = 60) -> Bool {
+        guard let exp = payload(token)?["exp"] as? TimeInterval else { return false }
+        return Date(timeIntervalSince1970: exp).timeIntervalSinceNow < seconds
+    }
+
+    /// The account the token was issued to (`sub`).
+    static func subject(_ token: String) -> UUID? {
+        (payload(token)?["sub"] as? String).flatMap(UUID.init(uuidString:))
+    }
+
+    private static func payload(_ token: String) -> [String: Any]? {
         let parts = token.split(separator: ".")
-        guard parts.count == 3 else { return false }
+        guard parts.count == 3 else { return nil }
         var base64 = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
         while base64.count % 4 != 0 { base64 += "=" }
-        guard let data = Data(base64Encoded: base64),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let exp = json["exp"] as? TimeInterval else { return false }
-        return Date(timeIntervalSince1970: exp).timeIntervalSinceNow < seconds
+        guard let data = Data(base64Encoded: base64) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 }

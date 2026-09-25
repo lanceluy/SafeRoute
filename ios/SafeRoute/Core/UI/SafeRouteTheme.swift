@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 /// The single source of SafeRoute's visual tokens. Screens must use these instead of one-off
-/// colors, paddings or radii (UI review §2, §7–9, §26, §47).
+/// colors, paddings or radii.
 enum SR {
 
     // MARK: Colors

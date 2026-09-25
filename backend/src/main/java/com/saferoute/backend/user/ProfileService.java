@@ -18,7 +18,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-/** Closes the contribution feedback loop (review §34) — deliberately not a social profile. */
+/** Closes the contribution feedback loop — deliberately not a social profile. */
 @Service
 public class ProfileService {
 

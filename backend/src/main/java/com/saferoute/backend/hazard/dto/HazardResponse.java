@@ -25,7 +25,9 @@ public record HazardResponse(
         Instant updatedAt,
         Instant lastConfirmedAt,
         Instant expiresAt,
-        Instant resolvedAt
+        Instant resolvedAt,
+        /** Committed row version; clients keep the highest version they have seen per hazard. */
+        long version
 ) {
     public static HazardResponse from(Hazard hazard) {
         return new HazardResponse(
@@ -46,7 +48,8 @@ public record HazardResponse(
                 hazard.getUpdatedAt(),
                 hazard.getLastConfirmedAt(),
                 hazard.getExpiresAt(),
-                hazard.getResolvedAt()
+                hazard.getResolvedAt(),
+                hazard.getVersion() != null ? hazard.getVersion() : 0
         );
     }
 }

@@ -9,6 +9,8 @@ public record ResolutionRequestedEvent(
         EventMetadata metadata,
         UUID hazardId,
         UUID userId,
-        ResolutionAction action
+        ResolutionAction action,
+        /** The hazard's content revision when the command was accepted; null for legacy events. */
+        Integer hazardRevision
 ) {
 }

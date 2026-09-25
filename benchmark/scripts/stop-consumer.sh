@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop or start the Hazard Processing consumer (fault-tolerance test, review §44).
+# Stop or start the Hazard Processing consumer (fault-tolerance test).
 #   ./stop-consumer.sh          # stop
 #   ./stop-consumer.sh start    # start again
 set -euo pipefail

@@ -8,7 +8,7 @@ import java.util.EnumMap;
 import java.util.Map;
 
 /**
- * How long a hazard stays on the map without a fresh confirmation (review §9). Every VERIFY or
+ * How long a hazard stays on the map without a fresh confirmation. Every VERIFY or
  * "still here" vote pushes {@code expiresAt} out again.
  */
 @ConfigurationProperties(prefix = "saferoute.hazard.expiry")

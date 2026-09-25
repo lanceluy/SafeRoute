@@ -4,7 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * The crowdsourced confidence model (review §8, §58). Status is always recomputed from the
+ * The crowdsourced confidence model. Status is always recomputed from the
  * current verify/dispute counts rather than incremented, so replaying an event can't drift it.
  *
  * <pre>

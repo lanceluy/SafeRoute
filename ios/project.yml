@@ -35,5 +35,19 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         SWIFT_STRICT_CONCURRENCY: complete
     scheme:
-      testTargets: []
+      testTargets: [SafeRouteTests]
       gatherCoverageData: false
+
+  SafeRouteTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: SafeRouteTests
+    dependencies:
+      - target: SafeRoute
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.saferoute.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_STRICT_CONCURRENCY: complete

@@ -1,67 +1,65 @@
 #!/usr/bin/env node
-// Event-driven (WebSocket) vs polling (GET /api/hazards/nearby every 1/3/5 s) — review §42.
+// Event-driven (WebSocket) vs polling (GET /api/hazards/nearby every 1/3/5 s).
 //
 //   node latency-compare.mjs [--events 30] [--gap 2000]
 //
-// For each synthetic hazard the reporter records T_submit (client clock). Then:
-//   WebSocket latency     = T_ws_frame_received      - T_submit
-//   Polling latency (Xs)  = T_first_poll_containing  - T_submit
-// All clocks are the same process, so no clock-skew correction is needed.
+// Every client — the WebSocket subscriber and each poller — records its own first sighting of
+// each hazard id, independently. Submissions are matched to hazard ids through their own outcome
+// (GET /api/hazard-submissions/{id}), never through another client, so a slow or dropped
+// WebSocket frame can't change or hide a polling measurement. Latency = first sighting − submit
+// time, all on this process's clock (no skew correction needed). Reports are sent at randomized
+// intervals (gap × 0.5–1.5) so polls are not phase-locked to them. Raw observations are saved.
 import { writeFileSync } from 'node:fs';
-import { api, createUsers, openSocket, sleep, now, stats, CENTER } from './lib.mjs';
+import { api, createUsers, openSocket, sleep, now, CENTER } from './lib.mjs';
+import { correlateDetections, sourceRevision } from './analysis.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? +argv[i + 1] : d; };
 const EVENTS = opt('events', 30);
 const GAP_MS = opt('gap', 2000);
 const POLL_INTERVALS = [1000, 3000, 5000];
+const POLL_LIMIT = 250; // server maximum; a full page means the sample may be incomplete
 
 async function main() {
+  if (EVENTS > 200) throw new Error('Use at most 200 events per run: the nearby query returns at most 250 hazards.');
   const [reporter, wsUser, ...pollUsers] = await createUsers(2 + POLL_INTERVALS.length, 'latency');
   // Unique neighbourhood per run so earlier runs' hazards don't count as detections.
   const spot = { lat: CENTER.lat + (Math.random() - 0.5) * 0.08, lon: CENTER.lon + (Math.random() - 0.5) * 0.08 };
   const ws = await openSocket(wsUser.token, spot);
 
-  const pending = new Map(); // submission index -> { sentAt, point }
-  const wsLatency = [], pollLatency = Object.fromEntries(POLL_INTERVALS.map((p) => [p, []]));
-  const pollStats = Object.fromEntries(POLL_INTERVALS.map((p) => [p, { requests: 0, emptyOrUnchanged: 0 }]));
-  const seenBy = Object.fromEntries(POLL_INTERVALS.map((p) => [p, new Set()]));
-  const hazardSentAt = new Map(); // hazardId -> sentAt (filled from WS frames / submission results)
-
+  const observations = []; // { client, hazardId, at }
   ws.listeners.push((f) => {
-    if (f.type !== 'hazard_created') return;
-    // Match the frame to the submission by position (each synthetic point is unique).
-    for (const [key, p] of pending) {
-      if (Math.abs(p.point.lat - f.latitude) < 1e-7 && Math.abs(p.point.lon - f.longitude) < 1e-7) {
-        wsLatency.push(f._receivedAt - p.sentAt);
-        hazardSentAt.set(f.hazardId, p.sentAt);
-        pending.delete(key);
-      }
-    }
+    if (f.type === 'hazard_created') observations.push({ client: 'websocket', hazardId: f.hazardId, at: f._receivedAt });
   });
 
+  const pollStats = Object.fromEntries(POLL_INTERVALS.map((p) => [p, { requests: 0, unchanged: 0, fullPages: 0, errors: 0 }]));
   let polling = true;
   const pollers = POLL_INTERVALS.map((interval, i) => (async () => {
     const token = pollUsers[i].token;
+    const client = `poll${interval / 1000}s`;
+    const seen = new Set();
     let previous = '';
+    await sleep(Math.random() * interval); // random phase
     while (polling) {
       const started = now();
-      const list = await api('GET', `/hazards/nearby?lat=${spot.lat}&lon=${spot.lon}&radiusMeters=1000`, undefined, token);
       const s = pollStats[interval];
-      s.requests++;
-      const ids = list.map((h) => h.id).sort().join(',');
-      if (ids === previous) s.emptyOrUnchanged++;
-      previous = ids;
-      for (const h of list) {
-        if (!seenBy[interval].has(h.id) && hazardSentAt.has(h.id)) {
-          seenBy[interval].add(h.id);
-          pollLatency[interval].push(now() - hazardSentAt.get(h.id));
+      try {
+        const list = await api('GET', `/hazards/nearby?lat=${spot.lat}&lon=${spot.lon}&radiusMeters=1000&limit=${POLL_LIMIT}`, undefined, token);
+        const at = now();
+        s.requests++;
+        if (list.length >= POLL_LIMIT) s.fullPages++;
+        const ids = list.map((h) => h.id).sort().join(',');
+        if (ids === previous) s.unchanged++;
+        previous = ids;
+        for (const h of list) {
+          if (!seen.has(h.id)) { seen.add(h.id); observations.push({ client, hazardId: h.id, at }); }
         }
-      }
+      } catch { s.errors++; }
       await sleep(Math.max(0, interval - (now() - started)));
     }
   })());
 
+  const submissions = []; // { submissionId, sentAt, hazardId, status }
   for (let i = 0; i < EVENTS; i++) {
     // Points 45 m apart on a grid, so none fall inside the 30 m dedup radius of another
     // (a merge would correctly produce no hazard_created frame and skew the sample).
@@ -70,28 +68,45 @@ async function main() {
       lat: +(spot.lat + north / 111320).toFixed(7),
       lon: +(spot.lon + east / (111320 * Math.cos((spot.lat * Math.PI) / 180))).toFixed(7),
     };
-    pending.set(i, { sentAt: now(), point });
-    await api('POST', '/hazard-submissions', { type: 'OPEN_MANHOLE', latitude: point.lat, longitude: point.lon }, reporter.token);
-    await sleep(GAP_MS);
+    const sentAt = now();
+    const s = await api('POST', '/hazard-submissions', { type: 'OPEN_MANHOLE', latitude: point.lat, longitude: point.lon }, reporter.token);
+    submissions.push({ submissionId: s.submissionId, sentAt, hazardId: null, status: 'QUEUED' });
+    await sleep(GAP_MS * (0.5 + Math.random()));
   }
   await sleep(Math.max(...POLL_INTERVALS) + 3000); // let the slowest poller catch the last hazard
   polling = false;
   await Promise.all(pollers);
   ws.close();
 
+  // Resolve each submission's hazard id from its own outcome.
+  for (const s of submissions) {
+    const r = await api('GET', `/hazard-submissions/${s.submissionId}`, undefined, reporter.token).catch(() => null);
+    s.status = r?.status ?? 'UNKNOWN';
+    s.hazardId = r?.status === 'CREATED' ? r.hazardId : null;
+  }
+
+  const clients = ['websocket', ...POLL_INTERVALS.map((p) => `poll${p / 1000}s`)];
+  const detections = correlateDetections({ submissions, observations, clients });
   const summary = {
-    scenario: 'event_driven_vs_polling', at: new Date().toISOString(), events: EVENTS,
-    websocket: { deliveredEvents: wsLatency.length, latencyMs: stats(wsLatency) },
+    scenario: 'event_driven_vs_polling', at: new Date().toISOString(), revision: sourceRevision(),
+    config: { events: EVENTS, meanGapMs: GAP_MS, pollIntervalsMs: POLL_INTERVALS },
+    submissions: { sent: submissions.length, created: detections.resolvedSubmissions,
+                   notCreated: detections.unresolvedSubmissions },
+    websocket: detections.clients.websocket,
     polling: Object.fromEntries(POLL_INTERVALS.map((p) => [`${p / 1000}s`, {
-      detectionLatencyMs: stats(pollLatency[p]),
+      ...detections.clients[`poll${p / 1000}s`],
       httpRequests: pollStats[p].requests,
-      unchangedResponses: pollStats[p].emptyOrUnchanged,
-      wastedRequestRatio: +(pollStats[p].emptyOrUnchanged / Math.max(1, pollStats[p].requests)).toFixed(3),
+      unchangedResponses: pollStats[p].unchanged,
+      wastedRequestRatio: +(pollStats[p].unchanged / Math.max(1, pollStats[p].requests)).toFixed(3),
+      fullPages: pollStats[p].fullPages, // > 0: some responses hit the cap and may have hidden hazards
+      pollErrors: pollStats[p].errors,
     }])),
+    raw: { submissions, observations },
   };
   const file = new URL(`../results/latency-compare-${Date.now()}.json`, import.meta.url);
   writeFileSync(file, JSON.stringify(summary, null, 2));
-  console.log(JSON.stringify(summary, null, 2));
+  const { raw, ...printable } = summary;
+  console.log(JSON.stringify(printable, null, 2));
   console.log(`Saved ${file.pathname}`);
 }
 

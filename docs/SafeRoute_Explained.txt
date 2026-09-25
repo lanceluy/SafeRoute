@@ -1,0 +1,893 @@
+================================================================================
+                         SAFEROUTE — COMPLETE EXPLANATION
+       Event-Driven Crowdsourced Pedestrian-Hazard Mapping & Safe Navigation
+                        CSS123P (Event-Driven Programming)
+================================================================================
+
+CONTENTS
+  1.  What SafeRoute is
+  2.  The problem it solves
+  3.  Technology stack
+  4.  System architecture
+  5.  How a hazard report flows through the system (step by step)
+  6.  Hazard types and severity classification
+  7.  Duplicate detection (merging reports)
+  8.  Community verification: confirm, dispute, resolve
+  9.  The hazard lifecycle (status state machine)
+  10. Confidence levels
+  11. Expiry — hazards that go stale
+  12. Reputation and trust levels
+  13. Roles: user, moderator, municipal official
+  14. Real-time alerts over WebSockets
+  15. Safer-route planning and navigation (iOS)
+  16. The iOS app, screen by screen
+  17. Reliability: idempotency, retries, dead-letter queues
+  18. Security and abuse prevention
+  19. Database design
+  20. REST API reference
+  21. Observability: logs, metrics, health
+  22. Testing
+  23. Benchmarks and results
+  24. How to run everything
+  25. Project structure
+  26. Known limitations and future work
+
+
+--------------------------------------------------------------------------------
+1. WHAT SAFEROUTE IS
+--------------------------------------------------------------------------------
+
+SafeRoute is a platform that lets pedestrians in Metro Manila report hazards they
+see on the street (floods, open manholes, broken sidewalks, dark areas, and so on).
+Other commuters confirm or dispute those reports, and anyone walking nearby or along
+an affected route gets a real-time alert. The app can also plan a walking route
+that avoids known hazards.
+
+It is made of two parts:
+
+  * A backend server (Java 21 + Spring Boot) built around Apache Kafka events, with
+    PostgreSQL/PostGIS for spatial data and WebSockets for live push updates.
+  * A native iOS app (SwiftUI + Apple MapKit) that commuters use to view the
+    hazard map, submit reports, receive alerts and plan safer routes.
+
+The project supports UN Sustainable Development Goal 11.2: safe, accessible and
+sustainable transport systems for all, with attention to vulnerable users such as
+people with disabilities.
+
+
+--------------------------------------------------------------------------------
+2. THE PROBLEM IT SOLVES
+--------------------------------------------------------------------------------
+
+Pedestrian hazards in Metro Manila change quickly. A street can flood within an hour
+and dry the next day, and manholes are left open during repairs. Official channels
+are slow to learn about these hazards and slow to share them. Commuters themselves
+are the best sensors, but they need:
+
+  * a fast, structured way to report what they see;
+  * a way to tell whether a report is trustworthy;
+  * to be told about hazards promptly, and only the ones relevant to them, without
+    constantly refreshing an app.
+
+The last point is why the system is event-driven. Instead of every phone polling
+the server every few seconds, a new hazard becomes an event, and the server pushes
+it immediately to the people it affects. The benchmarks in section 23 measure this
+difference.
+
+
+--------------------------------------------------------------------------------
+3. TECHNOLOGY STACK
+--------------------------------------------------------------------------------
+
+Backend
+  * Java 21, Spring Boot 3 (web, security, data JPA, WebSocket, Kafka, actuator)
+  * Apache Kafka 3.8, the event backbone (single broker in development)
+  * PostgreSQL 16 + PostGIS 3.4, relational storage with geographic queries
+  * Flyway for versioned database migrations (V1 to V11)
+  * Hibernate Spatial for mapping geography columns
+  * JWT (access + refresh tokens) for authentication
+  * Bucket4j for rate limiting
+  * Micrometer + Prometheus for metrics; springdoc for the Swagger/OpenAPI UI
+  * Testcontainers for integration tests against real PostGIS and Kafka
+
+iOS app
+  * Swift, SwiftUI, iOS 17+
+  * Apple MapKit for maps, clustering, walking directions and place search
+  * URLSession for REST and WebSocket connections
+  * Keychain for storing tokens securely
+  * XcodeGen generates the Xcode project from ios/project.yml
+
+Infrastructure and tooling
+  * Docker Compose for PostGIS, Kafka, Kafka UI and (optionally) the backend
+  * Node.js 22 synthetic-load simulator and k6 load-test scripts
+
+About 5,400 lines of Java (main source) and 7,300 lines of Swift.
+
+
+--------------------------------------------------------------------------------
+4. SYSTEM ARCHITECTURE
+--------------------------------------------------------------------------------
+
+  iOS app (SwiftUI / MapKit)
+     |  REST over HTTP (JWT)                    WebSocket /ws/notifications
+     v                                                    ^
+  Spring Boot REST API  (validation, auth, rate limits)   |
+     |  publishes COMMAND events                          |
+     v                                                    |
+  Kafka command topics:                                   |
+     hazard_reported                                      |
+     hazard_verified                                      |
+     hazard_resolution_requested                          |
+     hazard_resolved                                      |
+     |       (failed events -> <topic>.dlq)               |
+     v                                                    |
+  Hazard Processing module  ----->  PostgreSQL + PostGIS  |
+     (dedup, classify, status,                            |
+      reputation, expiry)                                 |
+     |  publishes OUTCOME events                          |
+     v                                                    |
+  Kafka outcome topics:                                   |
+     hazard_created, hazard_updated, submission_processed |
+     |                                                    |
+     v                                                    |
+  Notification module (proximity + route matching) -------+
+
+Key design decisions:
+
+  * Modular monolith. The API, the Hazard Processing module and the Notification
+    module all run inside one Spring Boot application. They are decoupled through
+    Kafka topics and separate consumer groups, so each module can be stopped
+    independently (the fault-tolerance test does exactly that). They are not
+    separately deployed microservices.
+
+  * Commands vs outcomes. The API never writes hazards directly. It records the
+    request and publishes a command event (e.g. hazard_reported), then returns
+    immediately with HTTP 202 Accepted. The processing module decides what happens
+    and publishes an outcome event, which the notification module turns into
+    WebSocket pushes.
+
+  * Asynchronous reporting. Because processing is asynchronous, a report first
+    becomes a "submission" with status QUEUED. The app can check the submission to
+    learn whether it CREATED a new hazard or was MERGED into an existing one.
+
+
+--------------------------------------------------------------------------------
+5. HOW A HAZARD REPORT FLOWS THROUGH THE SYSTEM
+--------------------------------------------------------------------------------
+
+ 1. The commuter completes the 5-step report form in the app (what, where, photo,
+    details, review). An optional photo is uploaded first via
+    POST /api/uploads/hazard-image; only the uploader can attach it to a report.
+
+ 2. The app sends POST /api/hazard-submissions with a clientRequestId (a key
+    generated once per report) and observedAt (when the hazard was seen). The API
+    checks the JWT, rate limit, input and coverage area. In ONE database
+    transaction it saves a hazard_submissions row with status QUEUED and writes the
+    hazard_reported event to the outbox table, then returns 202 with a
+    submissionId. Retrying with the same clientRequestId returns the same
+    submission (200) instead of creating a second one.
+
+ 3. After the transaction commits, the outbox relay publishes the event to Kafka
+    and marks it published once Kafka acknowledges it. If Kafka is slow or down,
+    the event waits in the outbox and is retried; the report is never lost and
+    never falsely marked FAILED.
+
+ 4. The Hazard Processing consumer receives the event and:
+      a. checks the processed_events table and skips the event if it was already
+         handled (idempotency);
+      b. takes a per-type lock and searches PostGIS for an ACTIVE hazard of the
+         same type within 30 m (no matter how long ago it was first reported);
+      c. if none exists, it CREATES a new hazard. Severity comes from the rule-based
+         classifier; freshness and expiry are measured from observedAt. The
+         submission becomes CREATED.
+      d. if one exists, it MERGES the submission into that hazard. The new report
+         counts as an independent confirmation. The submission becomes MERGED.
+      e. writes an audit-log entry and, in the same transaction, writes the
+         hazard_created or hazard_updated snapshot (with the hazard's version) and
+         submission_processed to the outbox.
+
+ 5. The Notification consumer receives the outcome event and sends it over
+    WebSocket to:
+      * every connected session within 5 km, so their maps update live;
+      * as an ALERT, to users whose active route passes within 40 m of the hazard
+        (and ahead of them), or, if they have no route, users within their personal
+        alert radius — only if their location is recent and the hazard type is
+        enabled in their notification preferences.
+
+ 6. The reporter's app receives a submission_processed frame (or learns the
+    outcome by polling) and shows it in My Reports. Nearby users see the new pin
+    appear and may get a local notification.
+
+
+--------------------------------------------------------------------------------
+6. HAZARD TYPES AND SEVERITY CLASSIFICATION
+--------------------------------------------------------------------------------
+
+The seven pedestrian-focused categories are deliberately few, so reporting stays
+quick and the data stays consistent:
+
+  FLOODING, BROKEN_SIDEWALK, OPEN_MANHOLE, POOR_LIGHTING,
+  ACCESSIBILITY_BARRIER, CONSTRUCTION, PATH_OBSTRUCTION
+
+Severity (LOW / MEDIUM / HIGH) is assigned by a simple rule-based classifier rather
+than machine learning. For each type, the reporter answers one structured question,
+and each answer maps to a severity:
+
+  Type                   Question                              Answers -> severity
+  ---------------------  ------------------------------------  ------------------------------
+  Flooding               How deep is the water?                Ankle=MED, Shin=HIGH,
+                                                               Knee or higher=HIGH
+  Broken sidewalk        Can pedestrians pass?                 Easily=LOW, With difficulty=MED,
+                                                               No=HIGH
+  Poor lighting          How dark is it?                       Dim=LOW, Very dark=MED,
+                                                               Completely unlit=HIGH
+  Open manhole           Where is it relative to the path?     Off path=MED, Partly=HIGH,
+                                                               Directly in path=HIGH
+  Accessibility barrier  Can wheelchair users pass?            Easily=LOW, Difficulty=MED, No=HIGH
+  Construction           Is the sidewalk still usable?         Open=LOW, Narrowed=MED,
+                                                               Closed (walk on road)=HIGH
+  Path obstruction       Can pedestrians pass?                 Easily=LOW, Difficulty=MED, No=HIGH
+
+If the question is skipped, a per-type default is used: open manhole and flooding
+default to HIGH, poor lighting to LOW, and everything else to MEDIUM. This rule
+table is easy to explain and defend, and it yields structured data. It sits behind
+a HazardClassifier interface, so a smarter classifier could replace it later.
+
+
+--------------------------------------------------------------------------------
+7. DUPLICATE DETECTION
+--------------------------------------------------------------------------------
+
+Many people often report the same flood. To avoid cluttering the map:
+
+  * When a report arrives, PostGIS looks for an ACTIVE hazard of the same type
+    within 30 meters. How long ago it was first reported doesn't matter: a broken
+    sidewalk reported last month and still on the map is the same sidewalk.
+  * If one is found, the report is merged into that hazard. It counts as a
+    VERIFY confirmation from that user, refreshes the hazard's freshness, and adds
+    a photo if the existing hazard had none.
+  * If the same user re-reports their own hazard, it only refreshes the hazard's
+    "last confirmed" time. It does not count as an independent confirmation.
+  * A resolved, expired or removed hazard never absorbs a new report: a hazard
+    that came back is a new hazard.
+  * Hazard creation takes a per-type database lock, so two simultaneous reports of
+    the same new hazard can't both miss each other and create two hazards.
+  * The app also checks for nearby duplicates before submitting, and offers to
+    confirm the existing hazard instead.
+
+The radius is configurable in application.yml.
+
+
+--------------------------------------------------------------------------------
+8. COMMUNITY VERIFICATION: CONFIRM, DISPUTE, RESOLVE
+--------------------------------------------------------------------------------
+
+Any signed-in user other than the reporter can give an opinion on a hazard:
+
+  * VERIFY ("I see it too") or DISPUTE ("this isn't there / isn't accurate").
+    Each user holds exactly one opinion per hazard. Changing your mind replaces
+    the earlier one (PUT /api/hazards/{id}/confirmation). Sending VERIFY again is
+    a fresh sighting: it extends the hazard's expiry but is not a second vote and
+    earns no extra reputation.
+  * Reporters cannot confirm or dispute their own report. This is enforced both
+    in the API and again in the processing consumer.
+
+For hazards that may have been fixed, users can also vote:
+
+  * NO_LONGER_PRESENT or STILL_PRESENT (POST /api/hazards/{id}/resolution-
+    confirmation). When at least 2 users say it's gone, and they outnumber the
+    "still present" votes, the hazard is RESOLVED by the community. A "still
+    present" vote refreshes the hazard's expiry timer.
+
+Votes always apply to the content they assessed:
+
+  * Once anyone has confirmed, disputed or voted, the reporter can no longer
+    change the hazard's type, location or severity (description and photo stay
+    editable).
+  * Every hazard has a content revision, raised when its type, location or
+    severity changes or a moderator reopens it. Each command carries the revision
+    it was accepted under; the consumer ignores it if the hazard has moved on.
+    Each stored opinion records the revision it assessed.
+  * The hazard row is locked while a command is evaluated, so simultaneous votes
+    can't both miss the threshold.
+
+All thresholds default to 2 and are configurable.
+
+
+--------------------------------------------------------------------------------
+9. THE HAZARD LIFECYCLE (STATUS STATE MACHINE)
+--------------------------------------------------------------------------------
+
+Statuses: REPORTED, VERIFIED, DISPUTED (these three are "active" and appear on the
+map), plus RESOLVED, EXPIRED and REMOVED (inactive).
+
+  REPORTED  --(2 independent confirmations)----------------------> VERIFIED
+  REPORTED/VERIFIED --(>=2 disputes AND disputes >= confirmations)--> DISPUTED
+  DISPUTED  --(confirmations overtake disputes)--> VERIFIED or REPORTED
+  any active --(2 "no longer present" votes, or a moderator)-------> RESOLVED
+  any active --(no confirmation within its type's window)---------> EXPIRED
+  moderator: remove a false/spam report --------------------------> REMOVED
+  moderator: reopen a RESOLVED / EXPIRED / REMOVED hazard
+
+Important detail: the status is always recomputed from the current counts of
+confirmations and disputes, never incremented step by step. If Kafka delivers the
+same event twice, the result is identical, so the status cannot drift.
+
+DISPUTED hazards stay visible on the map with a "contested" label rather than
+being hidden, so users can judge for themselves.
+
+Every status change is recorded in hazard_status_history and the audit log, and the
+app shows it as a timeline on the hazard detail screen.
+
+
+--------------------------------------------------------------------------------
+10. CONFIDENCE LEVELS
+--------------------------------------------------------------------------------
+
+Alongside the status, each active hazard carries a human-friendly confidence:
+
+  UNCONFIRMED  no one besides the reporter has weighed in yet
+  LOW          some support, but not much
+  MEDIUM       VERIFIED, and at least 60% of opinions support it
+  HIGH         VERIFIED, 5 or more confirmations, and at least 80% support
+  CONTESTED    status is DISPUTED
+
+Inactive hazards have no confidence value.
+
+
+--------------------------------------------------------------------------------
+11. EXPIRY — HAZARDS THAT GO STALE
+--------------------------------------------------------------------------------
+
+A flood from yesterday shouldn't stay on the map forever. Each type has a
+time-to-live counted from its last confirmation:
+
+  Flooding               12 hours
+  Path obstruction       24 hours
+  Construction            3 days
+  Open manhole            7 days
+  Poor lighting          30 days
+  Broken sidewalk        45 days
+  Accessibility barrier  90 days
+
+Every VERIFY (including a repeated one) or "still present" vote pushes the expiry
+forward. Freshness is measured from when a hazard was actually seen: a report
+queued offline keeps its observation time, and a report older than its type's
+lifetime is rejected (REPORT_TOO_OLD) instead of appearing as new. Changing a
+hazard's type recomputes its expiry from the new type's lifetime. A scheduled job
+runs every minute and marks hazards past their expiry as EXPIRED. In the last 20%
+of the window, the hazard is flagged "expiring soon" and the app asks passers-by
+"Is this hazard still here?", which keeps real hazards alive and lets fixed ones
+lapse.
+
+
+--------------------------------------------------------------------------------
+12. REPUTATION AND TRUST LEVELS
+--------------------------------------------------------------------------------
+
+Every user has a reputation score, and every change is written to a ledger
+(reputation_events) with its reason:
+
+  +5   your report becomes VERIFIED (once per hazard)
+  +2   you confirmed a hazard that became VERIFIED
+  +2   you disputed a hazard that a moderator removed as false
+  -5   your report is removed as false/spam; the penalty grows with each
+       earlier removal, capped at -20
+
+Users see a trust tier rather than the raw number:
+
+  NEW_REPORTER (< 10)   REGULAR_REPORTER (10-49)   TRUSTED_REPORTER (>= 50)
+
+Reputation is only one signal. It orders the moderation queue and is shown on the
+profile, but it never decides by itself whether a hazard is true.
+
+
+--------------------------------------------------------------------------------
+13. ROLES
+--------------------------------------------------------------------------------
+
+  USER                Report, confirm/dispute, vote on resolution, edit own reports.
+  MODERATOR           Everything a user can do, plus resolve, reopen and remove
+                      hazards, and view the moderation queue.
+  MUNICIPAL_OFFICIAL  Same moderation powers. Represents local-government staff
+                      who fix hazards.
+
+Moderators are designated through the SAFEROUTE_MODERATOR_EMAILS setting and
+promoted at startup or on registration. Every moderator action is audited
+(who, what, when, old value, new value).
+
+
+--------------------------------------------------------------------------------
+14. REAL-TIME ALERTS OVER WEBSOCKETS
+--------------------------------------------------------------------------------
+
+The app keeps one WebSocket open to ws://<server>/ws/notifications, authenticated
+with the same JWT in the Authorization header. Tokens are not accepted in the URL
+by default, because URLs end up in logs. The app sends small JSON frames:
+
+  {"type":"subscribe","lat":14.5547,"lon":121.0244}   — my current location
+  {"type":"route","route":[[lat,lon],[lat,lon],...]}  — my active walking route
+
+The server keeps a registry of sessions with each user's location (and when it
+was reported), route and alert preferences (radius and enabled hazard types). For
+each outcome event it decides:
+
+  * Map update: sent to every session within 5 km, so pins appear, change or
+    disappear live on everyone's map.
+  * Alert: sent only if the hazard is new, newly verified or reinstated, and
+    relevant:
+      - With an active route: the hazard is within 40 m of the route polyline
+        AND ahead of the user's current position (RouteCorridor projects the
+        hazard onto the route to measure "distance along").
+      - Without a route: the hazard is within the user's personal alert radius.
+      - Hazard types the user turned off are never alerted, and a location older
+        than 10 minutes is not used to decide relevance.
+    Other changes (counts, edits, severity changes, resolution) update the map
+    silently.
+  * submission_processed: sent only to the reporter.
+
+Every hazard frame carries the hazard's version. Frames can arrive out of order,
+so the app keeps the newest version it has seen and ignores older ones.
+
+A session lives no longer than the access token it was opened with; the server
+then closes it and the app reconnects with a refreshed token. After any
+reconnect, the app re-fetches the map (and, during navigation, re-checks the
+whole route) because frames sent while it was disconnected are lost. If a token
+refresh fails temporarily, the app keeps retrying with backoff.
+
+On the phone, alerts appear in the Alerts tab and as local notifications.
+
+
+--------------------------------------------------------------------------------
+15. SAFER-ROUTE PLANNING AND NAVIGATION (iOS)
+--------------------------------------------------------------------------------
+
+Apple MapKit has no "avoid this point" option, so the app builds safer routes
+itself (RouteAvoidanceService):
+
+ 1. Ask MapKit for walking routes (including alternates) to the destination. When
+    the destination was picked from search, the app routes to the place itself
+    rather than its bare coordinate, so the walk ends at its pedestrian entrance.
+ 2. Ask the backend for EVERY active hazard along those routes
+    (POST /api/hazards/along-route). The answer says whether it is complete: it
+    isn't if there were too many hazards to return, or if part of a route leaves
+    the pilot area where hazards aren't tracked.
+ 3. Give each route a risk score. Every active hazard within the route corridor
+    (40 m, the same value the server uses for on-route alerts) adds weight:
+    HIGH = 10, MEDIUM = 3, LOW = 1 (disputed hazards count half).
+ 4. If one of MapKit's own alternates is less risky, it becomes the "safer
+    route". These alternates follow Apple's pedestrian network: footbridges,
+    underpasses, stairs and walkways.
+ 5. Only if no alternate helps, take the worst one or two MEDIUM or HIGH hazards
+    and create detour waypoints 60 m to either side, then request routes through
+    those waypoints. This is a last resort: MapKit snaps an arbitrary waypoint to
+    the nearest routable segment (usually a street), so a detour can leave the
+    walkway network. The detours are checked for hazards with their own request
+    before they are scored.
+ 6. The safer route must be less risky than MapKit's recommended route and take
+    no more than twice as long. Ties are broken by travel time.
+
+The app never presents an unchecked route as clear:
+
+  * If the hazard check fails, the route is still shown with "Reported hazards
+    couldn't be checked for this route" — never the green "No reported hazards".
+  * If the check is incomplete, the card and navigation say so, list the hazards
+    that were found, and make no "safer route" claim.
+
+The Route Comparison card shows both options: MapKit's recommended route as a
+dashed grey line and the safer route as a solid navy line, with the extra
+minutes and which hazards are avoided. It warns if the safer route still passes a
+high-severity hazard.
+
+During navigation (NavigationSession):
+  * Each GPS fix is checked first: fixes less accurate than 50 m or older than
+    10 s are ignored. Progress may only advance as far as the walker could
+    plausibly have walked since the last fix, so on a route that doubles back a
+    noisy fix can't make progress jump ahead.
+  * Turn-by-turn instructions come from MapKit's steps.
+  * Guidance starts with every hazard the route check found, even ones the map
+    never loaded, and keeps them current from live updates (newest version wins).
+  * Hazards ahead are listed nearest-first with the distance to each, and the
+    closest becomes an active warning as the walker approaches.
+  * The route is sent over the WebSocket, so hazards reported while walking
+    trigger on-route alerts.
+
+
+--------------------------------------------------------------------------------
+16. THE iOS APP, SCREEN BY SCREEN
+--------------------------------------------------------------------------------
+
+Sign in / Register
+  Email and password. Tokens are stored in the Keychain. The access token is
+  refreshed automatically using the refresh token.
+
+Map tab
+  * Clustered hazard map (MKMapView) with color-coded pins by type and severity.
+  * Filters by hazard type and status.
+  * Greeting and hazard preview card, destination search, route planner and
+    comparison card, and navigation overlay.
+  * Updates live from WebSocket frames.
+  * "Report" button to start the report flow.
+
+Report flow (5 steps)
+  1. What did you see? (hazard type)
+  2. Where is it? (map pin, defaulting to your location; must be in the pilot area)
+  3. Add a photo (optional, from the photo library)
+  4. Details (the severity question plus an optional description)
+  5. Review, including a duplicate check that offers to confirm an existing
+     nearby hazard instead.
+  Reports made offline are saved to disk, photo included, and sent automatically
+  when the connection returns (OfflineReportQueue + ConnectivityMonitor). Each
+  account has its own queue, and every queued request is bound to its owner, so a
+  report queued by one person can never be sent under another person's login. If
+  the report can't be saved on the device, the app says so instead of claiming it
+  was queued.
+
+Hazard detail
+  Photo, type, severity, status, confidence, counts, and a timeline of every
+  change. Buttons to confirm or dispute, answer "still here?" and, for the
+  reporter, edit. Moderators get resolve/reopen/remove.
+
+Reports tab
+  "My Reports": each submission with its processing outcome (queued, created new
+  hazard, merged into an existing one) and the current status of the hazard.
+
+Alerts tab
+  History of the real-time alerts received, kept per account (the next person to
+  sign in on the same phone doesn't see it).
+
+Profile tab
+  Trust level, contribution stats, and notification preferences (alert radius and
+  which hazard types to be alerted about).
+
+Design: a custom design system (SafeRouteTheme + reusable components) with a navy
+accent and a floating tab bar. The Swift code compiles without warnings under
+strict concurrency checking.
+
+Demo convenience: Debug builds can log in automatically when SAFEROUTE_DEMO_EMAIL
+and SAFEROUTE_DEMO_PASSWORD are set in the Xcode scheme.
+
+
+--------------------------------------------------------------------------------
+17. RELIABILITY: IDEMPOTENCY, RETRIES, DEAD-LETTER QUEUES
+--------------------------------------------------------------------------------
+
+Kafka guarantees "at least once" delivery, so an event can arrive more than once.
+SafeRoute handles this as follows:
+
+  * Transactional outbox. Every Kafka message (commands from the API and outcomes
+    from the consumers) is written to the outbox_events table in the same
+    database transaction as the change that caused it. A relay publishes the
+    rows in order and marks each one published only after Kafka acknowledges it.
+    A crash between the commit and the publish just delays the message; a Kafka
+    outage leaves messages waiting in the outbox. Nothing committed is lost.
+  * Every event carries a metadata envelope: a unique eventId, event type, time,
+    and correlation id.
+  * Each consumer records the eventId in the processed_events table inside the
+    same database transaction as its changes. A redelivered or re-sent event is
+    detected and skipped.
+  * Statuses are recomputed from counts (section 9), so replays cannot
+    double-count.
+  * HTTP retries are idempotent too: the same clientRequestId returns the
+    original submission.
+  * Submissions only move to FAILED if they are still QUEUED, so a real outcome is
+    never overwritten.
+  * On failure, an event is retried twice (500 ms apart) and then sent to a
+    dead-letter topic (<topic>.dlq). Dead-lettered reports mark their submission
+    FAILED and tell the reporter; every other dead-letter topic is logged and
+    counted in metrics. Unparseable "poison" messages go straight to the DLQ.
+  * If the processing consumer is down, reports still succeed at the API and
+    wait. When the consumer restarts, it drains the backlog.
+
+
+--------------------------------------------------------------------------------
+18. SECURITY AND ABUSE PREVENTION
+--------------------------------------------------------------------------------
+
+  * Authentication: short-lived JWT access tokens (30 min) and refresh tokens
+    (30 days). Refresh tokens are stored hashed, rotated on every use, and
+    revoked on logout. The token row is locked during a refresh, so two
+    simultaneous refreshes can't both create a new session; reusing an old token
+    long after rotation revokes all of that user's sessions.
+  * The server refuses to start without a private JWT_SECRET (at least 32 bytes).
+    The public development key only works in the local "dev" profile.
+  * Moderators are provisioned by account id (SAFEROUTE_MODERATOR_USER_IDS).
+    Registering an allowlisted email does NOT make anyone a moderator, because
+    email ownership isn't verified; that shortcut exists only in the dev and
+    benchmark profiles. Every privilege grant is recorded in role_grants.
+  * Passwords are hashed with BCrypt.
+  * Every hazard endpoint requires authentication. Role checks protect moderator
+    endpoints.
+  * Rate limits (Bucket4j) return HTTP 429 with a Retry-After header:
+      login: 5 failures per 10 min per IP     register: 3 per hour per IP
+      reports: 10 per hour per user           confirmations: 60 per hour
+      resolution votes: 20 per hour           uploads: 10 per hour
+    Idle buckets are evicted so memory doesn't grow forever.
+  * Coverage area: reports outside the Metro Manila bounding box (lat 14.35-14.80,
+    lon 120.90-121.15) are rejected.
+  * Uploads: only JPEG/PNG up to 5 MB. Images are decoded and re-encoded as JPEG,
+    which strips EXIF metadata such as GPS location (tested with a real GPS-tagged
+    image). Only the uploader can attach a photo to a report, and photos never
+    attached are deleted after 24 hours. Attached photos are public evidence;
+    faces or plates in the picture are not blurred.
+  * WebSocket sessions close when their access token expires.
+  * One opinion per user per hazard, and no self-confirmation.
+  * Secrets come from environment variables (.env, which is not committed).
+  * Consistent JSON error responses carrying a correlation id for tracing.
+
+
+--------------------------------------------------------------------------------
+19. DATABASE DESIGN
+--------------------------------------------------------------------------------
+
+The schema is managed by Flyway migrations V1 to V11. Main tables:
+
+  users                     accounts, role, reputation score
+  refresh_tokens            hashed, rotating refresh tokens
+  role_grants               audit trail of privilege changes
+  hazards                   location (PostGIS geography point), type, severity,
+                            status, counts, reporter, photo, last_confirmed_at,
+                            expires_at, content_revision, version
+  hazard_submissions        every report attempt: QUEUED -> CREATED / MERGED /
+                            FAILED, the canonical hazard id, clientRequestId
+                            (unique per reporter) and observed_at
+  hazard_confirmations      one VERIFY/DISPUTE per (hazard, user), with the
+                            revision it assessed
+  hazard_resolution_votes   one NO_LONGER_PRESENT/STILL_PRESENT per (hazard, user)
+  hazard_status_history     status transitions for the timeline
+  hazard_audit_log          who changed what, when, old value -> new value
+  reputation_events         reputation ledger
+  notification_preferences  alert radius and enabled hazard types per user
+  processed_events          event ids already handled, per consumer (idempotency)
+  outbox_events             committed messages waiting for / sent to Kafka
+  uploads                   who uploaded each photo and whether it was attached
+
+Spatial queries (nearby, bounding box, along a route, duplicate search) use
+PostGIS ST_DWithin / ST_Intersects on geography columns with spatial indexes.
+Distances are in meters.
+
+
+--------------------------------------------------------------------------------
+20. REST API REFERENCE
+--------------------------------------------------------------------------------
+
+Base URL: http://localhost:8080. Interactive docs: /swagger-ui.html
+
+  Auth
+    POST /api/auth/register | login | refresh | logout
+    GET  /api/auth/me
+  Reporting (asynchronous, idempotent)
+    POST /api/hazard-submissions              -> 202 {submissionId, QUEUED}
+                                                 (200 for a repeated clientRequestId)
+    GET  /api/hazard-submissions/{id}         -> CREATED / MERGED + hazardId
+  Queries
+    GET  /api/hazards/nearby?lat&lon&radius   (radius 50-5000 m, max 250 results)
+    GET  /api/hazards/in-bbox                 (visible map area; header
+                                               X-Result-Truncated when capped)
+    POST /api/hazards/along-route             every active hazard along candidate
+                                              routes, with a "complete" flag
+    GET  /api/hazards/{id}
+    GET  /api/hazards/{id}/history
+  Community
+    PUT  /api/hazards/{id}/confirmation                 VERIFY / DISPUTE
+    POST /api/hazards/{id}/resolution-confirmation      NO_LONGER_PRESENT /
+                                                        STILL_PRESENT
+    PATCH /api/hazards/{id}                             reporter/moderator edit
+  Moderation (MODERATOR / MUNICIPAL_OFFICIAL)
+    POST /api/hazards/{id}/resolve | reopen
+    DELETE /api/hazards/{id}                             remove as false/spam
+    GET  /api/moderation/hazards                         moderation queue
+  Uploads
+    POST /api/uploads/hazard-image
+  Me
+    GET  /api/me/reports | profile
+    GET/PUT /api/me/notification-preferences
+  Meta
+    GET  /api/meta/coverage | severity-questions | routing
+  Real-time
+    WS   /ws/notifications
+
+
+--------------------------------------------------------------------------------
+21. OBSERVABILITY
+--------------------------------------------------------------------------------
+
+  * Every log line carries correlationId, userId and eventId, so a single report
+    can be traced from HTTP request -> outbox -> Kafka -> consumer -> WebSocket.
+  * /actuator/health, /actuator/metrics, /actuator/prometheus
+  * Custom metrics:
+      saferoute.hazard.processing.latency     (recorded after the commit)
+      saferoute.notification.delivery.latency (successful writes only)
+      saferoute.notification.delivery.failed
+      saferoute.outbox.pending / saferoute.outbox.oldest.pending.age.seconds
+      saferoute.kafka.dead_lettered{topic}
+      counters for accepted / created / merged / failed reports (after commit,
+      so rolled-back retries are never counted twice)
+  * Kafka UI at http://localhost:8081 for inspecting topics and consumer lag.
+
+
+--------------------------------------------------------------------------------
+22. TESTING
+--------------------------------------------------------------------------------
+
+Backend: 88 tests, all passing. They combine unit tests with integration tests
+that use Testcontainers to start a real PostGIS database and a real Kafka broker
+in Docker. They cover:
+
+  * registration, login, token refresh and rotation (including concurrent
+    refreshes), logout, and the JWT secret rules
+  * moderator provisioning (an allowlisted but unverified email stays USER)
+  * role enforcement and rate limiting
+  * duplicate detection: old-but-active hazards merge; inactive or distant ones
+    don't
+  * confirmation rules, edit locks, repeated VERIFY, and stale-revision commands
+  * type edits recomputing expiry; lifecycle transitions and expiry
+  * idempotent HTTP submissions and observation times
+  * outbox recovery after a simulated crash between commit and publish
+  * Kafka redelivery idempotency and dead-letter handling
+  * route assessment completeness (an old on-path hazard among 300 newer ones)
+  * image uploads, ownership and removal of a real EXIF GPS payload
+  * WebSocket alert delivery and route-corridor math
+  * the severity classifier
+
+iOS: 24 unit tests covering route assessment (hazard check failing, incomplete
+or empty; detours checked separately), navigation (hazards found by planning,
+GPS quality, progress on a route that doubles back), per-account offline queue
+and alert history, and versioned map state.
+
+Benchmark instruments: 5 self-tests for the accounting and latency correlation.
+
+Run with:
+  cd backend && ./mvnw test                          (Docker must be running)
+  cd ios && xcodebuild test -project SafeRoute.xcodeproj -scheme SafeRoute \
+            -destination 'platform=iOS Simulator,name=iPhone 17'
+  node --test benchmark/simulator/
+
+
+--------------------------------------------------------------------------------
+23. BENCHMARKS AND RESULTS
+--------------------------------------------------------------------------------
+
+The benchmark/ folder provides evidence for the research objectives.
+
+  * latency-compare.mjs: one WebSocket client and three polling clients (every
+    1 s, 3 s and 5 s) watch the same area while hazards are reported at random
+    intervals. Each client records its own first sighting of each hazard, and
+    hazards are identified through each submission's own outcome, so the polling
+    numbers don't depend on the WebSocket client.
+  * simulate.mjs: synthetic scenarios.
+      normal            1 event/s, 20 users, 30% confirmations
+      rush_hour         10 events/s, 100 users, 40% confirmations
+      severe_weather    50 flooding reports/s burst
+      duplicate_burst   20 reports/s within 40 m (tests merging)
+      failure_recovery  stop the report consumer, send 100 events, restart
+    Hazards are seeded first so confirmations really are part of the workload,
+    and every run checks that the achieved mix matches the configuration. Only
+    CREATED/MERGED reports count as throughput; FAILED and never-resolved reports
+    count as errors.
+  * k6 scripts: normal-load, high-load, stress, polling-baseline (these measure
+    HTTP acceptance, not completion of asynchronous processing).
+  * Every run is saved with its raw per-event data and the exact source revision.
+    report.mjs summarizes the latest run of each scenario and how many runs exist.
+    Metric definitions are in docs/METRICS.md.
+
+Earlier preliminary numbers (WebSocket median about 49 ms vs about 1.5 s for a
+3-second polling client; 0 events lost in the failure test) came from an older
+version of these scripts that had the flaws fixed above. They are not evidence
+until the experiments are re-run with the corrected scripts, at least three runs
+per scenario, and reported with the environment they ran in.
+
+
+--------------------------------------------------------------------------------
+24. HOW TO RUN EVERYTHING
+--------------------------------------------------------------------------------
+
+Prerequisites: Java 21, Docker Desktop, Xcode 15+, XcodeGen, Node 22 (optional
+k6).
+
+Backend (local development):
+  cp .env.example .env
+  docker compose up -d postgres kafka kafka-ui
+  cd backend
+  SPRING_PROFILES_ACTIVE=dev SAFEROUTE_MODERATOR_EMAILS=mod@saferoute.local \
+    ./mvnw spring-boot:run
+  (or containerized: docker compose --profile with-backend up --build)
+  Outside a local machine: drop the dev profile, set JWT_SECRET, and provision
+  moderators with SAFEROUTE_MODERATOR_USER_IDS.
+
+iOS app:
+  cd ios
+  xcodegen generate        (or open the included SafeRoute.xcodeproj)
+  open SafeRoute.xcodeproj
+  Run on an iPhone Simulator. Set its location inside Metro Manila:
+  Features > Location > Custom Location... e.g. 14.5547, 121.0244 (Makati).
+
+Benchmarks:
+  cd benchmark && ./scripts/start-stack.sh
+  node simulator/latency-compare.mjs --events 50 --gap 2000
+  node simulator/simulate.mjs failure_recovery
+  node simulator/report.mjs
+
+The full commands, including a curl smoke test, are in README.md.
+
+
+--------------------------------------------------------------------------------
+25. PROJECT STRUCTURE
+--------------------------------------------------------------------------------
+
+  README.md                 setup, architecture, endpoints
+  docker-compose.yml        PostGIS, Kafka, Kafka UI, optional backend
+  .env.example              environment variable template
+  docs/
+    METRICS.md              exact definitions of every measured metric
+    PAPER_ALIGNMENT.md      where the paper and implementation differ
+    SafeRoute_Explained.txt this document
+  backend/src/main/java/com/saferoute/backend/
+    auth/          JWT, login/register/refresh, security filter
+    hazard/        hazard entity, REST controller, service, lifecycle, expiry
+    submission/    asynchronous report submissions
+    confirmation/  confirmations, resolution votes, status history, audit log
+    event/         Kafka topics, event DTOs, outbox, producer, consumers,
+                   idempotency
+    websocket/     session registry, handshake auth, route corridor, frames
+    spatial/       geo utilities, severity classifier
+    user/          users, roles, reputation, trust level, preferences
+    moderation/    moderation queue
+    upload/        image upload and re-encoding
+    ratelimit/     Bucket4j rate limiting
+    coverage/      Metro Manila coverage area and /meta endpoint
+    metrics/       custom Micrometer metrics
+    admin/         consumer stop/start control (benchmark only)
+    common/, config/  errors, correlation ids, Spring configuration
+  backend/src/main/resources/db/migration/   Flyway V1-V11
+  backend/src/test/                          88 unit and integration tests
+  ios/project.yml                            XcodeGen project definition
+  ios/SafeRouteTests/                        iOS unit tests
+  ios/SafeRoute/
+    App/           app entry point and global state
+    Core/          models, networking (REST + WebSocket), Keychain,
+                   offline queue, location, stores, design system
+    Features/      Auth, Map, ReportHazard, HazardDetail, Reports, Alerts,
+                   Profile, Reroute (safer routes), Navigation, Root (tab bar)
+  benchmark/       k6 scripts, Node simulator, helper scripts
+
+
+--------------------------------------------------------------------------------
+26. KNOWN LIMITATIONS AND FUTURE WORK
+--------------------------------------------------------------------------------
+
+Limitations of the prototype:
+  * Alerts arrive only while the app's WebSocket is connected, and are shown as
+    local notifications. There are no Apple Push Notification service (APNs)
+    push notifications and no background location, so a suspended app gets no
+    alerts.
+  * Rate-limit buckets and WebSocket sessions live in memory, which supports a
+    single backend instance only. With several instances the outbox relay avoids
+    double-sends but not reordering; clients cope by applying hazard versions.
+  * Only one Kafka broker in development. A production cluster would replicate.
+  * Route scoring is a transparent heuristic, not a validated safety model. Point
+    buffers don't model flood extent, which side of the street a hazard is on, or
+    footbridges above a road. Waypoint detours may use streets.
+  * EXPIRED means "no recent confirmation", not "repaired".
+  * On a physical iPhone (not the Simulator), APIConfig.swift must point to the
+    computer's LAN IP instead of localhost.
+  * The benchmarks must be re-run with the corrected instruments before any
+    numbers are quoted.
+  * The prototype does not implement CQRS or event sourcing. PostgreSQL holds
+    current state, and the audit log records history.
+
+Future work:
+  * A municipal web portal (active-hazard map, heatmaps, per-area statistics).
+    The MUNICIPAL_OFFICIAL role and APIs already exist.
+  * APNs push notifications and background location.
+  * Horizontal scaling: shared rate-limit store (e.g. Redis), multi-broker Kafka,
+    and a WebSocket fan-out across instances.
+  * Smarter severity classification and hazard-aware routing on a proper
+    pedestrian graph.
+  * An Android client, and coverage beyond Metro Manila.
+  * Pedestrian routing with native hazard avoidance. MapKit cannot avoid a
+    point, so detours rely on waypoints that may land on streets. An
+    OpenStreetMap-based router (e.g. Valhalla's pedestrian profile) could
+    exclude hazard locations directly and prefer sidewalks and footways.
+
+================================================================================

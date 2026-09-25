@@ -8,7 +8,7 @@ struct SafeRouteApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(appState)
-                // Brand navy replaces the default system blue everywhere (UI review §40).
+                // Brand navy replaces the default system blue everywhere.
                 .tint(SR.Palette.navy)
                 .task {
                     await appState.bootstrap()

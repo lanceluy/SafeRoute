@@ -14,5 +14,7 @@ public interface HazardConfirmationRepository extends JpaRepository<HazardConfir
 
     long countByHazardIdAndAction(UUID hazardId, ConfirmationAction action);
 
+    boolean existsByHazardId(UUID hazardId);
+
     long countByUserIdAndAction(UUID userId, ConfirmationAction action);
 }

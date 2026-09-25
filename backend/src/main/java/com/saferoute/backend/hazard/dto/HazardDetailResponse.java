@@ -5,7 +5,7 @@ import com.saferoute.backend.confirmation.ResolutionAction;
 import com.saferoute.backend.user.TrustLevel;
 
 /**
- * Everything the Hazard Detail screen needs in one call (review §16). The reporter is described
+ * Everything the Hazard Detail screen needs in one call. The reporter is described
  * by trust tier only — no name or id beyond what HazardResponse already carries.
  */
 public record HazardDetailResponse(

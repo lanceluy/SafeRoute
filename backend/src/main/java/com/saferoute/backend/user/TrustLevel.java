@@ -1,6 +1,6 @@
 package com.saferoute.backend.user;
 
-/** Display tier derived from reputation (review §7) — shown instead of the raw score. */
+/** Display tier derived from reputation — shown instead of the raw score. */
 public enum TrustLevel {
     NEW_REPORTER,
     REGULAR_REPORTER,

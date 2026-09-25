@@ -45,9 +45,23 @@ final class NavigationSession: ObservableObject {
 
     /// Within this distance the next hazard is shown as an active warning.
     static let warningDistance: Double = 150
-    private static let corridorMeters: Double = 30
     private static let offRouteMeters: Double = 45
     private static let arrivalMeters: Double = 25
+    private static let arrivalNearEndMeters: Double = 100
+    /// Fixes worse or older than this are ignored rather than trusted.
+    static let maxFixAccuracyMeters: Double = 50
+    static let maxFixAge: TimeInterval = 10
+    /// Fast walking pace, used to bound how far along the route one fix may move the walker.
+    private static let maxWalkingSpeed: Double = 3
+
+    /// Same corridor as route assessment and the server's on-route alerts.
+    private let corridorMeters: Double
+    /// Whether the plan's hazard data was complete; guidance says so when it wasn't.
+    let assessment: HazardAssessment
+    /// Every hazard known along this route: seeded from the route assessment, then kept current
+    /// from live updates. Never shrunk by a smaller viewport cache.
+    private var knownHazards: [UUID: Hazard] = [:]
+    private var lastFixTime: Date?
 
     private let path: RoutePath
     private let steps: [Step]
@@ -58,10 +72,13 @@ final class NavigationSession: ObservableObject {
     private let speech = AVSpeechSynthesizer()
     private let haptics = UINotificationFeedbackGenerator()
 
-    init(plan: RoutePlan, option: RouteOption, knownHazards: [Hazard]) {
+    init(plan: RoutePlan, option: RouteOption, knownHazards: [Hazard],
+         corridorMeters: Double = RoutingSettings.corridorMeters) {
         destinationName = plan.destinationName
         destination = plan.destination
         self.option = option
+        self.corridorMeters = corridorMeters
+        self.assessment = plan.assessment
         path = RoutePath(option.coordinates)
         remainingDistance = path.length
         remainingTime = option.expectedTravelTime
@@ -70,8 +87,8 @@ final class NavigationSession: ObservableObject {
         // Automated demo runs shouldn't talk through the Mac's speakers.
         if ProcessInfo.processInfo.environment["SAFEROUTE_DEMO_SKIP_PROMPTS"] != nil { voiceEnabled = false }
         #endif
+        merge(plan.assessedHazards)
         refreshHazards(knownHazards)
-        updateProgress()
     }
 
     var nextHazard: (hazard: HazardOnRoute, distance: Double)? { hazardsAhead.first }
@@ -88,12 +105,18 @@ final class NavigationSession: ObservableObject {
     func start() {
         UIApplication.shared.isIdleTimerDisabled = true
         LocationManager.shared.setNavigationMode(true)
-        subscription = LocationManager.shared.$currentLocation
+        subscription = LocationManager.shared.$currentFix
             .compactMap { $0 }
-            .sink { [weak self] in self?.update(location: $0) }
+            .sink { [weak self] in self?.update(fix: $0) }
         let count = routeHazards.count
-        speak("Starting route to \(destinationName). "
-              + (count == 0 ? "No reported hazards on this route." : "\(count) reported hazard\(count == 1 ? "" : "s") on this route."))
+        let summary: String
+        if !assessment.isComplete {
+            summary = count == 0 ? "Hazard information for this route is incomplete. Take care."
+                : "\(count) reported hazard\(count == 1 ? "" : "s") known on this route; hazard information is incomplete."
+        } else {
+            summary = count == 0 ? "No reported hazards on this route." : "\(count) reported hazard\(count == 1 ? "" : "s") on this route."
+        }
+        speak("Starting route to \(destinationName). " + summary)
     }
 
     func stop() {
@@ -103,22 +126,51 @@ final class NavigationSession: ObservableObject {
         LocationManager.shared.setNavigationMode(false)
     }
 
-    /// Picks up hazards reported (or resolved) while walking.
+    /// Picks up hazards reported, changed or resolved while walking. Merges by id, keeping the
+    /// newest version: a hazard missing from `hazards` is kept, because the caller's list may be
+    /// a smaller viewport cache rather than the route's full set.
     func refreshHazards(_ hazards: [Hazard]) {
-        routeHazards = hazards.compactMap { hazard -> HazardOnRoute? in
+        merge(hazards)
+        routeHazards = knownHazards.values.compactMap { hazard -> HazardOnRoute? in
             guard hazard.status.isActive else { return nil }
             let p = path.project(hazard.coordinate)
-            return p.offset <= Self.corridorMeters ? HazardOnRoute(hazard: hazard, along: p.along, offset: p.offset) : nil
+            return p.offset <= corridorMeters ? HazardOnRoute(hazard: hazard, along: p.along, offset: p.offset) : nil
         }
         .sorted { $0.along < $1.along }
         updateProgress()
     }
 
+    /// Replaces the route's hazard set with an authoritative, complete re-assessment (e.g. after
+    /// reconnecting), so hazards resolved while we were disconnected disappear.
+    func replaceHazards(withCompleteAssessment hazards: [Hazard]) {
+        knownHazards = [:]
+        refreshHazards(hazards)
+    }
+
+    private func merge(_ hazards: [Hazard]) {
+        for hazard in hazards {
+            if let existing = knownHazards[hazard.id], (existing.version ?? 0) > (hazard.version ?? 0) { continue }
+            knownHazards[hazard.id] = hazard
+        }
+    }
+
     // MARK: Progress
 
-    func update(location: CLLocationCoordinate2D) {
+    /// A real GPS fix: ignored if stale or too inaccurate to place the walker on the route.
+    func update(fix: CLLocation, now: Date = Date()) {
+        guard fix.horizontalAccuracy >= 0, fix.horizontalAccuracy <= Self.maxFixAccuracyMeters,
+              now.timeIntervalSince(fix.timestamp) <= Self.maxFixAge else { return }
+        let elapsed = lastFixTime.map { max(1, fix.timestamp.timeIntervalSince($0)) } ?? 10
+        lastFixTime = fix.timestamp
+        // One fix can't move the walker further along than they could plausibly have walked, so a
+        // loop or a parallel street further along the route doesn't make progress jump ahead.
+        let maxAdvance = max(30, elapsed * Self.maxWalkingSpeed + fix.horizontalAccuracy + 15)
+        update(location: fix.coordinate, progressWindow: (userAlong - 40)...(userAlong + maxAdvance))
+    }
+
+    func update(location: CLLocationCoordinate2D, progressWindow: ClosedRange<Double>? = nil) {
         guard phase != .arrived else { return }
-        let p = path.project(location)
+        let p = progressWindow.map { path.project(location, within: $0) } ?? path.project(location)
         // Avoid jumping backwards on noisy fixes where the route doubles back on itself.
         userAlong = p.along < userAlong - 40 ? userAlong : p.along
 
@@ -136,7 +188,11 @@ final class NavigationSession: ObservableObject {
 
         let toDestination = CLLocation(latitude: location.latitude, longitude: location.longitude)
             .distance(from: CLLocation(latitude: destination.latitude, longitude: destination.longitude))
-        if toDestination <= Self.arrivalMeters || (path.length - userAlong <= Self.arrivalMeters && p.offset < Self.offRouteMeters) {
+        // Being near the destination only counts near the end of the route: a route that loops back
+        // past its own end must not "arrive" on the way out.
+        let remainingAlong = path.length - userAlong
+        if (toDestination <= Self.arrivalMeters && remainingAlong <= Self.arrivalNearEndMeters)
+            || (remainingAlong <= Self.arrivalMeters && p.offset < Self.offRouteMeters) {
             phase = .arrived
             remainingDistance = 0
             remainingTime = 0
@@ -233,6 +289,11 @@ struct RoutePath {
 
     /// (distance along the route to the nearest point, perpendicular offset from the route)
     func project(_ c: CLLocationCoordinate2D) -> (along: Double, offset: Double) {
+        project(c, within: nil)
+    }
+
+    /// Like `project`, but only considers route positions whose distance-along falls in `window`.
+    func project(_ c: CLLocationCoordinate2D, within window: ClosedRange<Double>?) -> (along: Double, offset: Double) {
         guard points.count > 1 else { return (0, .greatestFiniteMagnitude) }
         let metersPerDegree = 111_320.0
         let cosLat = cos(c.latitude * .pi / 180)
@@ -244,10 +305,20 @@ struct RoutePath {
             let by = (points[i + 1].latitude - c.latitude) * metersPerDegree
             let dx = bx - ax, dy = by - ay
             let lengthSq = dx * dx + dy * dy
-            let t = lengthSq == 0 ? 0 : max(0, min(1, -(ax * dx + ay * dy) / lengthSq))
+            var t = lengthSq == 0 ? 0 : max(0, min(1, -(ax * dx + ay * dy) / lengthSq))
+            let segStart = cumulative[i], segLength = cumulative[i + 1] - cumulative[i]
+            if let window {
+                // Skip segments entirely outside the window; clamp t to the part inside it.
+                guard segStart + segLength >= window.lowerBound, segStart <= window.upperBound else { continue }
+                if segLength > 0 {
+                    let lo = max(0, (window.lowerBound - segStart) / segLength)
+                    let hi = min(1, (window.upperBound - segStart) / segLength)
+                    t = min(max(t, lo), hi)
+                }
+            }
             let offset = hypot(ax + t * dx, ay + t * dy)
             if offset < best.offset {
-                best = (cumulative[i] + t * (cumulative[i + 1] - cumulative[i]), offset)
+                best = (segStart + t * segLength, offset)
             }
         }
         return best

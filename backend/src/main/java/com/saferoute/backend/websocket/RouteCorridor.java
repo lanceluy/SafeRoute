@@ -6,7 +6,7 @@ import java.util.List;
 
 /**
  * A commuter's active route polyline, used to decide whether a hazard is <em>on their route and
- * ahead of them</em> rather than merely nearby (review §13). Distances use a local
+ * ahead of them</em> rather than merely nearby. Distances use a local
  * equirectangular projection, which is accurate to well under a meter over walking distances.
  */
 public final class RouteCorridor {

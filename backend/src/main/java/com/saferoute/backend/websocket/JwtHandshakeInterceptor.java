@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
 /**
  * Validates the JWT before the WebSocket upgrade completes, from the
  * {@code Authorization: Bearer <jwt>} handshake header. The {@code ?token=} query parameter is
- * off by default because URLs end up in access logs (review §21); enable
+ * off by default because URLs end up in access logs; enable
  * {@code saferoute.websocket.allow-query-token} only for clients that cannot set headers.
  */
 @Component
@@ -46,6 +46,8 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
         try {
             AuthenticatedUser principal = jwtService.parsePrincipal(token);
             attributes.put("userId", principal.id());
+            // The session is closed when this token expires (see WebSocketSessionRegistry).
+            attributes.put("tokenExpiresAt", jwtService.parseClaims(token).getExpiration().toInstant());
             return true;
         } catch (JwtException | IllegalArgumentException e) {
             response.setStatusCode(HttpStatus.UNAUTHORIZED);

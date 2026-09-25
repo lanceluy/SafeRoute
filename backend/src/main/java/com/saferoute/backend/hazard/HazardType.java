@@ -1,6 +1,6 @@
 package com.saferoute.backend.hazard;
 
-/** Deliberately few, pedestrian-focused categories (review §28). */
+/** Deliberately few, pedestrian-focused categories. */
 public enum HazardType {
     FLOODING,
     BROKEN_SIDEWALK,

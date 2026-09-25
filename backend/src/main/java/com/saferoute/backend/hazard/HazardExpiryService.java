@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Moves stale hazards to EXPIRED (review §9). A plain @Scheduled task is enough for a single
+ * Moves stale hazards to EXPIRED. A plain @Scheduled task is enough for a single
  * instance prototype; each hazard is expired in its own transaction so one conflict (someone
  * confirmed it at the same moment) doesn't block the rest.
  */

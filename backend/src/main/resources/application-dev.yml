@@ -1,0 +1,9 @@
+# Local development only: SPRING_PROFILES_ACTIVE=dev (also combined with docker / benchmark).
+# Never enable this profile on a shared or public deployment.
+saferoute:
+  jwt:
+    # A blank JWT_SECRET falls back to the published development key, which is accepted only here.
+    allow-dev-secret: true
+  bootstrap:
+    # Promote SAFEROUTE_MODERATOR_EMAILS on registration/startup without verifying the address.
+    trust-unverified-emails: true

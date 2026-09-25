@@ -14,6 +14,9 @@ final class WebSocketClient: NSObject, ObservableObject {
 
     var onHazardFrame: ((HazardEventFrame) -> Void)?
     var onSubmissionFrame: ((SubmissionProcessedFrame) -> Void)?
+    /// Called when a connection opens after a drop. Frames sent while disconnected are lost, so
+    /// the owner re-fetches authoritative state.
+    var onReconnected: (() -> Void)?
 
     private var task: URLSessionWebSocketTask?
     private var session: URLSession!
@@ -22,21 +25,33 @@ final class WebSocketClient: NSObject, ObservableObject {
     private var reconnectAttempt = 0
     private var shouldBeConnected = false
     private var reconnectWork: Task<Void, Never>?
+    private var connectAttempt: Task<Void, Never>?
+    private var hasConnectedBefore = false
 
     override private init() {
         super.init()
         session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
     }
 
+    /// Idempotent: safe to call whenever connectivity or the session may have changed.
     func connect() {
         shouldBeConnected = true
-        guard task == nil else { return }
+        guard task == nil, connectAttempt == nil else { return }
+        reconnectWork?.cancel()
         state = reconnectAttempt == 0 ? .connecting : .reconnecting
-        Task {
+        connectAttempt = Task {
+            defer { self.connectAttempt = nil }
             // Refresh first if the 30-minute access token is about to lapse; the handshake
             // would otherwise fail with 401 forever.
             guard let token = await APIClient.shared.validAccessToken() else {
-                self.state = .disconnected
+                // No refresh token means signed out: stop. Otherwise the refresh failed
+                // transiently (offline, server hiccup): keep retrying with backoff.
+                if KeychainService.shared.readRefreshToken() == nil {
+                    self.shouldBeConnected = false
+                    self.state = .disconnected
+                } else {
+                    self.scheduleReconnect()
+                }
                 return
             }
             guard self.shouldBeConnected, self.task == nil else { return }
@@ -52,6 +67,9 @@ final class WebSocketClient: NSObject, ObservableObject {
     func disconnect() {
         shouldBeConnected = false
         reconnectWork?.cancel()
+        connectAttempt?.cancel()
+        connectAttempt = nil
+        hasConnectedBefore = false
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
         reconnectAttempt = 0
@@ -110,6 +128,13 @@ final class WebSocketClient: NSObject, ObservableObject {
             state = .disconnected
             return
         }
+        scheduleReconnect()
+    }
+
+    /// Also covers a server close (e.g. 4001 when the access token expires): the next attempt
+    /// refreshes the token first.
+    private func scheduleReconnect() {
+        guard shouldBeConnected else { return }
         state = .reconnecting
         reconnectAttempt += 1
         let delay = min(30.0, pow(2.0, Double(reconnectAttempt)))
@@ -126,6 +151,8 @@ final class WebSocketClient: NSObject, ObservableObject {
         reconnectAttempt = 0
         if let lastLocation { updateLocation(lastLocation) }
         if activeRoute != nil { sendRoute() }
+        if hasConnectedBefore { onReconnected?() }
+        hasConnectedBefore = true
     }
 
     private static func downsample(_ points: [CLLocationCoordinate2D], maxPoints: Int) -> [CLLocationCoordinate2D] {

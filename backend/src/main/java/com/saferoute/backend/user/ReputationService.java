@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 /**
- * Makes users.reputation_score mean something (review §7). Reputation is one signal — it drives
+ * Makes users.reputation_score mean something. Reputation is one signal — it drives
  * the displayed trust tier and moderation-queue ordering — never the sole arbiter of truth.
  *
  * <ul>

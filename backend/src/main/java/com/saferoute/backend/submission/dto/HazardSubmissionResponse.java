@@ -17,11 +17,14 @@ public record HazardSubmissionResponse(
         double longitude,
         String failureReason,
         Instant createdAt,
-        Instant processedAt
+        Instant processedAt,
+        /** Echo of the client's idempotency key, so an offline queue can match its entries. */
+        UUID clientRequestId,
+        Instant observedAt
 ) {
     public static HazardSubmissionResponse from(HazardSubmission s) {
         return new HazardSubmissionResponse(s.getId(), s.getProcessingStatus(), s.getCanonicalHazardId(),
                 s.getSubmittedType(), s.getLatitude(), s.getLongitude(), s.getFailureReason(),
-                s.getCreatedAt(), s.getProcessedAt());
+                s.getCreatedAt(), s.getProcessedAt(), s.getClientRequestId(), s.getObservedAt());
     }
 }

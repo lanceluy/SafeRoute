@@ -13,7 +13,7 @@ import java.util.EnumSet;
 import java.util.Set;
 import java.util.UUID;
 
-/** One row per user; simple boolean columns per type are fine at prototype scale (review §53). */
+/** One row per user; simple boolean columns per type are fine at prototype scale. */
 @Entity
 @Table(name = "user_notification_preferences")
 @Getter

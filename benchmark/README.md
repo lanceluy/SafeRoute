@@ -27,7 +27,7 @@ curl -X POST localhost:8080/api/auth/register -H 'Content-Type: application/json
   -d '{"email":"mod@saferoute.local","password":"password123","displayName":"Moderator"}'
 ```
 
-## 2. Event-driven vs polling (review §42)
+## 2. Event-driven vs polling
 
 ```bash
 node simulator/latency-compare.mjs --events 50 --gap 2000
@@ -38,7 +38,7 @@ reporter submits hazards. Same-process clocks, so latencies need no skew correct
 Reports WebSocket notification latency vs polling detection latency (median/p95/p99/max) and
 how many polling requests returned nothing new.
 
-## 3. Synthetic scenarios (review §43)
+## 3. Synthetic scenarios
 
 ```bash
 node simulator/simulate.mjs normal            # 1 event/s,  20 users
@@ -53,7 +53,7 @@ Each run records events submitted / accounted for / **lost**, created vs merged,
 hazards (duplicate side effects), HTTP error rate, throughput, processing latency percentiles,
 and (failure_recovery) the recovery time.
 
-### Fault-tolerance test (review §44)
+### Fault-tolerance test
 
 `failure_recovery` automates the paper's procedure: stop the Hazard Processing consumer
 (`/api/admin/consumers/hazard-reported-processor/stop`), publish 100 `hazard_reported` events,
@@ -77,7 +77,17 @@ k6 run -e CLIENTS=200 -e POLL_SECONDS=3 k6/polling-baseline.js
 ./scripts/export-metrics.sh   # server-side latency percentiles, CPU, memory, pool usage
 ```
 
-## 5. Summary for the presentation (review §46)
+## 5. Instrument self-tests
+
+```bash
+node --test simulator/
+```
+
+Checks the accounting (FAILED reports are errors, never throughput; unresolved reports are
+lost), the workload-mix check, and that polling latencies don't change when WebSocket frames are
+delayed or dropped.
+
+## 6. Summary for the presentation
 
 ```bash
 node simulator/report.mjs
@@ -86,9 +96,13 @@ node simulator/report.mjs
 Prints the latest run of each scenario. Report medians and p95/p99, not just averages, and
 state the environment (machine, Docker resources, single Kafka broker) next to any number.
 
-### Sample run (development laptop, single broker, 2026-09-24)
+### Earlier sample run (development laptop, single broker, 2026-09-24) — superseded
 
-These are from a short verification run, not a formal experiment; re-run with larger samples for the paper.
+These numbers came from a short run of an **earlier version of the instruments**, which never
+generated confirmations, matched polling detections through the WebSocket client and counted
+failed reports as throughput. They are kept for reference only. Re-run with the corrected
+scripts (at least 3 runs per scenario, results saved with raw data and source revision) before
+quoting anything in the paper.
 
 | Measurement | Median | p95 |
 |---|---|---|

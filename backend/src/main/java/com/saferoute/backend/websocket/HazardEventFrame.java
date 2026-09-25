@@ -12,7 +12,7 @@ import java.util.UUID;
 /**
  * Outbound hazard frame. {@code type} is one of hazard_created | hazard_verified |
  * hazard_disputed | hazard_resolved | hazard_expired | hazard_updated, so the client can patch
- * its map state immediately (review §23). {@code alert=true} means "notify the user": the hazard
+ * its map state immediately. {@code alert=true} means "notify the user": the hazard
  * is new/newly verified, of a type they enabled, and on their route ahead of them (or, with no
  * active route, within their alert radius).
  */
@@ -32,6 +32,8 @@ public record HazardEventFrame(
         boolean alert,
         boolean onRoute,
         Double distanceAheadMeters,
-        Instant occurredAt
+        Instant occurredAt,
+        /** Hazard row version: clients ignore a frame older than the state they already hold. */
+        long version
 ) {
 }

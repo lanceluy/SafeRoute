@@ -1,7 +1,11 @@
 package com.saferoute.backend.upload;
 
 import com.saferoute.backend.common.ApiException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,16 +24,22 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Iterator;
 import java.util.Set;
+import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
- * Local-disk image pipeline for the prototype (review §17). Every upload is decoded and
- * re-encoded as a fresh JPEG, which (a) proves it really is an image and (b) drops all
- * metadata, including EXIF GPS coordinates. Swapping in object storage later only changes
- * {@link #store}.
+ * Local-disk image pipeline for the prototype. Every upload is decoded and re-encoded as a fresh
+ * JPEG, which (a) proves it really is an image and (b) drops all metadata, including EXIF GPS
+ * coordinates. It does not remove identifying content in the picture itself (faces, plates).
+ * Swapping in object storage later only changes {@link #store}.
+ *
+ * <p>Ownership: each upload is recorded against its uploader, and only the uploader can attach it
+ * to a report. Attached photos are public evidence (served by UUID URL to anyone who can see the
+ * hazard); uploads never attached are deleted after {@code saferoute.uploads-cleanup.orphan-ttl}.
  */
 @Service
 public class ImageUploadService {
@@ -45,10 +55,18 @@ public class ImageUploadService {
     public record StoredImage(String url, int width, int height, long bytes) {
     }
 
-    private final Path hazardDir;
+    private static final Logger log = LoggerFactory.getLogger(ImageUploadService.class);
 
-    public ImageUploadService(@Value("${saferoute.uploads.dir}") String uploadsDir) throws IOException {
+    private final Path hazardDir;
+    private final JdbcTemplate jdbc;
+    private final Duration orphanTtl;
+
+    public ImageUploadService(@Value("${saferoute.uploads.dir}") String uploadsDir,
+                              @Value("${saferoute.uploads-cleanup.orphan-ttl:PT24H}") Duration orphanTtl,
+                              JdbcTemplate jdbc) throws IOException {
         this.hazardDir = Path.of(uploadsDir, "hazards").toAbsolutePath().normalize();
+        this.orphanTtl = orphanTtl;
+        this.jdbc = jdbc;
         Files.createDirectories(hazardDir);
     }
 
@@ -56,7 +74,7 @@ public class ImageUploadService {
         return hazardDir;
     }
 
-    public StoredImage storeHazardImage(MultipartFile file) {
+    public StoredImage storeHazardImage(MultipartFile file, UUID ownerId) {
         if (file == null || file.isEmpty()) {
             throw invalid("EMPTY_FILE", "No image was uploaded");
         }
@@ -78,15 +96,46 @@ public class ImageUploadService {
         }
         BufferedImage source = decode(bytes);
         BufferedImage resized = downscaleToRgb(source);
-        return store(resized);
+        StoredImage stored = store(resized);
+        jdbc.update("INSERT INTO uploads (url, owner_id) VALUES (?, ?)", stored.url(), ownerId);
+        return stored;
     }
 
-    /** Accepts null (no photo) or a URL previously issued by this service whose file still exists. */
-    public void requireExistingUpload(String url) {
+    /**
+     * Accepts null (no photo) or a URL this service issued to {@code userId} whose file still
+     * exists. Someone else's photo URL is rejected even though it is publicly readable.
+     */
+    public void requireOwnedUpload(String url, UUID userId) {
         if (url == null) return;
-        if (!URL_PATTERN.matcher(url).matches() || !Files.exists(hazardDir.resolve(url.substring(URL_PREFIX.length())))) {
-            throw invalid("INVALID_PHOTO_URL", "photoUrl must be a URL returned by POST /api/uploads/hazard-image");
+        boolean valid = URL_PATTERN.matcher(url).matches()
+                && Files.exists(hazardDir.resolve(url.substring(URL_PREFIX.length())))
+                && Boolean.TRUE.equals(jdbc.queryForObject(
+                        "SELECT EXISTS (SELECT 1 FROM uploads WHERE url = ? AND owner_id = ?)", Boolean.class, url, userId));
+        if (!valid) {
+            throw invalid("INVALID_PHOTO_URL", "photoUrl must be a URL returned to you by POST /api/uploads/hazard-image");
         }
+    }
+
+    /** Marks an upload as used by a report so the orphan cleanup keeps it. */
+    public void markAttached(String url) {
+        if (url == null) return;
+        jdbc.update("UPDATE uploads SET attached_at = COALESCE(attached_at, now()) WHERE url = ?", url);
+    }
+
+    @Scheduled(fixedDelayString = "PT1H", initialDelayString = "PT10M")
+    public void deleteOrphanedUploads() {
+        List<String> orphans = jdbc.queryForList(
+                "SELECT url FROM uploads WHERE attached_at IS NULL AND created_at < now() - make_interval(secs => ?)",
+                String.class, orphanTtl.toSeconds());
+        for (String url : orphans) {
+            try {
+                Files.deleteIfExists(hazardDir.resolve(url.substring(URL_PREFIX.length())));
+                jdbc.update("DELETE FROM uploads WHERE url = ? AND attached_at IS NULL", url);
+            } catch (IOException e) {
+                log.warn("Could not delete orphaned upload {}: {}", url, e.getMessage());
+            }
+        }
+        if (!orphans.isEmpty()) log.info("Deleted {} orphaned upload(s)", orphans.size());
     }
 
     static boolean hasImageMagicBytes(byte[] b) {
