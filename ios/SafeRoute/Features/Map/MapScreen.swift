@@ -21,6 +21,7 @@ struct MapScreen: View {
     @State private var isShowingNearby = false
     /// Opens part-way so the map (pins, direction) stays visible; drag up for the full list.
     @State private var nearbyDetent: PresentationDetent = Self.nearbyHalf
+    @State private var nearbyPreviewId: UUID?
     @State private var detailHazard: SelectedHazard?
     @State private var isFollowingUser = true
 
@@ -35,6 +36,7 @@ struct MapScreen: View {
             isNavigating: model.isNavigating,
             followCoordinate: model.isNavigating ? location.currentLocation : nil,
             followHeading: location.course,
+            obscuredBottomFraction: isShowingNearby ? (nearbyDetent == Self.nearbyPeek ? 0.3 : 0.6) : 0,
             labelledHazardIds: Set(model.navigation?.routeHazards.map(\.id) ?? []),
             onFollowChange: { isFollowingUser = $0 },
             onSelectHazard: { id in
@@ -74,16 +76,26 @@ struct MapScreen: View {
                 hasLocation: location.currentLocation != nil,
                 radiusMeters: Self.nearbyRadiusMeters,
                 selectedId: model.selectedHazardId,
+                map: model,
+                previewId: $nearbyPreviewId,
                 onSelect: { selectFromNearby($0) },
-                onOpenDetails: { id in
+                // The preview needs room: raise the sheet back to its half height.
+                onPreview: { id in
+                    nearbyDetent = Self.nearbyHalf
+                    // Keep the hazard in view above the taller sheet.
+                    if let hazard = model.hazards[id] { model.command = .init(command: .focus(hazard.coordinate)) }
+                },
+                onOpenFullDetails: { id in
                     isShowingNearby = false
                     detailHazard = SelectedHazard(id: id)
                 })
             .presentationDetents([Self.nearbyPeek, Self.nearbyHalf, .large], selection: $nearbyDetent)
-            .presentationDragIndicator(.visible)
+            // NearbyHazardsSheet draws a wider handle of its own.
+            .presentationDragIndicator(.hidden)
             // The map stays usable above the sheet: tapping a pin scrolls the list to it.
             .presentationBackgroundInteraction(.enabled(upThrough: Self.nearbyHalf))
             .onAppear { nearbyDetent = Self.nearbyHalf }
+            .onDisappear { nearbyPreviewId = nil }
         }
         .sheet(item: $detailHazard) { selection in
             HazardDetailView(hazardId: selection.id, map: model, onFindSaferRoute: {
@@ -346,13 +358,19 @@ struct MapScreen: View {
         case "report": isShowingReport = true
         case "planner": isShowingPlanner = true
         case "filters": isShowingFilters = true
-        case "nearby", "nearby-select":
+        case "nearby", "nearby-select", "nearby-preview":
             for _ in 0..<40 where model.nearbyActive.isEmpty { try? await Task.sleep(for: .milliseconds(250)) }
             isShowingNearby = true
-            // nearby-select: then do what tapping the nearest row does.
-            if intent == "nearby-select", let first = model.nearbyActive.first?.hazard.id {
+            // nearby-select: then do what tapping the nearest row does; nearby-preview: then tap it again.
+            if intent != "nearby", let first = model.nearbyActive.first?.hazard.id {
                 try? await Task.sleep(for: .seconds(3))
                 selectFromNearby(first)
+                if intent == "nearby-preview" {
+                    try? await Task.sleep(for: .seconds(2))
+                    nearbyPreviewId = first
+                    nearbyDetent = Self.nearbyHalf
+                    if let hazard = model.hazards[first] { model.command = .init(command: .focus(hazard.coordinate)) }
+                }
             }
         case "navigate":
             // SAFEROUTE_DEMO_ROUTE_TO="lat,lon,Name": plan a route and start navigation. With

@@ -1,15 +1,25 @@
 import SwiftUI
 
-/// Nearby Hazards: a severity summary, filters, and the list, tied to the map. Tapping a row
-/// selects its pin and pans to it; tapping a pin scrolls to its row; the chevron opens details.
+/// Nearby Hazards: a severity summary, filters, and the list, tied to the map.
+///
+/// First tap on a row selects it (map centers, pin enlarges, row expands). Tapping the selected
+/// row again, or "View details", opens a preview in the same sheet; "View full details" there
+/// opens the full hazard screen.
 struct NearbyHazardsSheet: View {
     let items: [NearbyHazardList.Item]
     let hasLocation: Bool
     let radiusMeters: Double
     /// The hazard selected on the map (from a row or a pin).
     let selectedId: UUID?
+    /// For the preview's live data and its confirm / dispute actions.
+    @ObservedObject var map: MapViewModel
+    /// The hazard shown in the preview (pushed over the list), owned by the parent so it resets
+    /// when the sheet closes.
+    @Binding var previewId: UUID?
     let onSelect: (UUID) -> Void
-    let onOpenDetails: (UUID) -> Void
+    /// The preview opened; the parent raises the sheet so it has room.
+    let onPreview: (UUID) -> Void
+    let onOpenFullDetails: (UUID) -> Void
 
     @State private var severity: NearbyHazardList.SeverityFilter = .all
     @State private var type: HazardType?
@@ -21,18 +31,42 @@ struct NearbyHazardsSheet: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            DragHandle()
+            NavigationStack {
+                list
+                    .toolbar(.hidden, for: .navigationBar)
+                    .navigationDestination(item: $previewId) { id in
+                        HazardPreviewView(hazardId: id,
+                                          distance: items.first { $0.id == id }?.distance,
+                                          map: map,
+                                          onOpenFullDetails: { onOpenFullDetails(id) })
+                    }
+            }
+        }
+        .srPageBackground()
+    }
+
+    private func openPreview(_ id: UUID) {
+        previewId = id
+        onPreview(id)
+    }
+
+    // MARK: List screen
+
+    private var list: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     header
-                        .padding(.top, SR.Space.xl)
+                        .padding(.top, SR.Space.lg)
                     RiskSummaryCard(counts: NearbyHazardList.counts(items))
                         .padding(.top, SR.Space.lg)
                     filterRow
                         .padding(.top, SR.Space.xl)
                     listHeader
                         .padding(.top, SR.Space.md)
-                    list
+                    rows
                         .padding(.top, SR.Space.xs)
                 }
                 .padding(.horizontal, SR.Space.screenMargin)
@@ -44,13 +78,13 @@ struct NearbyHazardsSheet: View {
                 guard let id = selectedId, shown.contains(where: { $0.id == id }) else { return }
                 try? await Task.sleep(for: .milliseconds(450))
                 guard !Task.isCancelled else { return }
-                withAnimation(SR.Motion.standard(reduceMotion: reduceMotion)) { proxy.scrollTo(id, anchor: .top) }
+                withAnimation(SR.Motion.standard(reduceMotion: reduceMotion)) {
+                    proxy.scrollTo(id, anchor: UnitPoint(x: 0.5, y: 0.04))
+                }
             }
         }
         .srPageBackground()
     }
-
-    // MARK: Header
 
     private var header: some View {
         VStack(alignment: .leading, spacing: SR.Space.xs) {
@@ -63,8 +97,6 @@ struct NearbyHazardsSheet: View {
                 .foregroundStyle(SR.Palette.textSecondary)
         }
     }
-
-    // MARK: Filters
 
     private var filterRow: some View {
         let counts = NearbyHazardList.counts(items)
@@ -114,10 +146,8 @@ struct NearbyHazardsSheet: View {
         }
     }
 
-    // MARK: List
-
     @ViewBuilder
-    private var list: some View {
+    private var rows: some View {
         if shown.isEmpty {
             Text(items.isEmpty ? "No active reports nearby." : "No hazards match these filters.")
                 .font(SR.Font.secondary)
@@ -126,18 +156,38 @@ struct NearbyHazardsSheet: View {
                 .padding(SR.Space.md)
                 .srCardSurface(radius: SR.Radius.button)
         } else {
+            let hasSelection = shown.contains { $0.id == selectedId }
             VStack(spacing: 0) {
                 ForEach(Array(shown.enumerated()), id: \.element.id) { index, item in
-                    if index > 0 { Divider().padding(.leading, 60) }
-                    NearbyHazardRow(item: item, isSelected: item.id == selectedId,
-                                    onSelect: { onSelect(item.id) },
-                                    onOpenDetails: { onOpenDetails(item.id) })
+                    let isSelected = item.id == selectedId
+                    if index > 0 {
+                        // No divider touching the lifted selected card.
+                        Divider().padding(.leading, 56)
+                            .opacity(isSelected || shown[index - 1].id == selectedId ? 0 : 1)
+                    }
+                    NearbyHazardRow(item: item, isSelected: isSelected, isDimmed: hasSelection && !isSelected,
+                                    onTap: { isSelected ? openPreview(item.id) : onSelect(item.id) })
                         .id(item.id)
+                        .zIndex(isSelected ? 1 : 0)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: SR.Radius.button, style: .continuous))
-            .srCardSurface(radius: SR.Radius.button)
+            .padding(SR.Space.xxs)
+            .background(SR.Palette.surface, in: RoundedRectangle(cornerRadius: SR.Radius.button, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: SR.Radius.button, style: .continuous).strokeBorder(SR.Palette.border, lineWidth: 1))
         }
+    }
+}
+
+/// Wider and darker than the system indicator, so it reads as "this panel expands".
+private struct DragHandle: View {
+    var body: some View {
+        Capsule()
+            .fill(SR.Palette.textTertiary.opacity(0.6))
+            .frame(width: 44, height: 5)
+            .padding(.top, SR.Space.xs)
+            .padding(.bottom, SR.Space.xxs)
+            .frame(maxWidth: .infinity)
+            .accessibilityHidden(true)
     }
 }
 
@@ -204,124 +254,171 @@ private struct SeverityBar: View {
 
 // MARK: - Row
 
+/// Unselected: three compact lines. Selected: a slightly taller, lifted card with confidence,
+/// walking time on its own line and a "View details" action.
 private struct NearbyHazardRow: View {
     let item: NearbyHazardList.Item
     let isSelected: Bool
-    let onSelect: () -> Void
-    let onOpenDetails: () -> Void
+    /// Another row is selected: lower this one's contrast a little to strengthen focus.
+    let isDimmed: Bool
+    let onTap: () -> Void
     @Environment(\.dynamicTypeSize) private var typeSize
 
     private var hazard: Hazard { item.hazard }
     private var isHigh: Bool { hazard.severity == .high }
     private var isStale: Bool { NearbyHazardList.isPossiblyOutdated(hazard) }
+    private var walk: String? { item.distance.flatMap(NearbyHazardList.walkingTime) }
 
     var body: some View {
-        HStack(spacing: 0) {
-            Button(action: onSelect) {
-                HStack(alignment: .top, spacing: SR.Space.sm) {
-                    CategoryIcon(type: hazard.type, emphasized: isHigh)
-                    VStack(alignment: .leading, spacing: SR.Space.xxs) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(hazard.type.displayName)
-                                .font(SR.Font.body.weight(.semibold))
-                                .foregroundStyle(SR.Palette.textPrimary)
-                            Spacer(minLength: SR.Space.xs)
-                            if let distance = item.distance {
-                                Text(Format.distance(distance))
-                                    .font(SR.Font.secondary.weight(.medium).monospacedDigit())
-                                    .foregroundStyle(SR.Palette.textPrimary)
-                            }
-                        }
-                        // One line normally; stacked at accessibility text sizes instead of wrapping.
-                        let metaLayout = typeSize.isAccessibilitySize
-                            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SR.Space.xxs))
-                            : AnyLayout(HStackLayout(spacing: SR.Space.xs))
-                        metaLayout {
-                            SeverityBadge(severity: hazard.severity, style: .filled)
-                            Text(Format.relative(hazard.createdAt))
-                                .font(SR.Font.secondary)
+        Button(action: onTap) {
+            HStack(alignment: .top, spacing: SR.Space.sm) {
+                CategoryIcon(type: hazard.type)
+                VStack(alignment: .leading, spacing: SR.Space.xxs) {
+                    titleLine
+                    metaLine
+                    trustLine
+                    if isSelected {
+                        if let walk {
+                            Label(walk, systemImage: "figure.walk")
+                                .font(SR.Font.meta)
                                 .foregroundStyle(SR.Palette.textSecondary)
-                            if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
-                            if let distance = item.distance, let walk = NearbyHazardList.walkingTime(distance) {
-                                Text(walk)
-                                    .font(SR.Font.meta)
-                                    .foregroundStyle(SR.Palette.textTertiary)
-                                    .lineLimit(1)
-                            }
                         }
-                        HStack(spacing: SR.Space.xxs) {
-                            Image(systemName: hazard.status == .verified ? "checkmark.seal.fill" : "person.2.fill")
-                                .imageScale(.small)
-                            Text(NearbyHazardList.trust(hazard))
-                            if isStale {
-                                Text("· Possibly outdated")
-                            }
+                        Divider().padding(.vertical, SR.Space.xxs)
+                        HStack {
+                            Text("View details")
+                            Spacer()
+                            Image(systemName: "chevron.right")
                         }
-                        .font(SR.Font.meta)
-                        .foregroundStyle(SR.Palette.textSecondary)
+                        .font(SR.Font.secondary.weight(.semibold))
+                        .foregroundStyle(SR.Palette.navy)
                     }
                 }
-                .padding(.vertical, SR.Space.sm)
-                .padding(.leading, SR.Space.sm)
-                .contentShape(Rectangle())
+                if !isSelected {
+                    Image(systemName: "chevron.right")
+                        .font(SR.Font.meta.weight(.semibold))
+                        .foregroundStyle(SR.Palette.textTertiary)
+                        .padding(.top, 2)
+                        .accessibilityHidden(true)
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(accessibilityText)
-            .accessibilityHint("Shows it on the map")
-            .accessibilityAddTraits(isSelected ? .isSelected : [])
-
-            Button(action: onOpenDetails) {
-                Image(systemName: "chevron.right")
-                    .font(SR.Font.meta.weight(.semibold))
-                    .foregroundStyle(SR.Palette.textTertiary)
-                    .frame(width: SR.Layout.minTouchTarget, height: SR.Layout.minTouchTarget)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Details for \(hazard.type.displayName)")
+            .padding(.vertical, isSelected ? SR.Space.md : SR.Space.sm)
+            .padding(.leading, SR.Space.sm + 2)
+            .padding(.trailing, SR.Space.sm)
+            .background(background)
+            .overlay(alignment: .leading) { accent }
+            .contentShape(Rectangle())
         }
-        .opacity(isStale ? 0.6 : 1)
-        .background(rowBackground)
-        .overlay(alignment: .leading) {
-            // Thin severity edge: high severity stands out without turning the whole row red.
-            if isHigh || isSelected {
-                Rectangle()
-                    .fill(isSelected ? SR.Palette.navy : SR.Palette.critical)
-                    .frame(width: 3)
+        .buttonStyle(.plain)
+        .opacity(opacity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
+        .accessibilityHint(isSelected ? "Opens a preview with photo, description and actions" : "Selects it and shows it on the map")
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+    }
+
+    private var titleLine: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(hazard.type.displayName)
+                .font(SR.Font.body.weight(.semibold))
+                .foregroundStyle(SR.Palette.textPrimary)
+            Spacer(minLength: SR.Space.xs)
+            if let distance = item.distance {
+                Text(Format.distance(distance))
+                    .font(SR.Font.secondary.weight(.medium).monospacedDigit())
+                    .foregroundStyle(SR.Palette.textPrimary)
             }
         }
     }
 
-    private var rowBackground: Color {
-        if isSelected { return SR.Palette.navyTint }
-        if isHigh { return SR.Palette.critical.opacity(0.06) }
-        return .clear
+    /// One line normally; stacked at accessibility text sizes instead of wrapping.
+    private var metaLine: some View {
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: SR.Space.xxs))
+            : AnyLayout(HStackLayout(spacing: SR.Space.xs))
+        return layout {
+            SeverityBadge(severity: hazard.severity, style: .filled)
+            Text(Format.ago(hazard.createdAt))
+                .font(SR.Font.secondary)
+                .foregroundStyle(SR.Palette.textSecondary)
+            if !isSelected {
+                if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
+                if let walk {
+                    // Secondary to the distance above it.
+                    Text(walk)
+                        .font(SR.Font.meta)
+                        .foregroundStyle(SR.Palette.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+
+    private var trustLine: some View {
+        HStack(spacing: SR.Space.xxs) {
+            Image(systemName: hazard.status == .verified ? "checkmark.seal.fill" : "person.2.fill")
+                .imageScale(.small)
+            Text(isSelected ? NearbyHazardList.detailedTrust(hazard) : NearbyHazardList.trust(hazard))
+            if isStale { Text("· Possibly outdated") }
+        }
+        .font(SR.Font.meta)
+        .foregroundStyle(SR.Palette.textSecondary)
+    }
+
+    @ViewBuilder
+    private var background: some View {
+        let shape = RoundedRectangle(cornerRadius: SR.Radius.control, style: .continuous)
+        if isSelected {
+            // Lifted, with a very light navy tint rather than a gray fill.
+            shape.fill(SR.Palette.surface)
+                .overlay(shape.fill(SR.Palette.navy.opacity(0.05)))
+                .overlay(shape.strokeBorder(SR.Palette.navy.opacity(0.18), lineWidth: 1))
+                .shadow(color: SR.Palette.navy.opacity(0.14), radius: 8, y: 3)
+        } else if isHigh {
+            // The red accent, badge and pin already say "danger"; the tint only hints at it.
+            shape.fill(SR.Palette.critical.opacity(0.03))
+        } else {
+            Color.clear
+        }
+    }
+
+    @ViewBuilder
+    private var accent: some View {
+        if isSelected || isHigh {
+            Capsule()
+                .fill(isSelected ? SR.Palette.navy : SR.Palette.critical)
+                .frame(width: 3)
+                .padding(.vertical, SR.Space.xs)
+                .padding(.leading, 3)
+        }
+    }
+
+    private var opacity: Double {
+        (isStale ? 0.6 : 1) * (isDimmed ? 0.78 : 1)
     }
 
     private var accessibilityText: String {
         var parts = [hazard.type.displayName, hazard.severity.label]
         if let distance = item.distance { parts.append("\(Format.distance(distance)) away") }
-        parts.append("reported \(Format.relativeInSentence(hazard.createdAt))")
-        parts.append(NearbyHazardList.trust(hazard))
+        if let walk { parts.append(walk) }
+        parts.append("reported \(Format.ago(hazard.createdAt).lowercased())")
+        parts.append(isSelected ? NearbyHazardList.detailedTrust(hazard) : NearbyHazardList.trust(hazard))
         if isStale { parts.append("possibly outdated") }
         return parts.joined(separator: ", ")
     }
 }
 
-/// Category glyph in SafeRoute navy — type only. Severity is shown separately by the badge, so
-/// orange never means "construction". High severity gets a red-tinted well for emphasis.
-private struct CategoryIcon: View {
+/// Category glyph in SafeRoute navy — hazard type only. Severity is carried by the badge and the
+/// map marker's color, so category and severity colors never compete.
+struct CategoryIcon: View {
     let type: HazardType
-    let emphasized: Bool
+    var size: CGFloat = 36
 
     var body: some View {
         Image(systemName: type.symbolName)
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(emphasized ? SR.Palette.critical : SR.Palette.navy)
-            .frame(width: 36, height: 36)
-            .background(emphasized ? SR.Palette.critical.opacity(0.12) : SR.Palette.navyTint,
-                        in: RoundedRectangle(cornerRadius: SR.Radius.control, style: .continuous))
+            .font(.system(size: size * 0.44, weight: .semibold))
+            .foregroundStyle(SR.Palette.navy)
+            .frame(width: size, height: size)
+            .background(SR.Palette.navyTint, in: RoundedRectangle(cornerRadius: SR.Radius.control, style: .continuous))
             .accessibilityHidden(true)
     }
 }

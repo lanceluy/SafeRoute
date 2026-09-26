@@ -104,6 +104,19 @@ enum NearbyHazardList {
         }
     }
 
+    /// The selected row's fuller line: "3 confirmations · Medium confidence". Confidence is left
+    /// out when it adds nothing ("Not yet confirmed" next to "New report", or a disputed status).
+    static func detailedTrust(_ hazard: Hazard) -> String {
+        let confidence: String? = switch hazard.confidence {
+        case .low: "Low confidence"
+        case .medium: "Medium confidence"
+        case .high: "High confidence"
+        case .contested where hazard.status != .disputed: "Contested"
+        default: nil
+        }
+        return [trust(hazard), confidence].compactMap { $0 }.joined(separator: " · ")
+    }
+
     static func isPossiblyOutdated(_ hazard: Hazard, now: Date = Date()) -> Bool {
         now.timeIntervalSince(hazard.lastConfirmedAt ?? hazard.createdAt) > staleAfter
     }

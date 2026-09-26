@@ -26,6 +26,20 @@ enum Format {
         return date.formatted(sameYear ? .dateTime.month(.abbreviated).day() : .dateTime.month(.abbreviated).day().year())
     }
 
+    /// Recency for lists, where "2 days ago" is quicker to read than "Sep 24":
+    /// Just now · 4 min ago · 2h ago · Yesterday · 3 days ago · 2 weeks ago · then the date.
+    static func ago(_ date: Date, now: Date = Date()) -> String {
+        let seconds = now.timeIntervalSince(date)
+        let days = Int(seconds / 86_400)
+        let calendar = Calendar.current
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now).map { calendar.isDate(date, inSameDayAs: $0) } ?? false
+        if seconds < 86_400 { return relative(date, now: now) }
+        if yesterday { return "Yesterday" }
+        if days < 7 { return "\(max(2, days)) days ago" }
+        if days < 35 { let weeks = days / 7; return weeks == 1 ? "1 week ago" : "\(weeks) weeks ago" }
+        return relative(date, now: now)
+    }
+
     /// For use mid-sentence ("Reported just now", "Reported Sep 22"): only lowercases words.
     static func relativeInSentence(_ date: Date, now: Date = Date()) -> String {
         let text = relative(date, now: now)

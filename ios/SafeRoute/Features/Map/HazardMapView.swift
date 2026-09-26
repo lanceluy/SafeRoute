@@ -15,6 +15,9 @@ struct HazardMapView: UIViewRepresentable {
     /// Navigation camera target (the user's position and walking direction).
     var followCoordinate: CLLocationCoordinate2D?
     var followHeading: CLLocationDirection?
+    /// Share of the map's height covered by a sheet (Nearby Hazards). Focusing a hazard centers
+    /// it in the visible part above, instead of behind the sheet.
+    var obscuredBottomFraction: CGFloat = 0
     /// Hazards that always show their name (the ones on the route while navigating).
     var labelledHazardIds: Set<UUID> = []
     /// Whether the camera is following the user (browsing or navigating). Paused by a drag or
@@ -133,6 +136,8 @@ struct HazardMapView: UIViewRepresentable {
                 guard let annotation = hazardAnnotations[id], let view = map.view(for: annotation) as? HazardPinView else { continue }
                 view.setEmphasis(selected: id == renderedSelection, showLabel: shouldLabel(id), animated: animate)
             }
+            // Selecting hides the other pins' labels; deselecting brings them back.
+            updateLabels(on: map)
         }
 
         /// Labels only at close zoom with few pins on screen; the selected pin always has one.
@@ -146,8 +151,11 @@ struct HazardMapView: UIViewRepresentable {
             }
         }
 
+        /// While browsing with a hazard selected, only that pin is labelled so it's obvious which
+        /// report is being looked at.
         private func shouldLabel(_ id: UUID) -> Bool {
-            labelsVisible || id == renderedSelection || parent.labelledHazardIds.contains(id)
+            if !parent.isNavigating, let selected = renderedSelection { return id == selected }
+            return labelsVisible || id == renderedSelection || parent.labelledHazardIds.contains(id)
         }
 
         // MARK: Navigation camera
@@ -312,7 +320,15 @@ struct HazardMapView: UIViewRepresentable {
             case .focus(let coordinate):
                 // Looking at a hazard elsewhere: don't snap back to the user on the next fix.
                 if !parent.isNavigating, isBrowseFollowing { pauseFollowing() }
-                map.setRegion(MKCoordinateRegion(center: coordinate, latitudinalMeters: 400, longitudinalMeters: 400), animated: animate)
+                let region = MKCoordinateRegion(center: coordinate, latitudinalMeters: 400, longitudinalMeters: 400)
+                let covered = map.bounds.height * parent.obscuredBottomFraction
+                if covered > 0 {
+                    map.setVisibleMapRect(Self.mapRect(region),
+                                          edgePadding: UIEdgeInsets(top: 80, left: 0, bottom: covered, right: 0),
+                                          animated: animate)
+                } else {
+                    map.setRegion(region, animated: animate)
+                }
             case .followUser:
                 followUser(on: map)
             case .showRoute:
@@ -322,6 +338,14 @@ struct HazardMapView: UIViewRepresentable {
                     map.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 140, left: 40, bottom: 320, right: 40), animated: animate)
                 }
             }
+        }
+
+        static func mapRect(_ region: MKCoordinateRegion) -> MKMapRect {
+            let a = MKMapPoint(CLLocationCoordinate2D(latitude: region.center.latitude + region.span.latitudeDelta / 2,
+                                                      longitude: region.center.longitude - region.span.longitudeDelta / 2))
+            let b = MKMapPoint(CLLocationCoordinate2D(latitude: region.center.latitude - region.span.latitudeDelta / 2,
+                                                      longitude: region.center.longitude + region.span.longitudeDelta / 2))
+            return MKMapRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
         }
 
         // MARK: Delegate
@@ -453,6 +477,9 @@ final class HazardPinView: MKAnnotationView {
     static func color(for severity: Severity) -> UIColor { severity.markerColor }
 
     private let disc = UIView()
+    /// Soft ring behind the selected pin, in its severity color — the map's counterpart to the
+    /// selected row's highlight. Pulses unless Reduce Motion is on.
+    private let halo = CAShapeLayer()
     private let glyph = UIImageView()
     private let label = PaddedLabel()
     private var isEmphasized = false
@@ -471,6 +498,11 @@ final class HazardPinView: MKAnnotationView {
         disc.layer.shadowRadius = m.shadowRadius
         disc.layer.shadowOffset = CGSize(width: 0, height: m.shadowRadius / 2)
         disc.isUserInteractionEnabled = false
+        let haloSize = m.selectedDiscSize + 16
+        halo.frame = CGRect(x: (m.viewSize - haloSize) / 2, y: (m.viewSize - haloSize) / 2, width: haloSize, height: haloSize)
+        halo.path = UIBezierPath(ovalIn: CGRect(origin: .zero, size: halo.frame.size)).cgPath
+        halo.isHidden = true
+        layer.addSublayer(halo)
         addSubview(disc)
         glyph.tintColor = .white
         glyph.contentMode = .center
@@ -499,6 +531,7 @@ final class HazardPinView: MKAnnotationView {
         isEmphasized = false
         label.isHidden = true
         disc.transform = .identity
+        setHalo(visible: false)
     }
 
     private func configure() {
@@ -527,6 +560,28 @@ final class HazardPinView: MKAnnotationView {
         let change = { self.disc.transform = CGAffineTransform(scaleX: scale, y: scale) }
         if animated { UIView.animate(withDuration: 0.2, animations: change) } else { change() }
         zPriority = selected ? .defaultSelected : .defaultUnselected
+        setHalo(visible: selected)
+    }
+
+    private func setHalo(visible: Bool) {
+        halo.removeAllAnimations()
+        halo.isHidden = !visible
+        guard visible, let hazard = (annotation as? HazardAnnotation)?.hazard else { return }
+        halo.fillColor = Self.color(for: hazard.severity).withAlphaComponent(0.28).cgColor
+        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        let grow = CABasicAnimation(keyPath: "transform.scale")
+        grow.fromValue = 0.8
+        grow.toValue = 1.25
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 1
+        fade.toValue = 0.15
+        let pulse = CAAnimationGroup()
+        pulse.animations = [grow, fade]
+        pulse.duration = 1.4
+        pulse.autoreverses = true
+        pulse.repeatCount = .infinity
+        pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        halo.add(pulse, forKey: "pulse")
     }
 }
 

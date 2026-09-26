@@ -49,6 +49,18 @@ final class NearbyHazardListTests: XCTestCase {
                        "Verified · 4 confirmations")
     }
 
+    func testDetailedTrustAddsConfidenceOnlyWhenItHelps() {
+        func hazard(_ status: HazardStatus, _ confidence: Confidence?, _ confirmations: Int) -> Hazard {
+            Hazard(id: UUID(), type: .construction, latitude: 0, longitude: 0, description: nil, photoUrl: nil,
+                   status: status, severity: .medium, severityAnswer: nil, confirmationCount: confirmations,
+                   disputeCount: 0, confidence: confidence, reporterId: nil, createdAt: now, updatedAt: now,
+                   lastConfirmedAt: nil, expiresAt: nil, resolvedAt: nil, version: 0)
+        }
+        XCTAssertEqual(NearbyHazardList.detailedTrust(hazard(.reported, .medium, 3)), "3 confirmations · Medium confidence")
+        XCTAssertEqual(NearbyHazardList.detailedTrust(hazard(.reported, .unconfirmed, 0)), "New report")
+        XCTAssertEqual(NearbyHazardList.detailedTrust(hazard(.disputed, .contested, 1)), "Disputed · 1 confirmation")
+    }
+
     func testStaleReportsAreFlagged() {
         XCTAssertFalse(NearbyHazardList.isPossiblyOutdated(item(.flooding, .high, meters: 1, minutesAgo: 60).hazard, now: now))
         XCTAssertTrue(NearbyHazardList.isPossiblyOutdated(item(.flooding, .high, meters: 1, minutesAgo: 4 * 24 * 60).hazard, now: now))
@@ -59,5 +71,24 @@ final class NearbyHazardListTests: XCTestCase {
         XCTAssertEqual(NearbyHazardList.subtitle(count: 1, hasLocation: false, radiusMeters: 1000), "1 report in the visible map area")
         XCTAssertEqual(NearbyHazardList.walkingTime(480), "~6 min walk")
         XCTAssertNil(NearbyHazardList.walkingTime(40))
+    }
+}
+
+final class FormatAgoTests: XCTestCase {
+    private let now = ISO8601DateFormatter().date(from: "2026-09-26T12:00:00Z")!
+
+    func testRecentTimesMatchRelative() {
+        XCTAssertEqual(Format.ago(now.addingTimeInterval(-30), now: now), "Just now")
+        XCTAssertEqual(Format.ago(now.addingTimeInterval(-12 * 60), now: now), "12 min ago")
+    }
+
+    func testDaysAndWeeksInsteadOfDates() {
+        XCTAssertEqual(Format.ago(now.addingTimeInterval(-2 * 86_400 - 60), now: now), "2 days ago")
+        XCTAssertEqual(Format.ago(now.addingTimeInterval(-9 * 86_400), now: now), "1 week ago")
+        XCTAssertEqual(Format.ago(now.addingTimeInterval(-20 * 86_400), now: now), "2 weeks ago")
+    }
+
+    func testOldReportsFallBackToTheDate() {
+        XCTAssertFalse(Format.ago(now.addingTimeInterval(-60 * 86_400), now: now).contains("ago"))
     }
 }
