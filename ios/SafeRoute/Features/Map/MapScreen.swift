@@ -19,6 +19,8 @@ struct MapScreen: View {
     @State private var isShowingFilters = false
     @State private var isShowingPlanner = false
     @State private var isShowingNearby = false
+    /// Opens part-way so the map (pins, direction) stays visible; drag up for the full list.
+    @State private var nearbyDetent: PresentationDetent = Self.nearbyHalf
     @State private var detailHazard: SelectedHazard?
     @State private var isFollowingUser = true
 
@@ -67,15 +69,28 @@ struct MapScreen: View {
         .sheet(isPresented: $isShowingFilters) { FilterSheet(filters: $model.filters) }
         .sheet(isPresented: $isShowingPlanner) { RoutePlannerView() }
         .sheet(isPresented: $isShowingNearby) {
-            NearbyHazardsSheet(items: nearby.items, scope: nearby.scope) { id in
-                isShowingNearby = false
-                withAnimation(motion) {
-                    model.selectedHazardId = id
-                    if let hazard = model.hazards[id] { model.command = .init(command: .focus(hazard.coordinate)) }
-                }
-            }
-            .presentationDetents([.medium, .large])
+            NearbyHazardsSheet(
+                items: nearby.items.map { NearbyHazardList.Item(hazard: $0.hazard, distance: $0.distance) },
+                hasLocation: location.currentLocation != nil,
+                radiusMeters: Self.nearbyRadiusMeters,
+                selectedId: model.selectedHazardId,
+                onSelect: { id in
+                    // Row → pin: select and pan to it, and lower the sheet so the pin is visible.
+                    withAnimation(motion) {
+                        model.selectedHazardId = id
+                        if let hazard = model.hazards[id] { model.command = .init(command: .focus(hazard.coordinate)) }
+                        nearbyDetent = Self.nearbyPeek
+                    }
+                },
+                onOpenDetails: { id in
+                    isShowingNearby = false
+                    detailHazard = SelectedHazard(id: id)
+                })
+            .presentationDetents([Self.nearbyPeek, Self.nearbyHalf, .large], selection: $nearbyDetent)
             .presentationDragIndicator(.visible)
+            // The map stays usable above the sheet: tapping a pin scrolls the list to it.
+            .presentationBackgroundInteraction(.enabled(upThrough: Self.nearbyHalf))
+            .onAppear { nearbyDetent = Self.nearbyHalf }
         }
         .sheet(item: $detailHazard) { selection in
             HazardDetailView(hazardId: selection.id, map: model, onFindSaferRoute: {
@@ -107,6 +122,8 @@ struct MapScreen: View {
 
     /// "Nearby" in the summary means within this distance of the user (MapViewModel.nearbyActive).
     static let nearbyRadiusMeters: Double = 1000
+    static let nearbyPeek = PresentationDetent.fraction(0.3)
+    static let nearbyHalf = PresentationDetent.fraction(0.6)
 
     private var motion: Animation? { SR.Motion.standard(reduceMotion: reduceMotion) }
 
@@ -289,7 +306,7 @@ struct MapScreen: View {
         let scope: String
         if location.currentLocation != nil {
             items = model.nearbyActive.map { ($0.hazard, Optional($0.distance)) }
-            scope = "Within \(Format.distance(Self.nearbyRadiusMeters)) of you"
+            scope = "Within \(NearbyHazardList.radius(Self.nearbyRadiusMeters)) of you"
         } else {
             items = model.visibleHazards.filter { $0.status.isActive }.map { ($0, nil) }
             scope = "In the visible map area"
@@ -316,13 +333,16 @@ struct MapScreen: View {
     }
 
     #if DEBUG
-    /// SAFEROUTE_DEMO_OPEN=preview|detail|report|planner|filters — screenshot automation only.
+    /// SAFEROUTE_DEMO_OPEN=preview|detail|report|planner|filters|nearby|navigate — screenshot automation only.
     private func runDemoIntent() async {
         guard let intent = ProcessInfo.processInfo.environment["SAFEROUTE_DEMO_OPEN"] else { return }
         switch intent {
         case "report": isShowingReport = true
         case "planner": isShowingPlanner = true
         case "filters": isShowingFilters = true
+        case "nearby":
+            for _ in 0..<40 where model.nearbyActive.isEmpty { try? await Task.sleep(for: .milliseconds(250)) }
+            isShowingNearby = true
         case "navigate":
             // SAFEROUTE_DEMO_ROUTE_TO="lat,lon,Name": plan a route and start navigation. With
             // ios/scripts/simulate-walks.sh running, the Simulator then walks it (SimulatedWalk).
@@ -344,88 +364,6 @@ struct MapScreen: View {
         }
     }
     #endif
-}
-
-/// The expanded nearby summary: severity breakdown and the full list, nearest first.
-private struct NearbyHazardsSheet: View {
-    let items: [(hazard: Hazard, distance: Double?)]
-    let scope: String
-    let onSelect: (UUID) -> Void
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    severityBreakdown
-                } footer: {
-                    Text(scope)
-                }
-                Section("Hazards") {
-                    if items.isEmpty {
-                        Text("No active reports").foregroundStyle(SR.Palette.textSecondary)
-                    }
-                    ForEach(items, id: \.hazard.id) { item in
-                        Button { onSelect(item.hazard.id) } label: {
-                            HStack(spacing: SR.Space.sm) {
-                                HazardIcon(type: item.hazard.type, severity: item.hazard.severity, size: 28)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(item.hazard.type.displayName).font(SR.Font.body).foregroundStyle(SR.Palette.textPrimary)
-                                    Text("\(item.hazard.severity.label) · \(item.hazard.status.label)")
-                                        .font(SR.Font.meta).foregroundStyle(SR.Palette.textSecondary)
-                                }
-                                Spacer()
-                                if let distance = item.distance {
-                                    Text(Format.distance(distance)).font(SR.Font.secondary.monospacedDigit())
-                                        .foregroundStyle(SR.Palette.textSecondary)
-                                }
-                            }
-                            .frame(minHeight: SR.Layout.minTouchTarget)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(item.distance.map { "\(item.hazard.accessibilitySummary), \(Format.distance($0)) away" }
-                                            ?? item.hazard.accessibilitySummary)
-                    }
-                }
-            }
-            .navigationTitle("Nearby hazards")
-            .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-
-    private var severityBreakdown: some View {
-        let levels: [Severity] = [.high, .medium, .low]
-        let counts = levels.map { level in items.filter { $0.hazard.severity == level }.count }
-        let total = max(1, counts.reduce(0, +))
-        return VStack(alignment: .leading, spacing: SR.Space.xs) {
-            GeometryReader { geo in
-                HStack(spacing: 2) {
-                    ForEach(Array(levels.enumerated()), id: \.offset) { index, level in
-                        if counts[index] > 0 {
-                            Rectangle()
-                                .fill(Color(uiColor: level.markerColor))
-                                .frame(width: max(4, geo.size.width * CGFloat(counts[index]) / CGFloat(total)))
-                        }
-                    }
-                }
-                .clipShape(Capsule())
-            }
-            .frame(height: 8)
-            .accessibilityHidden(true)
-            HStack(spacing: SR.Space.md) {
-                ForEach(Array(levels.enumerated()), id: \.offset) { index, level in
-                    HStack(spacing: SR.Space.xxs) {
-                        Circle().fill(Color(uiColor: level.markerColor)).frame(width: 8, height: 8)
-                        Text("\(counts[index]) \(level.label.lowercased())")
-                            .font(SR.Font.secondary)
-                            .foregroundStyle(SR.Palette.textPrimary)
-                    }
-                    .accessibilityElement(children: .combine)
-                }
-            }
-        }
-        .padding(.vertical, SR.Space.xxs)
-    }
 }
 
 struct SelectedHazard: Identifiable {
