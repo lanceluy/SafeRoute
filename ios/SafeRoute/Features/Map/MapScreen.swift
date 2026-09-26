@@ -74,14 +74,7 @@ struct MapScreen: View {
                 hasLocation: location.currentLocation != nil,
                 radiusMeters: Self.nearbyRadiusMeters,
                 selectedId: model.selectedHazardId,
-                onSelect: { id in
-                    // Row → pin: select and pan to it, and lower the sheet so the pin is visible.
-                    withAnimation(motion) {
-                        model.selectedHazardId = id
-                        if let hazard = model.hazards[id] { model.command = .init(command: .focus(hazard.coordinate)) }
-                        nearbyDetent = Self.nearbyPeek
-                    }
-                },
+                onSelect: { selectFromNearby($0) },
                 onOpenDetails: { id in
                     isShowingNearby = false
                     detailHazard = SelectedHazard(id: id)
@@ -126,6 +119,17 @@ struct MapScreen: View {
     static let nearbyHalf = PresentationDetent.fraction(0.6)
 
     private var motion: Animation? { SR.Motion.standard(reduceMotion: reduceMotion) }
+
+    /// Row → pin: select and pan to it, and lower the sheet so the pin is visible.
+    private func selectFromNearby(_ id: UUID) {
+        // Outside withAnimation: the sheet animates its own height, and wrapping it in a second
+        // animation made the content smear mid-resize.
+        nearbyDetent = Self.nearbyPeek
+        withAnimation(motion) {
+            model.selectedHazardId = id
+            if let hazard = model.hazards[id] { model.command = .init(command: .focus(hazard.coordinate)) }
+        }
+    }
 
     // MARK: Top — search + filters
 
@@ -207,7 +211,9 @@ struct MapScreen: View {
         VStack(alignment: .trailing, spacing: SR.Space.sm) {
             recenterButton
             Group {
-                if let hazard = model.selectedHazard {
+                // While the Nearby Hazards sheet is open its highlighted row stands in for the
+                // preview card, which would otherwise peek out above the lowered sheet.
+                if let hazard = model.selectedHazard, !isShowingNearby {
                     SRHazardPreviewCard(
                         hazard: hazard,
                         distance: Format.distance(from: location.currentLocation, to: hazard.coordinate),
@@ -340,9 +346,14 @@ struct MapScreen: View {
         case "report": isShowingReport = true
         case "planner": isShowingPlanner = true
         case "filters": isShowingFilters = true
-        case "nearby":
+        case "nearby", "nearby-select":
             for _ in 0..<40 where model.nearbyActive.isEmpty { try? await Task.sleep(for: .milliseconds(250)) }
             isShowingNearby = true
+            // nearby-select: then do what tapping the nearest row does.
+            if intent == "nearby-select", let first = model.nearbyActive.first?.hazard.id {
+                try? await Task.sleep(for: .seconds(3))
+                selectFromNearby(first)
+            }
         case "navigate":
             // SAFEROUTE_DEMO_ROUTE_TO="lat,lon,Name": plan a route and start navigation. With
             // ios/scripts/simulate-walks.sh running, the Simulator then walks it (SimulatedWalk).

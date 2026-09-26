@@ -38,9 +38,13 @@ struct NearbyHazardsSheet: View {
                 .padding(.horizontal, SR.Space.screenMargin)
                 .padding(.bottom, SR.Space.xxl)
             }
-            .onChange(of: selectedId) { _, id in
-                guard let id, shown.contains(where: { $0.id == id }) else { return }
-                withAnimation(SR.Motion.standard(reduceMotion: reduceMotion)) { proxy.scrollTo(id, anchor: .center) }
+            .task(id: selectedId) {
+                // Scroll once the sheet has finished resizing (a row tap also lowers it), so the
+                // two motions don't run at the same time. Cancelled if the selection changes again.
+                guard let id = selectedId, shown.contains(where: { $0.id == id }) else { return }
+                try? await Task.sleep(for: .milliseconds(450))
+                guard !Task.isCancelled else { return }
+                withAnimation(SR.Motion.standard(reduceMotion: reduceMotion)) { proxy.scrollTo(id, anchor: .top) }
             }
         }
         .srPageBackground()
