@@ -12,7 +12,7 @@ set -euo pipefail
 
 ONLY="${1:-}"
 SPEED="${SAFEROUTE_WALK_SPEED:-1.4}"
-HOME_LOCATION="${SAFEROUTE_HOME:-14.56628,121.01542}"
+HOME_LOCATION="${SAFEROUTE_HOME:14.566583,121.015167}"
 BUNDLE="com.saferoute.app"
 # Last walk id handled, one file per simulator (macOS bash 3.2 has no associative arrays).
 state=$(mktemp -d)
