@@ -34,6 +34,9 @@ class MunicipalResponseIntegrationTest extends IntegrationTestBase {
 
         JsonNode timeline = json(mvc.perform(get("/api/hazards/" + hazard + "/history").with(bearer(alice))).andReturn(), 200);
         assertThat(timeline.findValuesAsText("action")).contains("MUNICIPAL_ASSIGNED", "MUNICIPAL_PRIORITY");
+        for (JsonNode entry : timeline) {
+            if (entry.get("action").asText().startsWith("MUNICIPAL_")) assertThat(entry.get("actor").asText()).isEqualTo("MODERATOR");
+        }
 
         // Clearing both.
         JsonNode cleared = respond(mod, hazard, null, null, null, 200);

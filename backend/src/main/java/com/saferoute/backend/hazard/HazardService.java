@@ -418,7 +418,9 @@ public class HazardService {
     }
 
     private static String actorRole(HazardAuditLog entry, Hazard hazard) {
-        if (entry.getAction().name().startsWith("MODERATOR_")) return "MODERATOR";
+        // Only staff take moderator and city-response actions, even on their own reports.
+        String action = entry.getAction().name();
+        if (action.startsWith("MODERATOR_") || action.startsWith("MUNICIPAL_")) return "MODERATOR";
         if (entry.getActorId() == null) return "SYSTEM";
         if (entry.getActorId().equals(hazard.getReporterId())) return "REPORTER";
         return "COMMUNITY";
