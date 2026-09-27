@@ -156,7 +156,6 @@ struct NearbyHazardsSheet: View {
                 .padding(SR.Space.md)
                 .srCardSurface(radius: SR.Radius.button)
         } else {
-            let hasSelection = shown.contains { $0.id == selectedId }
             VStack(spacing: 0) {
                 ForEach(Array(shown.enumerated()), id: \.element.id) { index, item in
                     let isSelected = item.id == selectedId
@@ -165,7 +164,7 @@ struct NearbyHazardsSheet: View {
                         Divider().padding(.leading, 56)
                             .opacity(isSelected || shown[index - 1].id == selectedId ? 0 : 1)
                     }
-                    NearbyHazardRow(item: item, isSelected: isSelected, isDimmed: hasSelection && !isSelected,
+                    NearbyHazardRow(item: item, isSelected: isSelected,
                                     onTap: { isSelected ? openPreview(item.id) : onSelect(item.id) })
                         .id(item.id)
                         .zIndex(isSelected ? 1 : 0)
@@ -259,8 +258,6 @@ private struct SeverityBar: View {
 private struct NearbyHazardRow: View {
     let item: NearbyHazardList.Item
     let isSelected: Bool
-    /// Another row is selected: lower this one's contrast a little to strengthen focus.
-    let isDimmed: Bool
     let onTap: () -> Void
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -309,7 +306,6 @@ private struct NearbyHazardRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .opacity(opacity)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
         .accessibilityHint(isSelected ? "Opens a preview with photo, description and actions" : "Selects it and shows it on the map")
@@ -390,10 +386,6 @@ private struct NearbyHazardRow: View {
                 .padding(.vertical, SR.Space.xs)
                 .padding(.leading, 3)
         }
-    }
-
-    private var opacity: Double {
-        (isStale ? 0.6 : 1) * (isDimmed ? 0.78 : 1)
     }
 
     private var accessibilityText: String {
