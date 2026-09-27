@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError, photoSrc } from '../api/client';
-import type { HazardDetail, TimelineEntry } from '../api/types';
+import type { Department, HazardDetail, TimelineEntry } from '../api/types';
 import { ago, coords, fullDate, googleMapsUrl, shortDate } from '../lib/format';
 import type { Barangay } from '../lib/geo';
 import {
@@ -10,7 +10,9 @@ import {
 import { useHazardFrames } from '../state/live';
 import { usePlace } from '../state/places';
 import { useToast } from '../state/toast';
+import { departmentName, useDepartments } from '../state/departments';
 import { ActionDialog, type HazardAction } from './ActionDialog';
+import { CityResponse } from './CityResponse';
 import { ConfidenceBadge, InfoTip, SeverityBadge, StatusBadge, TypeIcon } from './Badges';
 import { Menu } from './Menu';
 import { ErrorState } from './States';
@@ -60,7 +62,8 @@ export function HazardDrawer({ hazardId, barangays, onClose, onChanged, onShowOn
       {!error && !detail && <DrawerSkeleton />}
       {detail && history && (
         <DrawerBody detail={detail} history={history} barangays={barangays} showAllHistory={showAllHistory}
-          onShowAllHistory={() => setShowAllHistory(true)} onAction={setAction} onShowOnMap={onShowOnMap} />
+          onShowAllHistory={() => setShowAllHistory(true)} onAction={setAction} onShowOnMap={onShowOnMap}
+          onChanged={() => { onChanged(); load(); }} />
       )}
       {action && detail && (
         <ActionDialog action={action} hazard={detail.hazard} onClose={() => setAction(null)}
@@ -70,10 +73,11 @@ export function HazardDrawer({ hazardId, barangays, onClose, onChanged, onShowOn
   );
 }
 
-function DrawerBody({ detail, history, barangays, showAllHistory, onShowAllHistory, onAction, onShowOnMap }: {
+function DrawerBody({ detail, history, barangays, showAllHistory, onShowAllHistory, onAction, onShowOnMap, onChanged }: {
   detail: HazardDetail; history: TimelineEntry[]; barangays: Barangay[]; showAllHistory: boolean;
-  onShowAllHistory: () => void; onAction: (a: HazardAction) => void; onShowOnMap?: () => void;
+  onShowAllHistory: () => void; onAction: (a: HazardAction) => void; onShowOnMap?: () => void; onChanged: () => void;
 }) {
+  const departments = useDepartments();
   const toast = useToast();
   const h = detail.hazard;
   const place = usePlace(h.latitude, h.longitude, barangays);
@@ -167,9 +171,14 @@ function DrawerBody({ detail, history, barangays, showAllHistory, onShowAllHisto
       </section>
 
       <section className="drawer-section">
+        <h3>City response</h3>
+        <CityResponse key={`${h.assignedDepartment}-${h.municipalPriority}`} hazard={h} departments={departments} onSaved={onChanged} />
+      </section>
+
+      <section className="drawer-section">
         <h3>Timeline</h3>
         <ol className="timeline">
-          {shown.map((e) => <TimelineItem key={e.id} entry={e} />)}
+          {shown.map((e) => <TimelineItem key={e.id} entry={e} departments={departments} />)}
         </ol>
         {!showAllHistory && events.length > shown.length && (
           <button type="button" className="btn-link" onClick={onShowAllHistory}>Show all {events.length} events</button>
@@ -182,7 +191,7 @@ function DrawerBody({ detail, history, barangays, showAllHistory, onShowAllHisto
           {active
             ? <button type="button" className="btn btn-primary" onClick={() => onAction('resolve')}>✓ Mark as resolved</button>
             : <button type="button" className="btn btn-primary" onClick={() => onAction('reopen')}>Reopen hazard</button>}
-          <Menu label="More actions" trigger={<span className="btn btn-secondary">More actions ▾</span>} align="left" items={[
+          <Menu label="More actions" trigger={<span className="btn btn-secondary">More actions ▾</span>} align="left" direction="up" items={[
             active ? { label: 'Mark as resolved', hint: 'Fixed or no longer present', onSelect: () => onAction('resolve') } : null,
             !active ? { label: 'Reopen hazard', hint: 'It’s back, or was closed by mistake', onSelect: () => onAction('reopen') } : null,
             h.status !== 'REMOVED'
@@ -198,12 +207,14 @@ function DrawerBody({ detail, history, barangays, showAllHistory, onShowAllHisto
   );
 }
 
-function TimelineItem({ entry: e }: { entry: TimelineEntry }) {
+function TimelineItem({ entry: e, departments }: { entry: TimelineEntry; departments: Department[] }) {
   const who: Record<string, string> = { REPORTER: 'Reporter', COMMUNITY: 'Community member', MODERATOR: 'Municipal staff', SYSTEM: 'SafeRoute' };
   let text: string = ACTION_LABEL[e.action];
   if (e.action === 'STATUS_CHANGED') text = `Became ${valueLabel(e.newValue)}`;
   if (e.action === 'CONFIRMATION_CHANGED') text = e.newValue === 'DISPUTE' ? 'Disputed' : 'Confirmed';
   if (e.action === 'RESOLUTION_VOTE') text = e.newValue === 'NO_LONGER_PRESENT' ? 'Voted it’s gone' : 'Voted it’s still there';
+  if (e.action === 'MUNICIPAL_ASSIGNED') text = e.newValue ? `Assigned to ${departmentName(departments, e.newValue)}` : 'Unassigned';
+  if (e.action === 'MUNICIPAL_PRIORITY') text = e.newValue ? `City priority: ${valueLabel(e.newValue)}` : 'City priority cleared';
   if (e.action === 'FIELD_EDITED') {
     text = e.field === 'severity' || e.field === 'type'
       ? `Changed ${fieldLabel(e.field)}: ${valueLabel(e.oldValue)} → ${valueLabel(e.newValue)}`

@@ -33,6 +33,8 @@ export const MODERATION_TABS: QueueTab[] = [
   { key: 'unconfirmed', label: 'Unconfirmed', view: 'unconfirmed',
     empty: { title: 'No unconfirmed reports', body: 'Every active report has at least one community response.' } },
   { key: 'expiring', label: 'Expiring soon', view: 'expiring', empty: MAP_TABS[3].empty },
+  { key: 'unassigned', label: 'Unassigned', view: 'unassigned',
+    empty: { title: 'Everything is assigned', body: 'Every active hazard has a department handling it.' } },
   { key: 'removed', label: 'Removed reports', view: 'removed',
     empty: { title: 'No removed reports', body: 'Reports removed as false, spam or invalid appear here.' } },
 ];
@@ -40,13 +42,16 @@ export const MODERATION_TABS: QueueTab[] = [
 export function buildQuery(tab: QueueTab, filters: Filters, sort: QueueSort, barangays: Barangay[]): QueueQuery {
   const area = filters.area ? barangays.find((b) => b.name === filters.area) : undefined;
   return {
+    departments: filters.departments,
+    priorities: filters.priorities,
     view: tab.view,
     statuses: tab.statuses,
     types: filters.types,
     severities: filters.severities,
     confidences: filters.confidences,
     from: dateFrom(filters.date),
-    bbox: area?.bbox,
+    // A drawn region is usually the tighter box; the exact barangay shape is checked in refine().
+    bbox: filters.region ?? area?.bbox,
     sort,
   };
 }
@@ -55,8 +60,10 @@ export function buildQuery(tab: QueueTab, filters: Filters, sort: QueueSort, bar
 export function refine(hazards: Hazard[], search: string, filters: Filters, barangays: Barangay[]) {
   const area = filters.area ? barangays.find((b) => b.name === filters.area) : undefined;
   const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+  const r = filters.region;
   return hazards.filter((h) => {
     if (area && !contains(area, h.latitude, h.longitude)) return false;
+    if (r && (h.latitude < r[0] || h.latitude > r[2] || h.longitude < r[1] || h.longitude > r[3])) return false;
     if (!words.length) return true;
     const text = [
       TYPE_LABEL[h.type], h.description, cachedStreet(h.latitude, h.longitude),

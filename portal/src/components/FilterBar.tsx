@@ -1,9 +1,10 @@
 import { forwardRef } from 'react';
 import {
-  CONFIDENCES, HAZARD_TYPES, SEVERITIES, type Confidence, type HazardType, type QueueSort, type Severity,
+  CONFIDENCES, HAZARD_TYPES, PRIORITIES, SEVERITIES, UNASSIGNED, type Confidence, type Department, type HazardType,
+  type MunicipalPriority, type QueueSort, type Severity,
 } from '../api/types';
 import type { Barangay } from '../lib/geo';
-import { CONFIDENCE_HINT, CONFIDENCE_LABEL, SEVERITY_LABEL, TYPE_LABEL } from '../lib/hazards';
+import { CONFIDENCE_HINT, CONFIDENCE_LABEL, PRIORITY_HINT, PRIORITY_LABEL, SEVERITY_LABEL, TYPE_LABEL } from '../lib/hazards';
 
 export type DateRange = 'any' | 'today' | '7d' | '30d';
 
@@ -13,12 +14,20 @@ export interface Filters {
   confidences: Confidence[];
   date: DateRange;
   area: string;
+  /** Department codes, or UNASSIGNED. */
+  departments: string[];
+  priorities: MunicipalPriority[];
+  /** A box drawn on the map: [minLat, minLon, maxLat, maxLon]. */
+  region: [number, number, number, number] | null;
 }
 
-export const NO_FILTERS: Filters = { types: [], severities: [], confidences: [], date: 'any', area: '' };
+export const NO_FILTERS: Filters = {
+  types: [], severities: [], confidences: [], date: 'any', area: '', departments: [], priorities: [], region: null,
+};
 
 export function activeFilterCount(f: Filters) {
-  return f.types.length + f.severities.length + f.confidences.length + (f.date !== 'any' ? 1 : 0) + (f.area ? 1 : 0);
+  return f.types.length + f.severities.length + f.confidences.length + (f.date !== 'any' ? 1 : 0) + (f.area ? 1 : 0)
+    + f.departments.length + f.priorities.length + (f.region ? 1 : 0);
 }
 
 export function dateFrom(range: DateRange): string | undefined {
@@ -38,6 +47,7 @@ export const SORTS: { value: QueueSort; label: string }[] = [
   { value: 'disputed', label: 'Most disputed' },
   { value: 'confirmed', label: 'Most confirmed' },
   { value: 'expiring', label: 'Expiring soon' },
+  { value: 'priority', label: 'City priority' },
 ];
 
 const DATES: { value: DateRange; label: string }[] = [
@@ -57,8 +67,11 @@ export const FilterBar = forwardRef<HTMLInputElement, {
   sort: QueueSort; onSort: (s: QueueSort) => void;
   filters: Filters; onFilters: (f: Filters) => void;
   barangays: Barangay[];
+  departments: Department[];
   open: boolean; onToggle: () => void;
-}>(function FilterBar({ search, onSearch, sort, onSort, filters, onFilters, barangays, open, onToggle }, searchRef) {
+  /** Saved views and export, next to Filters. */
+  extra?: React.ReactNode;
+}>(function FilterBar({ search, onSearch, sort, onSort, filters, onFilters, barangays, departments, open, onToggle, extra }, searchRef) {
   const count = activeFilterCount(filters);
   return (
     <div className="filter-bar">
@@ -83,6 +96,7 @@ export const FilterBar = forwardRef<HTMLInputElement, {
         </button>
         {count > 0 && <button type="button" className="btn-link" onClick={() => onFilters(NO_FILTERS)}>Clear</button>}
       </div>
+      {extra && <div className="filter-row">{extra}</div>}
       {open && (
         <div className="filter-panel">
           <fieldset>
@@ -124,6 +138,30 @@ export const FilterBar = forwardRef<HTMLInputElement, {
                   <input type="checkbox" checked={filters.confidences.includes(c)}
                     onChange={() => onFilters({ ...filters, confidences: toggle(filters.confidences, c) })} />
                   {CONFIDENCE_LABEL[c]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Department</legend>
+            <div className="chips">
+              {[...departments, { code: UNASSIGNED, name: 'Unassigned' }].map((d) => (
+                <label key={d.code} className={`chip${filters.departments.includes(d.code) ? ' on' : ''}`}>
+                  <input type="checkbox" checked={filters.departments.includes(d.code)}
+                    onChange={() => onFilters({ ...filters, departments: toggle(filters.departments, d.code) })} />
+                  {d.name}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend title={PRIORITY_HINT}>City priority</legend>
+            <div className="chips">
+              {PRIORITIES.map((p) => (
+                <label key={p} className={`chip${filters.priorities.includes(p) ? ' on' : ''}`}>
+                  <input type="checkbox" checked={filters.priorities.includes(p)}
+                    onChange={() => onFilters({ ...filters, priorities: toggle(filters.priorities, p) })} />
+                  {PRIORITY_LABEL[p]}
                 </label>
               ))}
             </div>

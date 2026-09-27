@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 
 export interface MenuItem {
   label: string;
@@ -9,8 +9,10 @@ export interface MenuItem {
 }
 
 /** A button that opens a small list of actions. Esc or a click outside closes it. */
-export function Menu({ label, trigger, items, align = 'right' }: {
-  label: string; trigger: ReactNode; items: (MenuItem | null)[]; align?: 'left' | 'right';
+export function Menu({ label, trigger, items, align = 'right', direction = 'down', footer }: {
+  label: string; trigger: ReactNode; items: (MenuItem | null)[]; align?: 'left' | 'right'; direction?: 'up' | 'down';
+  /** Extra content under the items (e.g. an empty-state line). */
+  footer?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -30,7 +32,7 @@ export function Menu({ label, trigger, items, align = 'right' }: {
   }, [open]);
 
   const shown = items.filter((i): i is MenuItem => i !== null);
-  const moveFocus = (e: React.KeyboardEvent) => {
+  const moveFocus = (e: ReactKeyboardEvent) => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     e.preventDefault();
     const buttons = Array.from(ref.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ?? []);
@@ -45,7 +47,7 @@ export function Menu({ label, trigger, items, align = 'right' }: {
         {trigger}
       </button>
       {open && (
-        <div className={`menu-list menu-${align}`} role="menu" id={id} onKeyDown={moveFocus}>
+        <div className={`menu-list menu-${align} menu-${direction}`} role="menu" id={id} onKeyDown={moveFocus}>
           {shown.map((item) => (
             <button key={item.label} type="button" role="menuitem" disabled={item.disabled}
               className={item.danger ? 'menu-item danger' : 'menu-item'}
@@ -54,6 +56,7 @@ export function Menu({ label, trigger, items, align = 'right' }: {
               {item.hint && <span className="menu-item-hint">{item.hint}</span>}
             </button>
           ))}
+          {footer}
         </div>
       )}
     </div>

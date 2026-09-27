@@ -37,3 +37,4 @@ memory/
 # Municipal portal (Vite)
 portal/node_modules/
 portal/dist/
+portal/*.tsbuildinfo

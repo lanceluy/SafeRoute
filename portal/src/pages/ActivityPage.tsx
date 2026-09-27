@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { api, ApiError } from '../api/client';
-import type { ActivityEntry } from '../api/types';
+import type { ActivityEntry, Department } from '../api/types';
+import { departmentName, useDepartments } from '../state/departments';
 import { TypeIcon } from '../components/Badges';
 import { EmptyState, ErrorState, SkeletonRows } from '../components/States';
 import { ago, coords, dayLabel, fullDate, timeOfDay } from '../lib/format';
@@ -14,7 +15,7 @@ const SCOPES: { value: Scope; label: string; hint: string }[] = [
   { value: 'status', label: 'Status changes', hint: 'Every change of hazard status' },
   { value: 'all', label: 'Everything', hint: 'Including community confirmations and edits' },
 ];
-const STAFF_ACTIONS = ['MODERATOR_RESOLVED', 'MODERATOR_REOPENED', 'MODERATOR_REMOVED'];
+const STAFF_ACTIONS = ['MODERATOR_RESOLVED', 'MODERATOR_REOPENED', 'MODERATOR_REMOVED', 'MUNICIPAL_ASSIGNED', 'MUNICIPAL_PRIORITY'];
 
 function who(e: ActivityEntry) {
   if (e.actor.kind === 'STAFF') return e.actor.name || 'Municipal staff';
@@ -24,7 +25,7 @@ function who(e: ActivityEntry) {
 }
 
 /** A sentence for one audit entry, in operational language. */
-function sentence(e: ActivityEntry) {
+function sentence(e: ActivityEntry, departments: Department[]) {
   const hazard = `${TYPE_LABEL[e.hazardType]} ${shortId(e.hazardId)}`;
   switch (e.action) {
     case 'MODERATOR_RESOLVED': return `${who(e)} resolved ${hazard}`;
@@ -36,6 +37,12 @@ function sentence(e: ActivityEntry) {
     case 'CONFIRMATION_CHANGED': return `${who(e)} ${e.newValue === 'DISPUTE' ? 'disputed' : 'confirmed'} ${hazard}`;
     case 'RESOLUTION_VOTE': return `${who(e)} said ${hazard} is ${e.newValue === 'NO_LONGER_PRESENT' ? 'gone' : 'still there'}`;
     case 'FIELD_EDITED': return `${who(e)} changed the ${fieldLabel(e.field)} of ${hazard}`;
+    case 'MUNICIPAL_ASSIGNED': return e.newValue
+      ? `${who(e)} assigned ${hazard} to ${departmentName(departments, e.newValue)}`
+      : `${who(e)} unassigned ${hazard}`;
+    case 'MUNICIPAL_PRIORITY': return e.newValue
+      ? `${who(e)} set ${hazard} to ${valueLabel(e.newValue).toLowerCase()} city priority`
+      : `${who(e)} cleared the city priority of ${hazard}`;
   }
 }
 
@@ -54,6 +61,7 @@ export function ActivityPage() {
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<ActivityEntry | null>(null);
   const tick = useLiveTick();
+  const departments = useDepartments();
 
   // Which page to fetch next; a new object on every request so asking again refetches.
   const [request, setRequest] = useState({ page: 0 });
@@ -134,7 +142,7 @@ export function ActivityPage() {
                       <span className="activity-time" title={fullDate(e.at)}>{timeOfDay(e.at)}</span>
                       <span className={`row-icon sev-bg-${e.hazardSeverity.toLowerCase()} sm`}><TypeIcon type={e.hazardType} size={14} /></span>
                       <span className="activity-text">
-                        <span>{sentence(e)}</span>
+                        <span>{sentence(e, departments)}</span>
                         {visibleNote(e) && <span className="activity-note">{e.action === 'MODERATOR_REMOVED' ? 'Reason: ' : ''}{visibleNote(e)}</span>}
                       </span>
                       <span className="row-chevron" aria-hidden="true">›</span>
@@ -158,12 +166,15 @@ export function ActivityPage() {
 }
 
 function AuditDetail({ entry: e, onClose }: { entry: ActivityEntry; onClose: () => void }) {
+  const departments = useDepartments();
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
-  const statusChange = e.action === 'STATUS_CHANGED' || (e.action === 'FIELD_EDITED' && (e.field === 'severity' || e.field === 'type'));
+  const statusChange = e.action === 'STATUS_CHANGED' || (e.action === 'FIELD_EDITED' && (e.field === 'severity' || e.field === 'type'))
+    || e.action === 'MUNICIPAL_ASSIGNED' || e.action === 'MUNICIPAL_PRIORITY';
+  const show = (v: string | null) => (e.action === 'MUNICIPAL_ASSIGNED' ? departmentName(departments, v) ?? 'Unassigned' : valueLabel(v) || '—');
   return (
     <aside className="card audit-detail" aria-label="Audit entry">
       <div className="drawer-header">
@@ -171,7 +182,7 @@ function AuditDetail({ entry: e, onClose }: { entry: ActivityEntry; onClose: () 
         <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">×</button>
       </div>
       <dl className="audit-fields">
-        <dt>Action</dt><dd>{sentence(e)}</dd>
+        <dt>Action</dt><dd>{sentence(e, departments)}</dd>
         <dt>Performed by</dt>
         <dd>
           {who(e)}
@@ -179,8 +190,8 @@ function AuditDetail({ entry: e, onClose }: { entry: ActivityEntry; onClose: () 
         </dd>
         <dt>Date</dt><dd>{fullDate(e.at)} <span className="muted">({ago(e.at)})</span></dd>
         {statusChange && <>
-          <dt>Previous {e.action === 'STATUS_CHANGED' ? 'state' : fieldLabel(e.field)}</dt><dd>{valueLabel(e.oldValue) || '—'}</dd>
-          <dt>New {e.action === 'STATUS_CHANGED' ? 'state' : fieldLabel(e.field)}</dt><dd>{valueLabel(e.newValue)}</dd>
+          <dt>Previous {e.action === 'STATUS_CHANGED' ? 'state' : fieldLabel(e.field)}</dt><dd>{show(e.oldValue)}</dd>
+          <dt>New {e.action === 'STATUS_CHANGED' ? 'state' : fieldLabel(e.field)}</dt><dd>{show(e.newValue)}</dd>
         </>}
         {visibleNote(e) && <><dt>{e.action === 'MODERATOR_REMOVED' ? 'Reason' : 'Note'}</dt><dd>{visibleNote(e)}</dd></>}
         <dt>Hazard</dt>

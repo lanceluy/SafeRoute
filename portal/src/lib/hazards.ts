@@ -1,6 +1,6 @@
 // How hazard attributes are named, colored and drawn. Color means severity; the glyph means type;
 // status and confidence always come with text so nothing relies on color alone.
-import type { AuditAction, Confidence, HazardStatus, HazardType, Severity, TrustLevel } from '../api/types';
+import type { AuditAction, Confidence, HazardStatus, HazardType, MunicipalPriority, Severity, TrustLevel } from '../api/types';
 
 export const TYPE_LABEL: Record<HazardType, string> = {
   FLOODING: 'Flooding',
@@ -94,7 +94,12 @@ export const ACTION_LABEL: Record<AuditAction, string> = {
   MODERATOR_RESOLVED: 'Marked resolved',
   MODERATOR_REOPENED: 'Reopened',
   MODERATOR_REMOVED: 'Report removed',
+  MUNICIPAL_ASSIGNED: 'Department assigned',
+  MUNICIPAL_PRIORITY: 'City priority set',
 };
+
+export const PRIORITY_LABEL: Record<MunicipalPriority, string> = { URGENT: 'Urgent', HIGH: 'High', NORMAL: 'Normal', LOW: 'Low' };
+export const PRIORITY_HINT = 'How urgently the city means to deal with it. Separate from severity, which is how dangerous commuters say it is.';
 
 /** Notes the backend fills in by itself; they add nothing for staff. */
 export const DEFAULT_NOTES = new Set(['Resolved by moderator']);
@@ -104,6 +109,7 @@ export const HIDDEN_FIELDS = new Set(['contentRevision', 'expiresAt']);
 
 const FIELD_LABEL: Record<string, string> = {
   description: 'description', photoUrl: 'photo', location: 'location', type: 'type', severity: 'severity',
+  department: 'department', priority: 'city priority',
 };
 
 export function fieldLabel(field: string | null) {
@@ -118,6 +124,7 @@ export function valueLabel(value: string | null) {
   if (value in SEVERITY_LABEL) return SEVERITY_LABEL[value as Severity];
   const words: Record<string, string> = {
     VERIFY: 'Confirmed', DISPUTE: 'Disputed', NO_LONGER_PRESENT: 'No longer there', STILL_PRESENT: 'Still there',
+    URGENT: 'Urgent', NORMAL: 'Normal',
   };
   return words[value] ?? value;
 }

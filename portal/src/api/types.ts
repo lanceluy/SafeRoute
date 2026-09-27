@@ -8,6 +8,15 @@ export type Severity = 'LOW' | 'MEDIUM' | 'HIGH';
 export type Confidence = 'UNCONFIRMED' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CONTESTED';
 export type Role = 'USER' | 'MODERATOR' | 'MUNICIPAL_OFFICIAL';
 export type TrustLevel = 'NEW_REPORTER' | 'REGULAR_REPORTER' | 'TRUSTED_REPORTER';
+export type MunicipalPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+export const PRIORITIES: MunicipalPriority[] = ['URGENT', 'HIGH', 'NORMAL', 'LOW'];
+
+export interface Department {
+  code: string;
+  name: string;
+}
+/** In the departments filter: hazards nobody is assigned to. */
+export const UNASSIGNED = 'UNASSIGNED';
 
 export const HAZARD_TYPES: HazardType[] = [
   'BROKEN_SIDEWALK', 'FLOODING', 'ACCESSIBILITY_BARRIER', 'OPEN_MANHOLE',
@@ -38,6 +47,10 @@ export interface Hazard {
   expiresAt: string | null;
   resolvedAt: string | null;
   version: number;
+  /** City response: department code, or null when unassigned. */
+  assignedDepartment: string | null;
+  municipalPriority: MunicipalPriority | null;
+  assignedAt: string | null;
 }
 
 export interface HazardDetail {
@@ -56,7 +69,8 @@ export interface HazardDetail {
 
 export type AuditAction =
   | 'CREATED' | 'DUPLICATE_MERGED' | 'CONFIRMATION_CHANGED' | 'RESOLUTION_VOTE' | 'STATUS_CHANGED'
-  | 'FIELD_EDITED' | 'MODERATOR_RESOLVED' | 'MODERATOR_REOPENED' | 'MODERATOR_REMOVED';
+  | 'FIELD_EDITED' | 'MODERATOR_RESOLVED' | 'MODERATOR_REOPENED' | 'MODERATOR_REMOVED'
+  | 'MUNICIPAL_ASSIGNED' | 'MUNICIPAL_PRIORITY';
 
 export interface TimelineEntry {
   id: string;
@@ -78,8 +92,8 @@ export interface Page<T> {
   hasMore: boolean;
 }
 
-export type QueueView = 'attention' | 'high' | 'contested' | 'expiring' | 'unconfirmed' | 'active' | 'removed';
-export type QueueSort = 'review' | 'newest' | 'oldest' | 'severity' | 'confidence' | 'disputed' | 'confirmed' | 'expiring';
+export type QueueView = 'attention' | 'high' | 'contested' | 'expiring' | 'unconfirmed' | 'active' | 'removed' | 'unassigned';
+export type QueueSort = 'review' | 'newest' | 'oldest' | 'severity' | 'confidence' | 'disputed' | 'confirmed' | 'expiring' | 'priority';
 
 export interface QueueQuery {
   view?: QueueView;
@@ -91,6 +105,16 @@ export interface QueueQuery {
   to?: string;
   bbox?: [number, number, number, number];
   sort?: QueueSort;
+  departments?: string[];
+  priorities?: MunicipalPriority[];
+}
+
+export interface SavedView {
+  id: string;
+  name: string;
+  /** JSON written by the portal (see lib/views.ts). */
+  config: string;
+  createdAt: string;
 }
 
 export interface Stats {

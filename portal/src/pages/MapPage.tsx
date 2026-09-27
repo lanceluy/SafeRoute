@@ -34,6 +34,7 @@ export function MapPage() {
   const { stats } = useStats();
   const selectedId = params.get('hazard');
   const [layer, setLayer] = useState<MapLayer>('markers');
+  const [drawing, setDrawing] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [width, setWidth] = useState(storedWidth);
   const [mobileView, setMobileView] = useState<'list' | 'map'>('list');
@@ -104,7 +105,21 @@ export function MapPage() {
       <section className="map-area" ref={mapRef}>
         <MapView hazards={mapHazards} selectedId={selectedId} onSelect={(id) => select(id)} layer={layer}
           barangays={barangays} highlightArea={c.area} pulseIds={c.queue.newIds} fitKey={c.filterKey}
-          loading={c.queue.loading} insetRight={selectedId ? DRAWER_WIDTH : 0} />
+          loading={c.queue.loading} insetRight={selectedId ? DRAWER_WIDTH : 0}
+          region={c.filters.region} drawing={drawing}
+          onDrawn={(box) => { setDrawing(false); if (box) c.setFilters({ ...c.filters, region: box }); }} />
+        <div className="map-tools">
+          {drawing
+            ? <span className="map-tool-hint" role="status">Drag on the map to select an area · Esc to cancel</span>
+            : null}
+          <button type="button" className={`map-tool${drawing ? ' on' : ''}`} aria-pressed={drawing}
+            onClick={() => setDrawing((d) => !d)}>
+            {drawing ? 'Cancel' : '⬚ Select area'}
+          </button>
+          {c.filters.region && !drawing && (
+            <button type="button" className="map-tool" onClick={() => c.setFilters({ ...c.filters, region: null })}>Clear area</button>
+          )}
+        </div>
         <div className="map-overlays">
           <LayerSwitcher layer={layer} onChange={setLayer} />
           <MapLegend layer={layer} />
@@ -128,7 +143,7 @@ export function MapPage() {
           <aside className="queue-panel" aria-label="Hazard queue">
             <button type="button" className="icon-btn collapse-btn" onClick={() => setCollapsed(true)} aria-label="Hide hazard queue" title="Hide queue">›</button>
             <QueuePanel c={c} tabs={MAP_TABS} stats={stats} barangays={barangays} selectedId={selectedId}
-              onSelect={onRow} searchRef={searchRef} />
+              onSelect={onRow} searchRef={searchRef} page="map" />
           </aside>
         </>
       )}

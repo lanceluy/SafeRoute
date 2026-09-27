@@ -1,7 +1,8 @@
 // Authenticated access to the SafeRoute backend. Access tokens last 30 minutes: on a 401 the
 // client refreshes once and retries; if that fails the session ends.
 import type {
-  ActivityEntry, Hazard, HazardDetail, Page, QueueQuery, Session, Stats, TimelineEntry,
+  ActivityEntry, Department, Hazard, HazardDetail, MunicipalPriority, Page, QueueQuery, SavedView, Session, Stats,
+  TimelineEntry,
 } from './types';
 
 const override = new URLSearchParams(location.search).get('api');
@@ -147,6 +148,9 @@ async function request(path: string, options: RequestOptions = {}, retried = fal
 function friendlyError(status: number, code?: string) {
   if (code === 'HAZARD_ALREADY_REMOVED') return 'This report was already removed.';
   if (code === 'HAZARD_NOT_ACTIVE') return 'This hazard is no longer active.';
+  if (code === 'HAZARD_ALREADY_ACTIVE') return 'This hazard is already active.';
+  if (code === 'UNKNOWN_DEPARTMENT') return 'That department isn’t on the city’s list. Refresh and try again.';
+  if (code === 'TOO_MANY_SAVED_VIEWS') return 'You have 50 saved views. Delete one before saving another.';
   if (status === 403) return 'Your account isn’t allowed to do that.';
   if (status === 404) return 'That hazard no longer exists.';
   if (status === 409) return 'Someone else changed this hazard just now. Refresh and try again.';
@@ -170,6 +174,8 @@ function queueParams(q: QueueQuery, page: number, size: number) {
   if (q.to) p.set('to', q.to);
   if (q.bbox) p.set('bbox', q.bbox.join(','));
   if (q.sort) p.set('sort', q.sort);
+  if (q.departments?.length) p.set('departments', q.departments.join(','));
+  if (q.priorities?.length) p.set('priorities', q.priorities.join(','));
   return p;
 }
 
@@ -225,6 +231,29 @@ export const api = {
 
   async remove(id: string, reason: string) {
     await request(`/hazards/${id}?${new URLSearchParams({ reason })}`, { method: 'DELETE' });
+  },
+
+  departments(signal?: AbortSignal) {
+    return getJson<Department[]>('/meta/departments', signal);
+  },
+
+  /** Replaces the city response; null clears a field. Commuters see it in the app. */
+  async setResponse(id: string, department: string | null, priority: MunicipalPriority | null, note = '') {
+    return (await request(`/moderation/hazards/${id}/response`, {
+      method: 'PUT', json: { department, priority, note: note || null },
+    })).json() as Promise<Hazard>;
+  },
+
+  savedViews(signal?: AbortSignal) {
+    return getJson<SavedView[]>('/moderation/saved-views', signal);
+  },
+
+  async saveView(name: string, config: string) {
+    return (await request('/moderation/saved-views', { method: 'POST', json: { name, config } })).json() as Promise<SavedView>;
+  },
+
+  async deleteView(id: string) {
+    await request(`/moderation/saved-views/${id}`, { method: 'DELETE' });
   },
 };
 

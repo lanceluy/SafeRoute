@@ -43,7 +43,7 @@ export function ModerationPage() {
       <div className="moderation-body">
         <section className="card moderation-queue">
           <QueuePanel c={c} tabs={MODERATION_TABS} stats={stats} barangays={barangays} selectedId={selectedId}
-            onSelect={select} searchRef={searchRef} />
+            onSelect={select} searchRef={searchRef} page="moderation" />
         </section>
         {selectedId && (
           <HazardDrawer key={selectedId} hazardId={selectedId} barangays={barangays} onClose={() => select(null)} onChanged={c.queue.reload}

@@ -40,7 +40,8 @@ function clusterIcon(cluster: L.MarkerCluster) {
  * Leaflet map of hazards: clustered markers (color = severity, glyph = type, corner mark =
  * status) or a heatmap, plus barangay outlines. Selecting reveals and enlarges the marker.
  */
-export function MapView({ hazards, selectedId, onSelect, layer, barangays, highlightArea, pulseIds, fitKey, loading, insetRight = 0 }: {
+export function MapView({ hazards, selectedId, onSelect, layer, barangays, highlightArea, pulseIds, fitKey, loading, insetRight = 0,
+  region, drawing = false, onDrawn }: {
   hazards: Hazard[];
   selectedId?: string | null;
   onSelect?: (id: string) => void;
@@ -53,6 +54,11 @@ export function MapView({ hazards, selectedId, onSelect, layer, barangays, highl
   loading?: boolean;
   /** Pixels on the right hidden behind an overlay (the details drawer). */
   insetRight?: number;
+  /** A selected area to outline: [minLat, minLon, maxLat, maxLon]. */
+  region?: [number, number, number, number] | null;
+  /** While true, dragging draws a box instead of panning; onDrawn gets the box. */
+  drawing?: boolean;
+  onDrawn?: (box: [number, number, number, number] | null) => void;
 }) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
@@ -190,6 +196,62 @@ export function MapView({ hazards, selectedId, onSelect, layer, barangays, highl
       if (marker?.hazard && id !== selectedId) marker.setIcon(pinIcon(marker.hazard, false, true));
     }
   }, [pulseIds, selectedId]);
+
+  // The selected area, outlined.
+  const regionLayer = useRef<L.Rectangle | null>(null);
+  useEffect(() => {
+    const m = map.current;
+    regionLayer.current?.remove();
+    regionLayer.current = null;
+    if (!m || !region) return;
+    regionLayer.current = L.rectangle([[region[0], region[1]], [region[2], region[3]]], {
+      color: '#173B67', weight: 2, dashArray: '6 4', fillColor: '#173B67', fillOpacity: 0.05, interactive: false,
+    }).addTo(m);
+  }, [region]);
+
+  // Drawing a box: press, drag, release. Panning is off meanwhile; Esc cancels.
+  const onDrawnRef = useRef(onDrawn);
+  useEffect(() => { onDrawnRef.current = onDrawn; });
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !drawing) return;
+    m.dragging.disable();
+    const container = m.getContainer();
+    container.classList.add('drawing');
+    let start: L.LatLng | null = null;
+    let box: L.Rectangle | null = null;
+    const down = (e: L.LeafletMouseEvent) => { start = e.latlng; };
+    const move = (e: L.LeafletMouseEvent) => {
+      if (!start) return;
+      const bounds = L.latLngBounds(start, e.latlng);
+      if (box) box.setBounds(bounds);
+      else box = L.rectangle(bounds, { color: '#173B67', weight: 2, fillOpacity: 0.08, interactive: false }).addTo(m);
+    };
+    const up = (e: L.LeafletMouseEvent) => {
+      if (!start) return;
+      const b = L.latLngBounds(start, e.latlng);
+      start = null;
+      box?.remove();
+      box = null;
+      // A click without a drag isn't an area.
+      if (b.getNorth() - b.getSouth() < 1e-4 || b.getEast() - b.getWest() < 1e-4) return;
+      onDrawnRef.current?.([b.getSouth(), b.getWest(), b.getNorth(), b.getEast()]);
+    };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onDrawnRef.current?.(null); };
+    m.on('mousedown', down);
+    m.on('mousemove', move);
+    m.on('mouseup', up);
+    document.addEventListener('keydown', key);
+    return () => {
+      m.off('mousedown', down);
+      m.off('mousemove', move);
+      m.off('mouseup', up);
+      document.removeEventListener('keydown', key);
+      box?.remove();
+      container.classList.remove('drawing');
+      m.dragging.enable();
+    };
+  }, [drawing]);
 
   // Fit to the hazards once per filter change, when they arrive (not on every live update).
   const fittedFor = useRef<string | null>(null);

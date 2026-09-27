@@ -217,6 +217,18 @@ preview, the safer-route comparison or navigation) · **Reports** (My Reports wi
 - **Analytics:** reports vs resolved, backlog, resolution time, and per-barangay numbers.
 - **Activity:** the audit trail of staff actions and status changes.
 
+Across the queues:
+
+- **City response:** assign a hazard to a department and set a city priority, separate from
+  severity. Commuters see the department on the hazard in the iOS app, and the change arrives live.
+  Departments are configured in `saferoute.municipal.departments`.
+- **Bulk actions:** Select several hazards to resolve them, set their department and priority, or
+  export them. There is no bulk Remove.
+- **Saved views:** save the current tab, filters, sort and search under a name. Views are kept per
+  official on the server.
+- **Export:** a CSV of the hazards in view, or a printable PDF report with a summary.
+- **Select area:** draw a box on the map to filter the queue to that area.
+
 With the backend running:
 
 ```bash
