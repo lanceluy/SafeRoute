@@ -1,0 +1,147 @@
+import { forwardRef } from 'react';
+import {
+  CONFIDENCES, HAZARD_TYPES, SEVERITIES, type Confidence, type HazardType, type QueueSort, type Severity,
+} from '../api/types';
+import type { Barangay } from '../lib/geo';
+import { CONFIDENCE_HINT, CONFIDENCE_LABEL, SEVERITY_LABEL, TYPE_LABEL } from '../lib/hazards';
+
+export type DateRange = 'any' | 'today' | '7d' | '30d';
+
+export interface Filters {
+  types: HazardType[];
+  severities: Severity[];
+  confidences: Confidence[];
+  date: DateRange;
+  area: string;
+}
+
+export const NO_FILTERS: Filters = { types: [], severities: [], confidences: [], date: 'any', area: '' };
+
+export function activeFilterCount(f: Filters) {
+  return f.types.length + f.severities.length + f.confidences.length + (f.date !== 'any' ? 1 : 0) + (f.area ? 1 : 0);
+}
+
+export function dateFrom(range: DateRange): string | undefined {
+  if (range === 'any') return undefined;
+  const d = new Date();
+  if (range === 'today') d.setHours(0, 0, 0, 0);
+  else d.setDate(d.getDate() - (range === '7d' ? 7 : 30));
+  return d.toISOString();
+}
+
+export const SORTS: { value: QueueSort; label: string }[] = [
+  { value: 'review', label: 'Review priority' },
+  { value: 'newest', label: 'Newest reports' },
+  { value: 'oldest', label: 'Oldest reports' },
+  { value: 'severity', label: 'Highest severity' },
+  { value: 'confidence', label: 'Lowest confidence' },
+  { value: 'disputed', label: 'Most disputed' },
+  { value: 'confirmed', label: 'Most confirmed' },
+  { value: 'expiring', label: 'Expiring soon' },
+];
+
+const DATES: { value: DateRange; label: string }[] = [
+  { value: 'any', label: 'Any time' },
+  { value: 'today', label: 'Today' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+];
+
+function toggle<T>(list: T[], value: T) {
+  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+}
+
+/** Search, sort and a collapsible set of filters above a hazard list. */
+export const FilterBar = forwardRef<HTMLInputElement, {
+  search: string; onSearch: (s: string) => void;
+  sort: QueueSort; onSort: (s: QueueSort) => void;
+  filters: Filters; onFilters: (f: Filters) => void;
+  barangays: Barangay[];
+  open: boolean; onToggle: () => void;
+}>(function FilterBar({ search, onSearch, sort, onSort, filters, onFilters, barangays, open, onToggle }, searchRef) {
+  const count = activeFilterCount(filters);
+  return (
+    <div className="filter-bar">
+      <div className="filter-row">
+        <label className="search">
+          <span className="sr-only">Search hazards</span>
+          <span aria-hidden="true" className="search-icon">⌕</span>
+          <input ref={searchRef} type="search" placeholder="Search hazards, streets or barangays" value={search}
+            onChange={(e) => onSearch(e.target.value)} />
+          <kbd aria-hidden="true">/</kbd>
+        </label>
+      </div>
+      <div className="filter-row">
+        <label className="select-inline">
+          <span>Sort</span>
+          <select value={sort} onChange={(e) => onSort(e.target.value as QueueSort)}>
+            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+        </label>
+        <button type="button" className={`btn btn-secondary btn-sm${count ? ' has-count' : ''}`} aria-expanded={open} onClick={onToggle}>
+          Filters{count ? ` · ${count}` : ''} <span aria-hidden="true">{open ? '▴' : '▾'}</span>
+        </button>
+        {count > 0 && <button type="button" className="btn-link" onClick={() => onFilters(NO_FILTERS)}>Clear</button>}
+      </div>
+      {open && (
+        <div className="filter-panel">
+          <fieldset>
+            <legend>Area</legend>
+            <select value={filters.area} onChange={(e) => onFilters({ ...filters, area: e.target.value })} aria-label="Barangay">
+              <option value="">All of Makati</option>
+              {barangays.map((b) => <option key={b.name} value={b.name}>Barangay {b.name}</option>)}
+            </select>
+          </fieldset>
+          <fieldset>
+            <legend>Severity</legend>
+            <div className="chips">
+              {SEVERITIES.map((s) => (
+                <label key={s} className={`chip${filters.severities.includes(s) ? ' on' : ''}`}>
+                  <input type="checkbox" checked={filters.severities.includes(s)}
+                    onChange={() => onFilters({ ...filters, severities: toggle(filters.severities, s) })} />
+                  <span className={`sev-dot sev-bg-${s.toLowerCase()}`} aria-hidden="true" />{SEVERITY_LABEL[s]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Type</legend>
+            <div className="chips">
+              {HAZARD_TYPES.map((t) => (
+                <label key={t} className={`chip${filters.types.includes(t) ? ' on' : ''}`}>
+                  <input type="checkbox" checked={filters.types.includes(t)}
+                    onChange={() => onFilters({ ...filters, types: toggle(filters.types, t) })} />
+                  {TYPE_LABEL[t]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Confidence</legend>
+            <div className="chips">
+              {CONFIDENCES.map((c) => (
+                <label key={c} className={`chip${filters.confidences.includes(c) ? ' on' : ''}`} title={CONFIDENCE_HINT[c]}>
+                  <input type="checkbox" checked={filters.confidences.includes(c)}
+                    onChange={() => onFilters({ ...filters, confidences: toggle(filters.confidences, c) })} />
+                  {CONFIDENCE_LABEL[c]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Reported</legend>
+            <div className="chips">
+              {DATES.map((d) => (
+                <label key={d.value} className={`chip${filters.date === d.value ? ' on' : ''}`}>
+                  <input type="radio" name="date" checked={filters.date === d.value}
+                    onChange={() => onFilters({ ...filters, date: d.value })} />
+                  {d.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </div>
+      )}
+    </div>
+  );
+});

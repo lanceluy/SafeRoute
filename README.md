@@ -206,15 +206,34 @@ preview, the safer-route comparison or navigation) · **Reports** (My Reports wi
 
 ## Municipal portal
 
-`portal/` is a static page for moderators and municipal officials: a map of the hazards in view
-and the moderation queue, with resolve, reopen and remove. With the backend running:
+`portal/` is a React + Vite app for moderators and municipal officials, in five sections:
+
+- **Overview:** today's numbers, the weekly trend, and the barangays with the most hazards.
+- **Hazard Map:** clustered markers (color = severity, symbol = type), heatmap layers, and a
+  searchable, filterable, sortable queue. Selecting a hazard opens its photo, community response,
+  timeline and the Resolve / Reopen / Remove actions.
+- **Moderation:** the review queue on its own (needs review, contested, unconfirmed, expiring,
+  removed).
+- **Analytics:** reports vs resolved, backlog, resolution time, and per-barangay numbers.
+- **Activity:** the audit trail of staff actions and status changes.
+
+With the backend running:
 
 ```bash
-cd portal && python3 -m http.server 5500
-# open http://localhost:5500 (add ?api=http://host:8080/api for another backend)
+cd portal
+npm install
+npm run dev        # http://localhost:5500
+npm run build      # static files in portal/dist
 ```
 
-Log in with a `MODERATOR` or `MUNICIPAL_OFFICIAL` account; other roles are turned away.
+It talks to `http://localhost:8080/api` by default. Set `VITE_API_BASE` at build time, or add
+`?api=http://host:8080/api` to the URL. Log in with a `MODERATOR` or `MUNICIPAL_OFFICIAL`
+account; other roles are turned away. The portal stays live over the WebSocket, watching the
+pilot area as a staff session.
+
+Barangay boundaries (`portal/public/makati-barangays.geojson`) come from OpenStreetMap (ODbL).
+Street names are looked up from OpenStreetMap Nominatim at most once a second and cached in the
+browser, so hazard coordinates are sent to that public service.
 
 ## Benchmarks
 
