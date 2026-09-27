@@ -31,6 +31,8 @@ final class MapViewModel: ObservableObject {
     nonisolated static let maxSpanDegrees = 0.45
     /// The server rejects bounding boxes wider than this; padded queries are clamped to it.
     nonisolated static let maxQuerySpanDegrees = 0.5
+    /// "Near you" means within this distance; the map always loads at least this much around the user.
+    nonisolated static let nearbyRadiusMeters: Double = 1000
 
     @Published private(set) var hazards: [UUID: Hazard] = [:]
     @Published var filters = MapFilters.load() {
@@ -90,7 +92,7 @@ final class MapViewModel: ObservableObject {
         return hazards.values
             .filter { $0.status.isActive && filters.types.contains($0.type) }
             .compactMap { h in Format.distance(from: user, to: h.coordinate).map { (h, $0) } }
-            .filter { $0.1 <= 1000 }
+            .filter { $0.1 <= Self.nearbyRadiusMeters }
             .sorted { $0.1 < $1.1 }
     }
 
@@ -113,13 +115,27 @@ final class MapViewModel: ObservableObject {
             return region.center.latitude - halfLat >= minLat && region.center.latitude + halfLat <= maxLat
                 && region.center.longitude - halfLon >= minLon && region.center.longitude + halfLon <= maxLon
         }
+
+        /// Whether everything within the "near you" radius of `user` is loaded.
+        func coversNearby(_ user: CLLocationCoordinate2D) -> Bool {
+            let dLat = MapViewModel.nearbyRadiusMeters / 111_320
+            let dLon = MapViewModel.nearbyRadiusMeters / (111_320 * cos(user.latitude * .pi / 180))
+            return user.latitude - dLat >= minLat && user.latitude + dLat <= maxLat
+                && user.longitude - dLon >= minLon && user.longitude + dLon <= maxLon
+        }
     }
 
     func regionChanged(_ region: MKCoordinateRegion) {
         lastRegion = region
-        if loadState == .loaded, loadedBox?.covers(region, statuses: filters.statuses) == true { return }
+        if loadState == .loaded, let loadedBox, loadedBox.covers(region, statuses: filters.statuses),
+           userLocation.map(loadedBox.coversNearby) ?? true { return }
         loadTask?.cancel()
         loadTask = Task { await load(region: region) }
+    }
+
+    /// The user's location arrived or moved: make sure the "near you" radius is loaded around it.
+    func userLocationChanged() {
+        if let lastRegion { regionChanged(lastRegion) }
     }
 
     func refresh() async {
@@ -128,6 +144,27 @@ final class MapViewModel: ObservableObject {
         } else if let user = userLocation {
             await load(region: MKCoordinateRegion(center: user, latitudinalMeters: 2000, longitudinalMeters: 2000))
         }
+    }
+
+    /// The box to fetch: the visible region with slight padding (so panning a little doesn't
+    /// reveal empty edges), widened to cover the "near you" radius around the user so that count
+    /// doesn't depend on how far the map is zoomed in. Clamped to the server's limit.
+    nonisolated static func queryBox(for region: MKCoordinateRegion, user: CLLocationCoordinate2D?)
+        -> (minLat: Double, minLon: Double, maxLat: Double, maxLon: Double) {
+        let latSpan = min(region.span.latitudeDelta * 1.2, maxQuerySpanDegrees)
+        let lonSpan = min(region.span.longitudeDelta * 1.2, maxQuerySpanDegrees)
+        var box = (minLat: region.center.latitude - latSpan / 2, minLon: region.center.longitude - lonSpan / 2,
+                   maxLat: region.center.latitude + latSpan / 2, maxLon: region.center.longitude + lonSpan / 2)
+        guard let user else { return box }
+        let dLat = nearbyRadiusMeters * 1.05 / 111_320
+        let dLon = nearbyRadiusMeters * 1.05 / (111_320 * cos(user.latitude * .pi / 180))
+        let widened = (minLat: min(box.minLat, user.latitude - dLat), minLon: min(box.minLon, user.longitude - dLon),
+                       maxLat: max(box.maxLat, user.latitude + dLat), maxLon: max(box.maxLon, user.longitude + dLon))
+        // Far from the user (browsing another district), keep just the visible region.
+        if widened.maxLat - widened.minLat <= maxQuerySpanDegrees, widened.maxLon - widened.minLon <= maxQuerySpanDegrees {
+            box = widened
+        }
+        return box
     }
 
     private func load(region: MKCoordinateRegion) async {
@@ -139,12 +176,7 @@ final class MapViewModel: ObservableObject {
         loadState = .loading
         let generation = self.generation
         let sequenceAtStart = liveSequence
-        // Slight padding so panning a little doesn't immediately reveal empty edges, clamped to
-        // the server's limit.
-        let latSpan = min(region.span.latitudeDelta * 1.2, Self.maxQuerySpanDegrees)
-        let lonSpan = min(region.span.longitudeDelta * 1.2, Self.maxQuerySpanDegrees)
-        let box = (minLat: region.center.latitude - latSpan / 2, minLon: region.center.longitude - lonSpan / 2,
-                   maxLat: region.center.latitude + latSpan / 2, maxLon: region.center.longitude + lonSpan / 2)
+        let box = Self.queryBox(for: region, user: userLocation)
         let statuses = filters.statuses
         do {
             let (fresh, response) = try await APIClient.shared.sendWithResponse(.inBbox(

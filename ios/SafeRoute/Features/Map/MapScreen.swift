@@ -113,9 +113,15 @@ struct MapScreen: View {
             if let id { detailHazard = SelectedHazard(id: id); appState.hazardToShow = nil }
         }
         .onAppear {
-            location.onSignificantChange = { coordinate in WebSocketClient.shared.updateLocation(coordinate) }
+            location.onSignificantChange = { coordinate in
+                WebSocketClient.shared.updateLocation(coordinate)
+                model.userLocationChanged()
+            }
             location.requestPermission()
-            if let here = location.currentLocation { WebSocketClient.shared.updateLocation(here) }
+            if let here = location.currentLocation {
+                WebSocketClient.shared.updateLocation(here)
+                model.userLocationChanged()
+            }
         }
         #if DEBUG
         .task { await runDemoIntent() }
@@ -126,7 +132,7 @@ struct MapScreen: View {
     }
 
     /// "Nearby" in the summary means within this distance of the user (MapViewModel.nearbyActive).
-    static let nearbyRadiusMeters: Double = 1000
+    static let nearbyRadiusMeters = MapViewModel.nearbyRadiusMeters
     static let nearbyPeek = PresentationDetent.fraction(0.3)
     static let nearbyHalf = PresentationDetent.fraction(0.6)
 
