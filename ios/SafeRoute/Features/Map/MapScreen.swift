@@ -207,7 +207,7 @@ struct MapScreen: View {
                 if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
             }
         case .unavailable where LocationManager.isSimulator:
-            StateBanner(text: "The Simulator has no location set. Choose Features ▸ Location ▸ Custom Location (e.g. 14.5547, 121.0244).",
+            StateBanner(text: "The Simulator has no location set. Choose Features ▸ Location ▸ Custom Location (e.g. 14.56628, 121.01542).",
                         systemImage: "location.slash", tint: SR.Palette.warning)
         case .unavailable:
             StateBanner(text: "Can't find your location right now", systemImage: "location.slash", tint: SR.Palette.warning,

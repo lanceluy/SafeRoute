@@ -185,7 +185,8 @@ To have the Simulator walk whenever you start navigation, keep this running whil
 ios/scripts/simulate-walks.sh             # SAFEROUTE_WALK_SPEED=3 for a faster walk (m/s)
 ```
 
-It walks the route at 1.4 m/s from the moment you tap Start, and when you tap End it stops you
+It watches every booted Simulator (pass a UDID to watch just one) and puts each at Mapúa Makati
+when it starts watching it (`SAFEROUTE_HOME=lat,lon` to change that). It walks the route at 1.4 m/s from the moment you tap Start, and when you tap End it stops you
 where you are. Between walks the location stays put. (Debug Simulator builds only; see
 `SimulatedWalk.swift`.)
 

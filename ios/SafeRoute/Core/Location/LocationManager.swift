@@ -35,6 +35,9 @@ final class LocationManager: NSObject, ObservableObject {
     private let minimumMoveMeters: CLLocationDistance = 25
     private var isUpdating = false
 
+    /// Where maps start before a fix arrives: Mapúa University Makati, inside the pilot area.
+    static let defaultCoordinate = CLLocationCoordinate2D(latitude: 14.56628, longitude: 121.01542)
+
     static var isSimulator: Bool {
         #if targetEnvironment(simulator)
         true

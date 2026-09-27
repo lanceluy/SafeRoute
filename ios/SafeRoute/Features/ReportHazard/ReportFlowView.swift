@@ -37,7 +37,7 @@ struct ReportFlowView: View {
     @State private var errorMessage: String?
 
     init() {
-        let start = LocationManager.shared.currentLocation ?? CLLocationCoordinate2D(latitude: 14.5547, longitude: 121.0244)
+        let start = LocationManager.shared.currentLocation ?? LocationManager.defaultCoordinate
         _coordinate = State(initialValue: start)
         _camera = State(initialValue: .region(MKCoordinateRegion(center: start, latitudinalMeters: 250, longitudinalMeters: 250)))
     }

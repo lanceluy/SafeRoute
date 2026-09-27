@@ -41,7 +41,7 @@ struct HazardMapView: UIViewRepresentable {
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleBackgroundTap(_:)))
         tap.delegate = context.coordinator
         map.addGestureRecognizer(tap)
-        let start = LocationManager.shared.currentLocation ?? CLLocationCoordinate2D(latitude: 14.5547, longitude: 121.0244)
+        let start = LocationManager.shared.currentLocation ?? LocationManager.defaultCoordinate
         map.setRegion(MKCoordinateRegion(center: start, latitudinalMeters: 1500, longitudinalMeters: 1500), animated: false)
         return map
     }
