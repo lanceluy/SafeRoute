@@ -31,6 +31,7 @@ final class AppState: ObservableObject {
         let socket = WebSocketClient.shared
         socket.onHazardFrame = { [weak self] frame in self?.handle(frame) }
         socket.onSubmissionFrame = { [weak self] frame in self?.reports.handle(frame) }
+        socket.onReportUpdate = { [weak self] frame in self?.handle(frame) }
         // Frames sent while the socket was down are lost: re-fetch what they would have changed.
         socket.onReconnected = { [weak self] in
             guard let self, self.currentUser != nil else { return }
@@ -206,6 +207,21 @@ final class AppState: ObservableObject {
         Task { await meta.refresh() }
         Task { await reports.load(reset: true) }
         Task { await flushOfflineQueue() }
+    }
+
+    /// Something happened to one of the user's reports: say so, and refresh what My Reports shows.
+    private func handle(_ frame: ReportUpdateFrame) {
+        let symbol: String
+        switch frame.change {
+        case "RESOLVED": symbol = "checkmark.seal.fill"
+        case "REMOVED": symbol = "xmark.octagon.fill"
+        case "EXPIRED": symbol = "clock.badge.xmark"
+        default: symbol = "building.2.fill"
+        }
+        show(Toast(message: "\(frame.title). \(frame.body)", systemImage: symbol,
+                   style: frame.change == "REMOVED" ? .warning : .success))
+        Task { await map.fetchAndUpsert(frame.hazardId) }
+        Task { await reports.load(reset: true) }
     }
 
     private func handle(_ frame: HazardEventFrame) {

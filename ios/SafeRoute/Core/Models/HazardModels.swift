@@ -472,6 +472,14 @@ struct MyReport: Codable, Identifiable {
             return (hazard.status.label, hazard.status.symbolName, hazard.status.color)
         }
     }
+
+    /// What the city is doing about it, if anything yet (active reports only).
+    var cityResponseLine: String? {
+        guard let hazard, hazard.status.isActive, let department = CityDepartments.name(hazard.assignedDepartment) else { return nil }
+        var line = "City assigned it to \(department)"
+        if let at = hazard.assignedAt { line += " · \(Format.relativeInSentence(at))" }
+        return line
+    }
 }
 
 struct PageResponse<T: Codable & Sendable>: Codable, Sendable {
@@ -529,6 +537,8 @@ struct CoverageArea: Codable {
 struct NotificationPreferences: Codable, Equatable {
     var radiusMeters: Int
     var enabledTypes: Set<HazardType>
+    /// Updates about the user's own reports (assigned, resolved, removed, expired). Older servers omit it.
+    var reportUpdates: Bool? = true
 
     static let `default` = NotificationPreferences(radiusMeters: 400, enabledTypes: Set(HazardType.reportable))
 }

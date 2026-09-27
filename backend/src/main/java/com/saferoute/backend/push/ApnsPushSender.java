@@ -94,7 +94,7 @@ public class ApnsPushSender implements PushSender {
                     .header("apns-priority", "10")
                     .header("apns-expiration", Long.toString(Instant.now().plus(ALERT_EXPIRY).getEpochSecond()))
                     // A Kafka redelivery of the same hazard replaces the alert instead of stacking a second one.
-                    .header("apns-collapse-id", message.hazardId().toString())
+                    .header("apns-collapse-id", ("report_update".equals(message.kind()) ? "report-" : "") + message.hazardId())
                     .POST(HttpRequest.BodyPublishers.ofString(payload(message)))
                     .build();
         } catch (JsonProcessingException e) {
@@ -115,8 +115,9 @@ public class ApnsPushSender implements PushSender {
                 "aps", Map.of(
                         "alert", Map.of("title", message.title(), "body", message.body()),
                         "sound", "default",
-                        "thread-id", "hazard-alerts"),
-                "hazardId", message.hazardId().toString()));
+                        "thread-id", "report_update".equals(message.kind()) ? "report-updates" : "hazard-alerts"),
+                "hazardId", message.hazardId().toString(),
+                "kind", message.kind()));
     }
 
     synchronized String providerToken(Instant now) {

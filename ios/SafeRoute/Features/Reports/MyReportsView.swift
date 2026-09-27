@@ -364,6 +364,11 @@ private struct ReportCard: View {
                     Text(detailLine)
                         .font(SR.Font.meta)
                         .foregroundStyle(report.submission.status == .failed ? SR.Palette.critical : SR.Palette.textSecondary)
+                    if let city = report.cityResponseLine {
+                        Label(city, systemImage: "building.2.fill")
+                            .font(SR.Font.meta.weight(.semibold))
+                            .foregroundStyle(SR.Palette.navy)
+                    }
                     if report.mergedIntoExisting {
                         Text("Someone had already reported this — your report counted as a confirmation.")
                             .font(SR.Font.meta)

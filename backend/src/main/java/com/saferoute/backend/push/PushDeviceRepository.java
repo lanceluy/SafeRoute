@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 public interface PushDeviceRepository extends JpaRepository<PushDevice, String> {
 
@@ -20,6 +21,8 @@ public interface PushDeviceRepository extends JpaRepository<PushDevice, String> 
     List<PushDevice> findWithFreshLocationIn(@Param("since") Instant since,
                                              @Param("minLat") double minLat, @Param("maxLat") double maxLat,
                                              @Param("minLon") double minLon, @Param("maxLon") double maxLon);
+
+    List<PushDevice> findByUserId(UUID userId);
 
     @Modifying
     @Query("""

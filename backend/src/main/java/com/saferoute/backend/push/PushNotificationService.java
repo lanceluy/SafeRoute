@@ -97,7 +97,7 @@ public class PushNotificationService {
     }
 
     /** OPEN_MANHOLE -> "Open manhole". */
-    static String label(Enum<?> value) {
+    public static String label(Enum<?> value) {
         if (value == null) return "Unknown";
         String words = value.name().replace('_', ' ').toLowerCase(Locale.ROOT);
         return Character.toUpperCase(words.charAt(0)) + words.substring(1);

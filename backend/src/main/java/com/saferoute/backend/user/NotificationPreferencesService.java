@@ -15,7 +15,8 @@ import java.util.UUID;
 @Service
 public class NotificationPreferencesService {
 
-    public record PreferencesDto(int radiusMeters, Set<HazardType> enabledTypes) {
+    /** {@code reportUpdates} null on update means "leave as is" (older app versions don't send it). */
+    public record PreferencesDto(int radiusMeters, Set<HazardType> enabledTypes, Boolean reportUpdates) {
     }
 
     private final NotificationPreferencesRepository repository;
@@ -28,8 +29,12 @@ public class NotificationPreferencesService {
     }
 
     public PreferencesDto get(UUID userId) {
-        NotificationPreferences prefs = load(userId);
-        return new PreferencesDto(prefs.getRadiusMeters(), prefs.enabledTypes());
+        return toDto(load(userId));
+    }
+
+    /** Whether to tell this user what happened to hazards they reported. */
+    public boolean wantsReportUpdates(UUID userId) {
+        return load(userId).isReportUpdatesEnabled();
     }
 
     @Transactional
@@ -37,11 +42,16 @@ public class NotificationPreferencesService {
         NotificationPreferences prefs = load(userId);
         prefs.setRadiusMeters(dto.radiusMeters());
         prefs.setEnabledTypes(dto.enabledTypes() != null ? dto.enabledTypes() : EnumSet.noneOf(HazardType.class));
+        if (dto.reportUpdates() != null) prefs.setReportUpdatesEnabled(dto.reportUpdates());
         prefs.setUpdatedAt(Instant.now());
         repository.save(prefs);
         // Live sessions pick the change up immediately, without reconnecting.
         registry.updatePreferences(userId, toAlertPreferences(prefs));
-        return new PreferencesDto(prefs.getRadiusMeters(), prefs.enabledTypes());
+        return toDto(prefs);
+    }
+
+    private static PreferencesDto toDto(NotificationPreferences prefs) {
+        return new PreferencesDto(prefs.getRadiusMeters(), prefs.enabledTypes(), prefs.isReportUpdatesEnabled());
     }
 
     public AlertPreferences alertPreferences(UUID userId) {

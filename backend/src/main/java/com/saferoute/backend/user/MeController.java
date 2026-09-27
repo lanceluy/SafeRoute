@@ -25,7 +25,9 @@ import org.springframework.web.bind.annotation.*;
 public class MeController {
 
     public record PreferencesRequest(@Min(100) @Max(5000) int radiusMeters,
-                                     java.util.Set<com.saferoute.backend.hazard.HazardType> enabledTypes) {
+                                     java.util.Set<com.saferoute.backend.hazard.HazardType> enabledTypes,
+                                     /** Optional: updates about the user's own reports. */
+                                     Boolean reportUpdates) {
     }
 
     public record PushDeviceRequest(@NotNull @Pattern(regexp = "^[0-9a-fA-F]{64,200}$") String deviceToken) {
@@ -71,11 +73,11 @@ public class MeController {
     }
 
     @PutMapping("/notification-preferences")
-    @Operation(summary = "Alert radius (100–5000 m) and which hazard types trigger alerts")
+    @Operation(summary = "Alert radius (100–5000 m), which hazard types trigger alerts, and updates about your reports")
     public NotificationPreferencesService.PreferencesDto updatePreferences(@AuthenticationPrincipal AuthenticatedUser principal,
                                                                            @Valid @RequestBody PreferencesRequest request) {
         return preferencesService.update(principal.id(),
-                new NotificationPreferencesService.PreferencesDto(request.radiusMeters(), request.enabledTypes()));
+                new NotificationPreferencesService.PreferencesDto(request.radiusMeters(), request.enabledTypes(), request.reportUpdates()));
     }
 
     @PutMapping("/push-device")

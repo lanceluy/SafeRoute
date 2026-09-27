@@ -47,9 +47,23 @@ struct SubmissionProcessedFrame: Codable {
     let message: String?
 }
 
+/// What happened to a hazard the user reported: assigned to a department, resolved, removed or expired.
+struct ReportUpdateFrame: Codable {
+    let type: String
+    let hazardId: UUID
+    let hazardType: HazardType
+    let change: String
+    let status: HazardStatus
+    let assignedDepartment: String?
+    let title: String
+    let body: String
+    let occurredAt: Date?
+}
+
 enum ServerFrame {
     case hazard(HazardEventFrame)
     case submission(SubmissionProcessedFrame)
+    case reportUpdate(ReportUpdateFrame)
 
     private struct Envelope: Decodable { let type: String }
 
@@ -57,6 +71,9 @@ enum ServerFrame {
         guard let envelope = try? JSONDecoder.api.decode(Envelope.self, from: data) else { return nil }
         if envelope.type == "submission_processed" {
             return (try? JSONDecoder.api.decode(SubmissionProcessedFrame.self, from: data)).map(ServerFrame.submission)
+        }
+        if envelope.type == "report_update" {
+            return (try? JSONDecoder.api.decode(ReportUpdateFrame.self, from: data)).map(ServerFrame.reportUpdate)
         }
         if envelope.type.hasPrefix("hazard_") {
             return (try? JSONDecoder.api.decode(HazardEventFrame.self, from: data)).map(ServerFrame.hazard)

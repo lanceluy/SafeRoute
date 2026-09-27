@@ -41,6 +41,11 @@ public class NotificationPreferences {
     @Column(name = "construction_enabled", nullable = false) @Builder.Default private boolean constructionEnabled = true;
     @Column(name = "path_obstruction_enabled", nullable = false) @Builder.Default private boolean pathObstructionEnabled = true;
 
+    /** Tell the user what happens to hazards they reported. */
+    @Column(name = "report_updates_enabled", nullable = false)
+    @Builder.Default
+    private boolean reportUpdatesEnabled = true;
+
     @Column(name = "updated_at", nullable = false)
     @Builder.Default
     private Instant updatedAt = Instant.now();

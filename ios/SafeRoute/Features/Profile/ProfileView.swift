@@ -273,6 +273,18 @@ struct NotificationPreferencesView: View {
                             .foregroundStyle(SR.Palette.textSecondary)
                     }
                 }
+                VStack(alignment: .leading, spacing: SR.Space.sectionTitleToCard) {
+                    SRSectionHeader(title: "Your reports")
+                    SRCard {
+                        Toggle("Updates on my reports", isOn: Binding(
+                            get: { prefs.reportUpdates ?? true },
+                            set: { on in update { $0.reportUpdates = on } }))
+                            .font(SR.Font.body)
+                        Text("Hear when the city assigns, resolves or removes a hazard you reported, or when it expires. With background alerts on, these arrive even when SafeRoute is closed.")
+                            .font(SR.Font.meta)
+                            .foregroundStyle(SR.Palette.textSecondary)
+                    }
+                }
                 backgroundAlertsSection
             } else if let errorMessage {
                 SREmptyState(systemImage: "exclamationmark.triangle", title: "Couldn't load preferences", message: errorMessage)
