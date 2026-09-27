@@ -1,10 +1,16 @@
 package com.saferoute.backend.moderation;
 
+import com.saferoute.backend.auth.AuthenticatedUser;
 import com.saferoute.backend.common.ApiException;
 import com.saferoute.backend.common.PageResponse;
 import com.saferoute.backend.hazard.dto.HazardResponse;
 import com.saferoute.backend.moderation.dto.ActivityEntry;
 import com.saferoute.backend.moderation.dto.ModerationStats;
+import com.saferoute.backend.moderation.dto.MunicipalResponseRequest;
+import com.saferoute.backend.moderation.dto.SavedViewRequest;
+import com.saferoute.backend.moderation.dto.SavedViewResponse;
+import jakarta.validation.Valid;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -24,9 +31,41 @@ import java.util.UUID;
 public class ModerationController {
 
     private final ModerationQueryService queries;
+    private final MunicipalResponseService responses;
+    private final SavedViewService savedViews;
 
-    public ModerationController(ModerationQueryService queries) {
+    public ModerationController(ModerationQueryService queries, MunicipalResponseService responses,
+                                SavedViewService savedViews) {
         this.queries = queries;
+        this.responses = responses;
+        this.savedViews = savedViews;
+    }
+
+    @PutMapping("/hazards/{id}/response")
+    @Operation(summary = "Set the city response: assigned department and municipal priority",
+            description = "Replaces both (null clears). Audited; commuters see it on the hazard in the app.")
+    public HazardResponse setResponse(@PathVariable UUID id, @Valid @RequestBody MunicipalResponseRequest request,
+                                      @AuthenticationPrincipal AuthenticatedUser principal) {
+        return responses.update(id, principal.id(), request);
+    }
+
+    @GetMapping("/saved-views")
+    @Operation(summary = "Your saved portal views")
+    public List<SavedViewResponse> savedViews(@AuthenticationPrincipal AuthenticatedUser principal) {
+        return savedViews.list(principal.id());
+    }
+
+    @PostMapping("/saved-views")
+    @Operation(summary = "Save a portal view (the same name replaces it)")
+    public SavedViewResponse saveView(@Valid @RequestBody SavedViewRequest request,
+                                      @AuthenticationPrincipal AuthenticatedUser principal) {
+        return savedViews.save(principal.id(), request);
+    }
+
+    @DeleteMapping("/saved-views/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteView(@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser principal) {
+        savedViews.delete(principal.id(), id);
     }
 
     @GetMapping("/hazards")
@@ -34,7 +73,7 @@ public class ModerationController {
             description = "Default order: DISPUTED first, then reports from the lowest-reputation reporters. "
                     + "`view` picks a queue tab and replaces `statuses`; every other filter narrows it further.")
     public PageResponse<HazardResponse> queue(
-            @Parameter(description = "attention, high, contested, expiring, unconfirmed, active or removed")
+            @Parameter(description = "attention, high, contested, expiring, unconfirmed, active, removed or unassigned")
             @RequestParam(required = false) String view,
             @Parameter(description = "Comma-separated statuses (default: active ones). Ignored with `view`.")
             @RequestParam(required = false) String statuses,
@@ -46,15 +85,18 @@ public class ModerationController {
             @Parameter(description = "Reported before (ISO-8601 instant)") @RequestParam(required = false) String to,
             @Parameter(description = "minLat,minLon,maxLat,maxLon") @RequestParam(required = false) String bbox,
             @Parameter(description = "Matches the description or the hazard type") @RequestParam(required = false) String q,
-            @Parameter(description = "review (default), newest, oldest, severity, confidence, disputed, confirmed, expiring")
+            @Parameter(description = "review (default), newest, oldest, severity, confidence, disputed, confirmed, expiring, priority")
             @RequestParam(required = false) String sort,
+            @Parameter(description = "Comma-separated department codes; UNASSIGNED for none")
+            @RequestParam(required = false) String departments,
+            @Parameter(description = "Comma-separated: LOW, NORMAL, HIGH, URGENT") @RequestParam(required = false) String priorities,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         requirePage(page, size);
         var filter = new ModerationQueryService.QueueFilter(
                 parseEnum(view, ModerationQueryService.View.class, "view"), statuses, types, severities, confidences,
                 parseInstant(from, "from"), parseInstant(to, "to"), parseBbox(bbox), q,
-                parseEnum(sort, ModerationQueryService.Sort.class, "sort"));
+                parseEnum(sort, ModerationQueryService.Sort.class, "sort"), departments, priorities);
         return queries.queue(filter, page, size);
     }
 

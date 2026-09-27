@@ -11,5 +11,7 @@ public enum HazardChange {
     EXPIRED,
     REMOVED,
     EDITED,
+    /** A department was assigned or the municipal priority changed. */
+    MUNICIPAL_RESPONSE,
     DUPLICATE_MERGED
 }

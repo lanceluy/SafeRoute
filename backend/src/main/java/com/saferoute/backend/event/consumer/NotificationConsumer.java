@@ -158,7 +158,7 @@ public class NotificationConsumer {
         return new HazardEventFrame(frameType, event.change(), event.hazardId(), event.type(),
                 event.latitude(), event.longitude(), event.status(), event.severity(),
                 event.confirmationCount(), event.disputeCount(), distance, alert, onRoute, distanceAhead,
-                event.metadata().occurredAt(), event.version());
+                event.metadata().occurredAt(), event.version(), event.assignedDepartment(), event.municipalPriority());
     }
 
     static String frameType(HazardChange change) {

@@ -33,14 +33,20 @@ public class ModerationQueryService {
     /** Shortcuts for the portal's queue tabs. */
     public enum View {
         /** Disputed, unverified high severity, or nobody has weighed in for a day. */
-        ATTENTION, HIGH, CONTESTED, EXPIRING, UNCONFIRMED, ACTIVE, REMOVED
+        ATTENTION, HIGH, CONTESTED, EXPIRING, UNCONFIRMED, ACTIVE, REMOVED,
+        /** Active and not yet assigned to a department. */
+        UNASSIGNED
     }
 
-    public enum Sort { REVIEW, NEWEST, OLDEST, SEVERITY, CONFIDENCE, DISPUTED, CONFIRMED, EXPIRING }
+    public enum Sort { REVIEW, NEWEST, OLDEST, SEVERITY, CONFIDENCE, DISPUTED, CONFIRMED, EXPIRING, PRIORITY }
+
+    /** In the {@code departments} filter: hazards nobody is assigned to. */
+    public static final String UNASSIGNED = "UNASSIGNED";
 
     /** Everything optional; {@code bbox} is minLat, minLon, maxLat, maxLon. */
     public record QueueFilter(View view, String statuses, String types, String severities, String confidences,
-                              Instant from, Instant to, double[] bbox, String query, Sort sort) {
+                              Instant from, Instant to, double[] bbox, String query, Sort sort,
+                              String departments, String priorities) {
     }
 
     static final int MAX_STATS_DAYS = 366;
@@ -68,12 +74,14 @@ public class ModerationQueryService {
     private final NamedParameterJdbcTemplate jdbc;
     private final HazardRepository hazardRepository;
     private final ExpiryPolicy expiryPolicy;
+    private final MunicipalDepartments departments;
 
     public ModerationQueryService(NamedParameterJdbcTemplate jdbc, HazardRepository hazardRepository,
-                                  ExpiryPolicy expiryPolicy) {
+                                  ExpiryPolicy expiryPolicy, MunicipalDepartments departments) {
         this.jdbc = jdbc;
         this.hazardRepository = hazardRepository;
         this.expiryPolicy = expiryPolicy;
+        this.departments = departments;
     }
 
     // ------------------------------------------------------------------ queue
@@ -117,6 +125,25 @@ public class ModerationQueryService {
             params.addValue("confidences", HazardService.parseEnumCsv(f.confidences(), Confidence.class, "confidences"));
             conditions.add(CONFIDENCE + " = ANY(string_to_array(:confidences, ','))");
         }
+        if (f.departments() != null && !f.departments().isBlank()) {
+            List<String> codes = Arrays.stream(f.departments().split(",")).map(String::trim).filter(s -> !s.isEmpty())
+                    .map(String::toUpperCase).distinct().toList();
+            for (String code : codes) {
+                if (!code.equals(UNASSIGNED) && !departments.contains(code)) throw badRequest("Unknown department: " + code);
+            }
+            List<String> named = codes.stream().filter(c -> !c.equals(UNASSIGNED)).toList();
+            List<String> any = new ArrayList<>();
+            if (!named.isEmpty()) {
+                params.addValue("departments", String.join(",", named));
+                any.add("h.assigned_department = ANY(string_to_array(:departments, ','))");
+            }
+            if (codes.contains(UNASSIGNED)) any.add("h.assigned_department IS NULL");
+            conditions.add("(" + String.join(" OR ", any) + ")");
+        }
+        if (f.priorities() != null && !f.priorities().isBlank()) {
+            params.addValue("priorities", HazardService.parseEnumCsv(f.priorities(), MunicipalPriority.class, "priorities"));
+            conditions.add("h.municipal_priority = ANY(string_to_array(:priorities, ','))");
+        }
         if (f.from() != null) {
             params.addValue("from", OffsetDateTime.ofInstant(f.from(), ZoneOffset.UTC));
             conditions.add("h.created_at >= :from");
@@ -154,6 +181,7 @@ public class ModerationQueryService {
             case UNCONFIRMED -> UNCONFIRMED;
             case ACTIVE -> ACTIVE;
             case REMOVED -> "h.status = 'REMOVED'";
+            case UNASSIGNED -> "(" + ACTIVE + " AND h.assigned_department IS NULL)";
         };
     }
 
@@ -179,6 +207,10 @@ public class ModerationQueryService {
             case DISPUTED -> "h.dispute_count DESC, h.created_at DESC";
             case CONFIRMED -> "h.confirmation_count DESC, h.created_at DESC";
             case EXPIRING -> "h.expires_at ASC";
+            // Unset priority sorts after LOW: the city hasn't ranked it yet.
+            case PRIORITY -> "CASE h.municipal_priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'NORMAL' THEN 2"
+                    + " WHEN 'LOW' THEN 3 ELSE 4 END, CASE h.severity WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END,"
+                    + " h.created_at ASC";
         };
     }
 

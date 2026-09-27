@@ -1,5 +1,6 @@
 package com.saferoute.backend.coverage;
 
+import com.saferoute.backend.moderation.MunicipalDepartments;
 import com.saferoute.backend.hazard.HazardType;
 import com.saferoute.backend.spatial.HazardClassifier;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,9 +31,11 @@ public class MetaController {
     private final CoverageArea coverageArea;
     private final HazardClassifier classifier;
     private final double routeCorridorMeters;
+    private final MunicipalDepartments departments;
 
-    public MetaController(CoverageArea coverageArea, HazardClassifier classifier,
+    public MetaController(CoverageArea coverageArea, HazardClassifier classifier, MunicipalDepartments departments,
                           @Value("${saferoute.notification.route-corridor-meters}") double routeCorridorMeters) {
+        this.departments = departments;
         this.coverageArea = coverageArea;
         this.classifier = classifier;
         this.routeCorridorMeters = routeCorridorMeters;
@@ -49,6 +52,12 @@ public class MetaController {
     public CoverageResponse coverage() {
         return new CoverageResponse(coverageArea.isEnabled(), coverageArea.getName(),
                 coverageArea.getMinLat(), coverageArea.getMaxLat(), coverageArea.getMinLon(), coverageArea.getMaxLon());
+    }
+
+    @GetMapping("/departments")
+    @Operation(summary = "City departments a hazard can be assigned to, in display order")
+    public List<MunicipalDepartments.Department> departments() {
+        return departments.list();
     }
 
     @GetMapping("/severity-questions")

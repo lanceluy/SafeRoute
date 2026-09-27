@@ -28,7 +28,9 @@ public class HazardAuditLog {
         FIELD_EDITED,
         MODERATOR_RESOLVED,
         MODERATOR_REOPENED,
-        MODERATOR_REMOVED
+        MODERATOR_REMOVED,
+        MUNICIPAL_ASSIGNED,
+        MUNICIPAL_PRIORITY
     }
 
     @Id

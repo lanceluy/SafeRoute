@@ -106,6 +106,17 @@ public class Hazard {
     @Column(name = "resolved_at")
     private Instant resolvedAt;
 
+    /** Department code (see MunicipalDepartments) handling it; null = unassigned. */
+    @Column(name = "assigned_department", length = 40)
+    private String assignedDepartment;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "municipal_priority", length = 10)
+    private MunicipalPriority municipalPriority;
+
+    @Column(name = "assigned_at")
+    private Instant assignedAt;
+
     @PreUpdate
     public void onUpdate() {
         this.updatedAt = Instant.now();

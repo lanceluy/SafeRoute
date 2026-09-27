@@ -3,6 +3,7 @@ package com.saferoute.backend.event.dto;
 import com.saferoute.backend.event.EventMetadata;
 import com.saferoute.backend.hazard.Hazard;
 import com.saferoute.backend.hazard.HazardStatus;
+import com.saferoute.backend.hazard.MunicipalPriority;
 import com.saferoute.backend.hazard.HazardType;
 import com.saferoute.backend.hazard.Severity;
 
@@ -28,11 +29,14 @@ public record HazardUpdatedEvent(
         Severity severity,
         int confirmationCount,
         int disputeCount,
-        long version
+        long version,
+        String assignedDepartment,
+        MunicipalPriority municipalPriority
 ) {
     public static HazardUpdatedEvent of(String eventType, Hazard hazard, HazardChange change, UUID actorUserId) {
         return new HazardUpdatedEvent(EventMetadata.create(eventType), hazard.getId(), change, actorUserId,
                 hazard.getType(), hazard.latitude(), hazard.longitude(), hazard.getStatus(), hazard.getSeverity(),
-                hazard.getConfirmationCount(), hazard.getDisputeCount(), hazard.getVersion());
+                hazard.getConfirmationCount(), hazard.getDisputeCount(), hazard.getVersion(),
+                hazard.getAssignedDepartment(), hazard.getMunicipalPriority());
     }
 }

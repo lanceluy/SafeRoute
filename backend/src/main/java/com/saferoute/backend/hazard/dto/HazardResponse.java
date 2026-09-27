@@ -27,7 +27,11 @@ public record HazardResponse(
         Instant expiresAt,
         Instant resolvedAt,
         /** Committed row version; clients keep the highest version they have seen per hazard. */
-        long version
+        long version,
+        /** City response: department code (names from /api/meta/departments), null = unassigned. */
+        String assignedDepartment,
+        MunicipalPriority municipalPriority,
+        Instant assignedAt
 ) {
     public static HazardResponse from(Hazard hazard) {
         return new HazardResponse(
@@ -49,7 +53,10 @@ public record HazardResponse(
                 hazard.getLastConfirmedAt(),
                 hazard.getExpiresAt(),
                 hazard.getResolvedAt(),
-                hazard.getVersion() != null ? hazard.getVersion() : 0
+                hazard.getVersion() != null ? hazard.getVersion() : 0,
+                hazard.getAssignedDepartment(),
+                hazard.getMunicipalPriority(),
+                hazard.getAssignedAt()
         );
     }
 }

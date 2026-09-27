@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.saferoute.backend.support.IntegrationTestBase;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.http.MediaType;
 import org.springframework.lang.NonNull;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketHttpHeaders;
@@ -24,6 +25,7 @@ import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 class WebSocketIntegrationTest extends IntegrationTestBase {
 
@@ -147,6 +149,16 @@ class WebSocketIntegrationTest extends IntegrationTestBase {
                 && "CONSTRUCTION".equals(f.get("hazardType").asText()));
         assertThat(created.get("alert").asBoolean()).isFalse();
         assertThat(snoop.frames.poll(2, TimeUnit.SECONDS)).isNull();
+
+        // The city response goes out live too, so the portal and commuters' apps stay in step.
+        String hazardId = created.get("hazardId").asText();
+        expectStatus(mvc.perform(put("/api/moderation/hazards/" + hazardId + "/response").with(bearer(mod))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(toJson(Map.of("department", "ENGINEERING", "priority", "HIGH")))).andReturn(), 200);
+        JsonNode response = portal.await(f -> "MUNICIPAL_RESPONSE".equals(f.get("change").asText()));
+        assertThat(response.get("type").asText()).isEqualTo("hazard_updated");
+        assertThat(response.get("assignedDepartment").asText()).isEqualTo("ENGINEERING");
+        assertThat(response.get("municipalPriority").asText()).isEqualTo("HIGH");
         portal.close();
         snoop.close();
     }

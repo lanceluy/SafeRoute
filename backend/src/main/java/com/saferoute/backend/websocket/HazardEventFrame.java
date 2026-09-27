@@ -3,6 +3,7 @@ package com.saferoute.backend.websocket;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.saferoute.backend.event.dto.HazardChange;
 import com.saferoute.backend.hazard.HazardStatus;
+import com.saferoute.backend.hazard.MunicipalPriority;
 import com.saferoute.backend.hazard.HazardType;
 import com.saferoute.backend.hazard.Severity;
 
@@ -34,6 +35,9 @@ public record HazardEventFrame(
         Double distanceAheadMeters,
         Instant occurredAt,
         /** Hazard row version: clients ignore a frame older than the state they already hold. */
-        long version
+        long version,
+        /** Current city response; omitted when unassigned / not set. */
+        String assignedDepartment,
+        MunicipalPriority municipalPriority
 ) {
 }
