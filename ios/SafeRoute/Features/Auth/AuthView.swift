@@ -11,11 +11,10 @@ struct AuthView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: SR.Space.xl) {
                 VStack(alignment: .leading, spacing: SR.Space.sm) {
-                    Image(systemName: "figure.walk")
-                        .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(SR.Palette.onNavy)
-                        .frame(width: 56, height: 56)
-                        .background(SR.Palette.navy, in: RoundedRectangle(cornerRadius: SR.Radius.button, style: .continuous))
+                    Image("LogoMark")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 64)
                         .accessibilityHidden(true)
                     Text(viewModel.mode == .login ? "Welcome back" : "Join SafeRoute")
                         .font(SR.Font.pageTitle)

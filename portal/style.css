@@ -2,7 +2,8 @@
 body { display: flex; flex-direction: column; height: 100vh; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; color: #0f172a; }
 
 header { background: #1e293b; color: white; padding: 12px 24px; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
-header h1 { font-size: 18px; }
+header h1 { font-size: 18px; display: flex; align-items: center; gap: 10px; }
+header h1 .logo { height: 32px; width: auto; }
 .auth { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 14px; }
 .auth[hidden] { display: none; }
 header input { padding: 6px 10px; border-radius: 4px; border: 1px solid #475569; background: #334155; color: white; }
