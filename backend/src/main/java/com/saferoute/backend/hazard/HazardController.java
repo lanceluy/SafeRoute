@@ -1,6 +1,7 @@
 package com.saferoute.backend.hazard;
 
 import com.saferoute.backend.auth.AuthenticatedUser;
+import com.saferoute.backend.common.ApiException;
 import com.saferoute.backend.hazard.dto.*;
 import com.saferoute.backend.ratelimit.RateLimitPolicy;
 import com.saferoute.backend.ratelimit.RateLimitService;
@@ -24,6 +25,7 @@ import java.util.UUID;
 public class HazardController {
 
     static final String MODERATOR_ONLY = "hasAnyRole('MODERATOR','MUNICIPAL_OFFICIAL')";
+    static final int MAX_REMOVAL_REASON = 500;
     public static final String TRUNCATED_HEADER = "X-Result-Truncated";
 
     private final HazardService hazardService;
@@ -145,8 +147,13 @@ public class HazardController {
             description = "Soft delete: status becomes REMOVED; reporter reputation is penalised.")
     @ResponseStatus(HttpStatus.OK)
     public HazardResponse remove(@PathVariable UUID id,
-                                 @Parameter(description = "Reason, recorded in the audit log") @RequestParam(required = false) String reason,
+                                 @Parameter(description = "Why it's being removed (required), recorded in the audit log")
+                                 @RequestParam(required = false) String reason,
                                  @AuthenticationPrincipal AuthenticatedUser principal) {
-        return hazardService.remove(id, principal.id(), reason);
+        if (reason == null || reason.isBlank() || reason.length() > MAX_REMOVAL_REASON) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED",
+                    "reason is required (at most " + MAX_REMOVAL_REASON + " characters)");
+        }
+        return hazardService.remove(id, principal.id(), reason.trim());
     }
 }

@@ -100,23 +100,6 @@ public interface HazardRepository extends JpaRepository<Hazard, UUID> {
         """, nativeQuery = true)
     List<UUID> findExpiredIds(@Param("now") Instant now, @Param("limit") int limit);
 
-    /**
-     * Moderation queue: disputed first, then hazards whose reporters have the least reputation —
-     * reputation is used as one ordering signal, never as a verdict.
-     */
-    @Query(value = """
-        SELECT h.* FROM hazards h JOIN users u ON u.id = h.reporter_id
-        WHERE h.status = ANY(string_to_array(:statuses, ','))
-        ORDER BY (h.status = 'DISPUTED') DESC, u.reputation_score ASC, h.updated_at DESC
-        LIMIT :limit OFFSET :offset
-        """, nativeQuery = true)
-    List<Hazard> findModerationQueue(@Param("statuses") String commaSeparatedStatuses,
-                                     @Param("limit") int limit,
-                                     @Param("offset") int offset);
-
-    @Query(value = "SELECT count(*) FROM hazards WHERE status = ANY(string_to_array(:statuses, ','))", nativeQuery = true)
-    long countByStatuses(@Param("statuses") String commaSeparatedStatuses);
-
     List<Hazard> findByIdIn(Collection<UUID> ids);
 
     long countByReporterIdAndReporterRewardedTrue(UUID reporterId);

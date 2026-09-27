@@ -222,13 +222,6 @@ public class HazardService {
         return PageResponse.of(items, page, size, submissions.getTotalElements());
     }
 
-    public PageResponse<HazardResponse> moderationQueue(String statuses, int page, int size) {
-        String statusFilter = parseStatuses(statuses);
-        List<HazardResponse> items = hazardRepository.findModerationQueue(statusFilter, size, page * size)
-                .stream().map(HazardResponse::from).toList();
-        return PageResponse.of(items, page, size, hazardRepository.countByStatuses(statusFilter));
-    }
-
     // ------------------------------------------------------------------ community commands (async)
 
     @Transactional
@@ -444,17 +437,17 @@ public class HazardService {
         return value;
     }
 
-    static String parseTypes(String csv) {
+    public static String parseTypes(String csv) {
         if (csv == null || csv.isBlank()) return null;
         return parseEnumCsv(csv, HazardType.class, "types");
     }
 
-    static String parseStatuses(String csv) {
+    public static String parseStatuses(String csv) {
         if (csv == null || csv.isBlank()) return ACTIVE_STATUSES;
         return parseEnumCsv(csv, HazardStatus.class, "statuses");
     }
 
-    private static <E extends Enum<E>> String parseEnumCsv(String csv, Class<E> type, String param) {
+    public static <E extends Enum<E>> String parseEnumCsv(String csv, Class<E> type, String param) {
         try {
             return Arrays.stream(csv.split(","))
                     .map(String::trim).filter(s -> !s.isEmpty())
