@@ -26,10 +26,18 @@ The proposal still contains template scaffolding that must be replaced before su
 
    Tools: *Mobile development: Xcode + SwiftUI · Mapping: Apple MapKit.*
 
-2. **Municipal web portal and analytics → future work** (p. 6, 7, 12, 13). The prototype has no portal and no Municipal Analytics Service. Move the portal, heatmaps and statistics to Future Work:
-   > "A municipal web portal (active-hazard map, heatmap, per-area counts and trends) is future work. The prototype already models municipal officials as a role that can resolve and reopen hazards through the API, and every such action is audited."
+2. **Municipal web portal and analytics: now implemented, but not as a separate service** (p. 6, 7, 12, 13). `portal/` is a React + TypeScript web app (Vite) for moderators and municipal officials:
+   - an active-hazard map with clustering and density/severity heatmaps
+   - a moderation queue with filters, sorting and search
+   - resolve / reopen / remove, with required removal reasons
+   - department assignment and a municipal priority kept separate from severity
+   - bulk actions, saved views, and CSV/PDF export
+   - an Overview dashboard, Analytics (reports vs resolved, backlog, resolution time), and an Activity page built on the audit log
 
-   If the paper is graded as a fixed specification, a minimum portal would be an active-hazard map with resolve/reopen actions (the API already supports them) — decide this with the team.
+   There is no separate "Municipal Analytics Service". The statistics come from read-only endpoints in the same Spring Boot application (`/api/moderation/stats`, `/api/moderation/activity`). The per-barangay numbers are computed in the browser from bundled OpenStreetMap boundaries. Suggested wording:
+   > "A municipal web portal (React) gives officials an active-hazard map with heatmaps, a moderation queue, per-barangay statistics and trends, and an audit trail. Its statistics are served by read-only endpoints of the same Spring Boot backend rather than by a separate analytics service."
+
+   Street names in the portal come from OpenStreetMap's public Nominatim service, so hazard coordinates are sent to a third party. Say so if the paper discusses privacy.
 
 3. **"API gateway" → "Spring Boot REST API"** (p. 10, §3.1 phase 3). There is one Spring Boot API, not a separate gateway.
 
@@ -38,11 +46,11 @@ The proposal still contains template scaffolding that must be replaced before su
 
    The processing and notification modules have separate consumer groups and can be stopped independently (the fault-tolerance test does exactly that), but they are deployed together.
 
-5. **Not every write goes through Kafka.** Reports, confirmations, resolution votes and moderator resolution are Kafka commands processed asynchronously. Field edits, moderator reopen and remove are synchronous database operations that then publish an outcome event. Describe both paths.
+5. **Not every write goes through Kafka.** Reports, confirmations, resolution votes and moderator resolution are Kafka commands processed asynchronously. Field edits, moderator reopen and remove, and the city response (department and priority) are synchronous database operations that then publish an outcome event. Describe both paths.
 
 6. **Event names** (p. 12–13 use `hazard_confirmed`). The implemented topics are commands `hazard_reported`, `hazard_verified`, `hazard_resolution_requested`, `hazard_resolved`, and outcomes `hazard_created`, `hazard_updated`, `submission_processed`; failed records go to `<topic>.dlq`. Every message passes through a transactional outbox (committed with the state change, then published).
 
-7. **Notifications are connected-session only** (p. 12: "WebSockets or push notifications"). Alerts reach a phone while the app's WebSocket is connected and are shown as local notifications. There is no APNs push and no background location; say so.
+7. **Notifications: WebSocket first, APNs when configured** (p. 12: "WebSockets or push notifications"). Alerts reach a phone over the app's WebSocket while it's open or navigating. APNs push for users who opt into background alerts (approximate background location, kept 2 hours) is implemented, but it needs a paid Apple Developer account, so it's off by default. Reporters also get report updates when their report is assigned to a department, resolved, removed or expires: a WebSocket frame, or a push when configured. Staff sessions in the portal watch the whole pilot area through the same WebSocket. State which of these were demonstrated.
 
 8. **IoT keyword** (p. 2). Remove "Internet of Things (IoT)" from the keywords, or add: *"SafeRoute does not require IoT sensing hardware in the current prototype."*
 
@@ -56,6 +64,9 @@ The proposal still contains template scaffolding that must be replaced before su
 
 12. **Unmeasured claims** (p. 2: "high resilience", "instantaneous map UI updates", "significantly decreased event processing latency"). Replace with measured statements from `node benchmark/simulator/report.mjs`, e.g.:
     > "In our local test environment (single Kafka broker, one laptop), median WebSocket notification latency was X ms (p95 Y ms, n = N over K runs), versus a median detection latency of … for clients polling every 3 seconds."
+
+    Measured numbers are now in [`BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md). Suggested wording:
+    > "In our local test environment (one laptop, single Kafka broker), median WebSocket notification latency was 26 ms (p95 56 ms, n = 100 over 2 clean runs), versus 1,441 ms (p95 2,883 ms) for clients polling every 3 seconds. With the processing consumer stopped, 100 of 100 reports were retained and processed after restart (3 runs, 0 lost, backlog drained in 1–3 s). The backend processed about 125 reports/s; faster intake queued without loss."
 
     The earlier sample numbers in `benchmark/README.md` came from instruments that have since been corrected (confirmations were never generated; polling detections depended on the WebSocket client; failed reports counted as throughput). Re-run the experiments and quote only new, saved results.
 
@@ -76,4 +87,6 @@ The proposal still contains template scaffolding that must be replaced before su
 | Comparison against polling (p. 6, 15) | `benchmark/simulator/latency-compare.mjs` and `k6/polling-baseline.js`. |
 | Synthetic hazard and user activity (p. 14) | `benchmark/simulator/simulate.mjs` (normal, rush hour, severe weather, duplicate burst, failure recovery). |
 | Disabling a consumer to test recovery (p. 15) | `simulate.mjs failure_recovery` stops the report listener only — not the whole application, database or broker. Say so. |
-| Municipal officials resolving hazards | A `MUNICIPAL_OFFICIAL` role can resolve/reopen/remove via the API; there is no portal. |
+| Municipal officials resolving hazards | A `MUNICIPAL_OFFICIAL` role can resolve/reopen/remove, assign departments and set priorities in the web portal; every action is audited. |
+| Heatmaps, per-area statistics, trends (p. 6, 12) | In the portal: density and severity heatmaps, a per-barangay table, reported vs resolved, backlog, and resolution time by type. |
+| Commuters informed of outcomes | Reporters are told when their report is assigned, resolved, removed or expires, and My Reports shows the assigned department. |

@@ -96,6 +96,12 @@ node simulator/report.mjs
 Prints the latest run of each scenario. Report medians and p95/p99, not just averages, and
 state the environment (machine, Docker resources, single Kafka broker) next to any number.
 
+### Current results
+
+See [`../docs/BENCHMARK_RESULTS.md`](../docs/BENCHMARK_RESULTS.md) (27–28 Sep 2026, 3 rounds, separate
+benchmark database). Run the latency comparison on an idle system, before any k6 load, and keep
+the laptop awake. A k6 backlog or a suspended machine shows up as huge latencies.
+
 ### Earlier sample run (development laptop, single broker, 2026-09-24) — superseded
 
 These numbers came from a short run of an **earlier version of the instruments**, which never

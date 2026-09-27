@@ -10,6 +10,7 @@
 // time, all on this process's clock (no skew correction needed). Reports are sent at randomized
 // intervals (gap × 0.5–1.5) so polls are not phase-locked to them. Raw observations are saved.
 import { writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { api, createUsers, openSocket, sleep, now, CENTER } from './lib.mjs';
 import { correlateDetections, sourceRevision } from './analysis.mjs';
 
@@ -107,7 +108,7 @@ async function main() {
   writeFileSync(file, JSON.stringify(summary, null, 2));
   const { raw, ...printable } = summary;
   console.log(JSON.stringify(printable, null, 2));
-  console.log(`Saved ${file.pathname}`);
+  console.log(`Saved ${fileURLToPath(file)}`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

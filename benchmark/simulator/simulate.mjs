@@ -6,6 +6,7 @@
 // Scenarios: normal | rush_hour | severe_weather | duplicate_burst | failure_recovery
 // Writes a JSON summary to ../results/.
 import { writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { api, createUsers, login, randomPoint, pick, TYPES, sleep, now, prometheus, CENTER } from './lib.mjs';
 import { summarizeRun, workloadMix, sourceRevision } from './analysis.mjs';
 
@@ -147,7 +148,7 @@ async function main() {
   writeFileSync(file, JSON.stringify(summary, null, 2));
   const { raw, ...printable } = summary;
   console.log(JSON.stringify(printable, null, 2));
-  console.log(`Saved ${file.pathname}`);
+  console.log(`Saved ${fileURLToPath(file)}`);
 }
 
 async function awaitTerminal(s, timeoutMs) {
