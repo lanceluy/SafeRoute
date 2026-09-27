@@ -230,6 +230,9 @@ final class MapViewModel: ObservableObject {
             existing.type = frame.hazardType
             existing.updatedAt = frame.occurredAt ?? Date()
             existing.version = frame.version ?? existing.version
+            // Portal changes to the city response arrive here too.
+            existing.assignedDepartment = frame.assignedDepartment
+            existing.municipalPriority = MunicipalPriority(serverValue: frame.municipalPriority)
             hazards[frame.hazardId] = existing
         } else {
             hazards[frame.hazardId] = Hazard(
@@ -237,7 +240,9 @@ final class MapViewModel: ObservableObject {
                 description: nil, photoUrl: nil, status: frame.status, severity: frame.severity, severityAnswer: nil,
                 confirmationCount: frame.confirmationCount, disputeCount: frame.disputeCount, confidence: nil,
                 reporterId: nil, createdAt: frame.occurredAt ?? Date(), updatedAt: frame.occurredAt ?? Date(),
-                lastConfirmedAt: nil, expiresAt: nil, resolvedAt: nil, version: frame.version)
+                lastConfirmedAt: nil, expiresAt: nil, resolvedAt: nil, version: frame.version,
+                assignedDepartment: frame.assignedDepartment,
+                municipalPriority: MunicipalPriority(serverValue: frame.municipalPriority))
         }
     }
 

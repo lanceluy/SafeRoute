@@ -20,6 +20,9 @@ struct HazardEventFrame: Codable, Identifiable, Hashable {
     let occurredAt: Date?
     /// Hazard row version; older frames than the stored snapshot are ignored.
     let version: Int64?
+    /// The city response as of this frame (absent = unassigned / not set).
+    var assignedDepartment: String?
+    var municipalPriority: String?
 
     var id: String { "\(hazardId.uuidString)-\(change)-\(occurredAt?.timeIntervalSince1970 ?? 0)" }
 

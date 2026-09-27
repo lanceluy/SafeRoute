@@ -136,6 +136,7 @@ struct APIEndpoint {
     static let coverage = APIEndpoint(path: "/meta/coverage")
     static let severityQuestions = APIEndpoint(path: "/meta/severity-questions")
     static let routing = APIEndpoint(path: "/meta/routing")
+    static let departments = APIEndpoint(path: "/meta/departments")
 
     static func uploadHazardImage(jpeg: Data) -> APIEndpoint {
         let boundary = "SafeRoute-\(UUID().uuidString)"

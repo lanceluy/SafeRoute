@@ -277,6 +277,10 @@ struct Hazard: Codable, Identifiable, Hashable {
     /// Server row version. Snapshots can arrive out of order (REST vs WebSocket, two Kafka
     /// topics), so the store keeps the highest version it has seen.
     var version: Int64?
+    /// The city's response, set in the municipal portal: department code and priority.
+    var assignedDepartment: String? = nil
+    var municipalPriority: MunicipalPriority? = nil
+    var assignedAt: Date? = nil
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -314,6 +318,42 @@ struct HazardDetail: Codable {
     let expiringSoon: Bool
 }
 
+/// How urgently the city means to deal with a hazard (its own call, separate from severity).
+enum MunicipalPriority: String, Codable, Hashable {
+    case low = "LOW", normal = "NORMAL", high = "HIGH", urgent = "URGENT"
+
+    var label: String {
+        switch self {
+        case .low: return "Low"
+        case .normal: return "Normal"
+        case .high: return "High"
+        case .urgent: return "Urgent"
+        }
+    }
+
+    /// From a WebSocket frame's plain string; nil when absent (not set).
+    init?(serverValue: String?) {
+        guard let serverValue, let value = MunicipalPriority(rawValue: serverValue) else { return nil }
+        self = value
+    }
+
+    /// A value added on the server later reads as Normal instead of failing the whole hazard.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = MunicipalPriority(rawValue: raw) ?? .normal
+    }
+}
+
+/// Department display names from /api/meta/departments (cached by MetaStore).
+enum CityDepartments {
+    nonisolated(unsafe) static var names: [String: String] = [:]
+
+    static func name(_ code: String?) -> String? {
+        guard let code else { return nil }
+        return names[code] ?? code.replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
+
 struct TimelineEntry: Codable, Identifiable {
     let id: UUID
     let action: String
@@ -342,6 +382,10 @@ struct TimelineEntry: Codable, Identifiable {
         case "MODERATOR_RESOLVED": return "Resolved by a moderator"
         case "MODERATOR_REOPENED": return "Reopened by a moderator"
         case "MODERATOR_REMOVED": return "Removed by a moderator"
+        case "MUNICIPAL_ASSIGNED":
+            return newValue.map { "Assigned to \(CityDepartments.name($0) ?? $0)" } ?? "No longer assigned to a department"
+        case "MUNICIPAL_PRIORITY":
+            return MunicipalPriority(serverValue: newValue).map { "City priority set to \($0.label)" } ?? "City priority cleared"
         default: return action.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }
@@ -361,6 +405,8 @@ struct TimelineEntry: Codable, Identifiable {
         case "STATUS_CHANGED": return "arrow.triangle.2.circlepath"
         case "DUPLICATE_MERGED": return "arrow.triangle.merge"
         case "FIELD_EDITED": return "pencil"
+        case "MUNICIPAL_ASSIGNED": return "building.2.fill"
+        case "MUNICIPAL_PRIORITY": return "flag.fill"
         default: return action.hasPrefix("MODERATOR") ? "shield.fill" : "circle.fill"
         }
     }

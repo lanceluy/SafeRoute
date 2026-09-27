@@ -79,6 +79,9 @@ struct HazardPreviewView: View {
             if NearbyHazardList.isPossiblyOutdated(hazard) {
                 fact("exclamationmark.circle", "Possibly outdated: no one has confirmed it recently")
             }
+            if let department = CityDepartments.name(hazard.assignedDepartment) {
+                fact("building.2.fill", "The city assigned this to \(department)")
+            }
         }
         .font(SR.Font.secondary)
         .foregroundStyle(SR.Palette.textSecondary)

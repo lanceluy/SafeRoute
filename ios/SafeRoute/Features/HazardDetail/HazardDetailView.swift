@@ -94,6 +94,8 @@ struct HazardDetailView: View {
                     }
                 }
 
+                if hazard.assignedDepartment != nil || hazard.municipalPriority != nil { cityResponseCard(hazard) }
+
                 community(detail)
 
                 if hazard.status.isActive { stillThereCard(detail) }
@@ -271,6 +273,33 @@ struct HazardDetailView: View {
             }
         }
         .buttonStyle(.plain)
+    }
+
+    /// What the city is doing about it, set by officials in the municipal portal.
+    private func cityResponseCard(_ hazard: Hazard) -> some View {
+        SRCard(padding: SR.Space.md) {
+            SRSectionHeader(title: "City response")
+            if let department = CityDepartments.name(hazard.assignedDepartment) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Assigned to \(department)").font(SR.Font.body.weight(.semibold)).foregroundStyle(SR.Palette.textPrimary)
+                        if let at = hazard.assignedAt {
+                            Text("Makati City · \(Format.ago(at))").font(SR.Font.secondary).foregroundStyle(SR.Palette.textSecondary)
+                        }
+                    }
+                } icon: {
+                    Image(systemName: "building.2.fill").foregroundStyle(SR.Palette.navy)
+                }
+            }
+            if let priority = hazard.municipalPriority {
+                Label {
+                    Text("\(priority.label) priority for the city").font(SR.Font.body).foregroundStyle(SR.Palette.textPrimary)
+                } icon: {
+                    Image(systemName: "flag.fill").foregroundStyle(priority == .urgent || priority == .high ? SR.Palette.critical : SR.Palette.navy)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var historyCard: some View {

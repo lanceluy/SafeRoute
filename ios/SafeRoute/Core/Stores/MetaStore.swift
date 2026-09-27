@@ -1,7 +1,7 @@
 import Foundation
 
-/// Server-provided configuration (coverage area, severity questions, routing corridor), cached so
-/// the report flow and navigation still work offline.
+/// Server-provided configuration (coverage area, severity questions, routing corridor, city
+/// departments), cached so the report flow and navigation still work offline.
 @MainActor
 final class MetaStore: ObservableObject {
     @Published private(set) var coverage: CoverageArea?
@@ -10,6 +10,12 @@ final class MetaStore: ObservableObject {
     private let coverageKey = "saferoute.meta.coverage"
     private let questionsKey = "saferoute.meta.questions"
     private let routingKey = "saferoute.meta.routing"
+    private let departmentsKey = "saferoute.meta.departments"
+
+    private struct Department: Codable {
+        let code: String
+        let name: String
+    }
 
     init() {
         if let data = UserDefaults.standard.data(forKey: coverageKey) {
@@ -22,6 +28,10 @@ final class MetaStore: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: routingKey),
            let routing = try? JSONDecoder.api.decode(RoutingMeta.self, from: data) {
             RoutingSettings.corridorMeters = routing.routeCorridorMeters
+        }
+        if let data = UserDefaults.standard.data(forKey: departmentsKey),
+           let list = try? JSONDecoder.api.decode([Department].self, from: data) {
+            CityDepartments.names = Dictionary(list.map { ($0.code, $0.name) }, uniquingKeysWith: { a, _ in a })
         }
     }
 
@@ -37,6 +47,10 @@ final class MetaStore: ObservableObject {
         if let routing = try? await APIClient.shared.send(.routing, as: RoutingMeta.self) {
             RoutingSettings.corridorMeters = routing.routeCorridorMeters
             UserDefaults.standard.set(try? JSONEncoder.api.encode(routing), forKey: routingKey)
+        }
+        if let list = try? await APIClient.shared.send(.departments, as: [Department].self) {
+            CityDepartments.names = Dictionary(list.map { ($0.code, $0.name) }, uniquingKeysWith: { a, _ in a })
+            UserDefaults.standard.set(try? JSONEncoder.api.encode(list), forKey: departmentsKey)
         }
     }
 }
