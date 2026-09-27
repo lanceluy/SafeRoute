@@ -120,6 +120,37 @@ class WebSocketIntegrationTest extends IntegrationTestBase {
         client.close();
     }
 
+    @Test
+    void moderatorWatchingAnAreaGetsEveryChangeThereButCommutersCannotWatch() throws Exception {
+        TestUser mod = registerModerator();
+        TestUser commuter = registerUser();
+        TestUser reporter = registerUser();
+        Location at = freshLocation();
+        double[] box = {at.lat() - 0.01, at.lon() - 0.01, at.lat() + 0.01, at.lon() + 0.01};
+
+        // Browsers can't set headers on a WebSocket, so the portal sends its token as a subprotocol.
+        var headers = new WebSocketHttpHeaders();
+        headers.setSecWebSocketProtocol(List.of("bearer", mod.token()));
+        Client portal = new Client();
+        portal.session = new StandardWebSocketClient().execute(portal, headers, uri()).get(5, TimeUnit.SECONDS);
+        assertThat(portal.session.getAcceptedProtocol()).isEqualTo("bearer");
+        portal.send(Map.of("type", "watch", "bbox", box));
+
+        // A commuter far away can't use watch to see hazards outside their area.
+        Client snoop = connect(commuter);
+        snoop.subscribe(at.offsetMeters(20_000, 0));
+        snoop.send(Map.of("type", "watch", "bbox", box));
+        Thread.sleep(300);
+
+        submit(reporter, "CONSTRUCTION", at);
+        JsonNode created = portal.await(f -> "hazard_created".equals(f.get("type").asText())
+                && "CONSTRUCTION".equals(f.get("hazardType").asText()));
+        assertThat(created.get("alert").asBoolean()).isFalse();
+        assertThat(snoop.frames.poll(2, TimeUnit.SECONDS)).isNull();
+        portal.close();
+        snoop.close();
+    }
+
     private URI uri() {
         return URI.create("ws://localhost:" + port + "/ws/notifications");
     }

@@ -10,16 +10,20 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.SubProtocolCapable;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Component
-public class NotificationWebSocketHandler extends TextWebSocketHandler {
+public class NotificationWebSocketHandler extends TextWebSocketHandler implements SubProtocolCapable {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationWebSocketHandler.class);
     private static final int MAX_ROUTE_POINTS = 1000;
+    /** Degrees per side; Metro Manila fits comfortably. */
+    private static final double MAX_WATCH_SPAN = 1.0;
 
     private final WebSocketSessionRegistry registry;
     private final NotificationPreferencesService preferencesService;
@@ -56,6 +60,8 @@ public class NotificationWebSocketHandler extends TextWebSocketHandler {
             registry.updateLocation(session.getId(), frame.lat(), frame.lon());
         } else if ("route".equals(frame.type())) {
             registry.updateRoute(session.getId(), parseRoute(frame));
+        } else if ("watch".equals(frame.type()) && Boolean.TRUE.equals(session.getAttributes().get("canModerate"))) {
+            registry.updateWatch(session.getId(), parseWatch(frame.bbox()));
         }
     }
 
@@ -70,6 +76,21 @@ public class NotificationWebSocketHandler extends TextWebSocketHandler {
             if (p == null || p.length != 2 || Math.abs(p[0]) > 90 || Math.abs(p[1]) > 180) return null;
         }
         return new RouteCorridor(frame.route());
+    }
+
+    /** Echoed to browsers that sent their token as the {@code bearer} subprotocol; header clients ask for none. */
+    @Override
+    public @NonNull List<String> getSubProtocols() {
+        return List.of(JwtHandshakeInterceptor.BEARER_PROTOCOL);
+    }
+
+    private static WebSocketSessionRegistry.WatchArea parseWatch(double[] b) {
+        if (b == null || b.length != 4 || b[0] >= b[2] || b[1] >= b[3] || Math.abs(b[0]) > 90 || Math.abs(b[2]) > 90
+                || Math.abs(b[1]) > 180 || Math.abs(b[3]) > 180
+                || b[2] - b[0] > MAX_WATCH_SPAN || b[3] - b[1] > MAX_WATCH_SPAN) {
+            return null;
+        }
+        return new WebSocketSessionRegistry.WatchArea(b[0], b[1], b[2], b[3]);
     }
 
     private UUID userId(WebSocketSession session) {

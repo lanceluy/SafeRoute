@@ -11,19 +11,24 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Validates the JWT before the WebSocket upgrade completes, from the
- * {@code Authorization: Bearer <jwt>} handshake header. The {@code ?token=} query parameter is
+ * {@code Authorization: Bearer <jwt>} handshake header or, for browsers (which can't set headers
+ * on a WebSocket), the subprotocol list {@code Sec-WebSocket-Protocol: bearer, <jwt>}; the
+ * handler then answers with the {@code bearer} subprotocol. The {@code ?token=} query parameter is
  * off by default because URLs end up in access logs; enable
  * {@code saferoute.websocket.allow-query-token} only for clients that cannot set headers.
  */
 @Component
 public class JwtHandshakeInterceptor implements HandshakeInterceptor {
 
+    public static final String BEARER_PROTOCOL = "bearer";
     private static final Pattern TOKEN_PARAM = Pattern.compile("(?:^|[?&])token=([^&]+)");
 
     private final JwtService jwtService;
@@ -46,6 +51,7 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
         try {
             AuthenticatedUser principal = jwtService.parsePrincipal(token);
             attributes.put("userId", principal.id());
+            attributes.put("canModerate", principal.canModerate());
             // The session is closed when this token expires (see WebSocketSessionRegistry).
             attributes.put("tokenExpiresAt", jwtService.parseClaims(token).getExpiration().toInstant());
             return true;
@@ -65,6 +71,14 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
         String header = request.getHeaders().getFirst("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
             return header.substring(7);
+        }
+        List<String> protocols = request.getHeaders().get("Sec-WebSocket-Protocol");
+        if (protocols != null) {
+            List<String> values = protocols.stream().flatMap(p -> Arrays.stream(p.split(","))).map(String::trim).toList();
+            int i = values.indexOf(BEARER_PROTOCOL);
+            if (i >= 0 && i + 1 < values.size()) {
+                return values.get(i + 1);
+            }
         }
         String query = request.getURI().getQuery();
         if (allowQueryToken && query != null) {

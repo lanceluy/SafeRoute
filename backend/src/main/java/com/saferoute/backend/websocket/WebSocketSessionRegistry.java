@@ -39,7 +39,8 @@ public class WebSocketSessionRegistry {
     public static final CloseStatus TOKEN_EXPIRED = new CloseStatus(4001, "Access token expired; reconnect");
 
     public record SessionInfo(UUID userId, WebSocketSession session, double lat, double lon, Instant locationAt,
-                              RouteCorridor route, AlertPreferences preferences, Instant expiresAt) {
+                              RouteCorridor route, AlertPreferences preferences, Instant expiresAt,
+                              WatchArea watch) {
 
         public boolean hasLocation() {
             return !Double.isNaN(lat);
@@ -51,15 +52,26 @@ public class WebSocketSessionRegistry {
         }
 
         SessionInfo withLocation(double newLat, double newLon, Instant at) {
-            return new SessionInfo(userId, session, newLat, newLon, at, route, preferences, expiresAt);
+            return new SessionInfo(userId, session, newLat, newLon, at, route, preferences, expiresAt, watch);
         }
 
         SessionInfo withRoute(RouteCorridor newRoute) {
-            return new SessionInfo(userId, session, lat, lon, locationAt, newRoute, preferences, expiresAt);
+            return new SessionInfo(userId, session, lat, lon, locationAt, newRoute, preferences, expiresAt, watch);
         }
 
         SessionInfo withPreferences(AlertPreferences newPreferences) {
-            return new SessionInfo(userId, session, lat, lon, locationAt, route, newPreferences, expiresAt);
+            return new SessionInfo(userId, session, lat, lon, locationAt, route, newPreferences, expiresAt, watch);
+        }
+
+        SessionInfo withWatch(WatchArea newWatch) {
+            return new SessionInfo(userId, session, lat, lon, locationAt, route, preferences, expiresAt, newWatch);
+        }
+    }
+
+    /** A lat/lon box a moderator's session watches for every hazard change. */
+    public record WatchArea(double minLat, double minLon, double maxLat, double maxLon) {
+        public boolean contains(double lat, double lon) {
+            return lat >= minLat && lat <= maxLat && lon >= minLon && lon <= maxLon;
         }
     }
 
@@ -76,7 +88,7 @@ public class WebSocketSessionRegistry {
         // to the same session at once, which a raw WebSocketSession does not allow.
         var safeSession = new ConcurrentWebSocketSessionDecorator(session, SEND_TIME_LIMIT_MS, BUFFER_SIZE_LIMIT);
         sessions.put(session.getId(), new SessionInfo(userId, safeSession, Double.NaN, Double.NaN, null, null,
-                preferences, expiresAt));
+                preferences, expiresAt, null));
     }
 
     public void updateLocation(String sessionId, double lat, double lon) {
@@ -86,6 +98,11 @@ public class WebSocketSessionRegistry {
 
     public void updateRoute(String sessionId, RouteCorridor route) {
         sessions.computeIfPresent(sessionId, (id, s) -> s.withRoute(route));
+    }
+
+    /** A staff session's watched area (null stops watching); the handler checks the role. */
+    public void updateWatch(String sessionId, WatchArea watch) {
+        sessions.computeIfPresent(sessionId, (id, s) -> s.withWatch(watch));
     }
 
     public void updatePreferences(UUID userId, AlertPreferences preferences) {

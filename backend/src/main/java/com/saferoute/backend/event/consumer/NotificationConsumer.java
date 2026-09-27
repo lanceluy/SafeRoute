@@ -43,6 +43,9 @@ import java.util.Set;
  *       to nearby users who aren't connected (app closed or suspended).</li>
  * </ul>
  *
+ * <p>Moderator/official sessions that sent a {@code watch} box (the municipal portal) get every
+ * change inside it instead, never flagged as an alert.
+ *
  * <p>Delivery latency is recorded only for frames actually written; failed writes are counted
  * separately. A written frame is not proof that the client displayed it.
  */
@@ -82,6 +85,15 @@ public class NotificationConsumer {
             Instant now = Instant.now();
             int sent = 0, alerts = 0;
             for (WebSocketSessionRegistry.SessionInfo info : registry.activeSessions()) {
+                if (info.watch() != null) {
+                    // A staff map watching this area gets every change there, never as an alert.
+                    if (info.watch().contains(event.latitude(), event.longitude())
+                            && send(info, frame(frameType, event, 0, false, false, null))) {
+                        metrics.recordNotificationLatency(event.metadata().occurredAt());
+                        sent++;
+                    }
+                    continue;
+                }
                 if (!info.hasLocation()) continue;
                 boolean freshLocation = info.hasFreshLocation(now);
                 double distance = GeoUtils.distanceMeters(info.lat(), info.lon(), event.latitude(), event.longitude());
@@ -105,10 +117,7 @@ public class NotificationConsumer {
                         && info.preferences().enabledTypes().contains(event.type())
                         && relevant;
 
-                boolean written = send(info, new HazardEventFrame(frameType, event.change(), event.hazardId(), event.type(),
-                        event.latitude(), event.longitude(), event.status(), event.severity(),
-                        event.confirmationCount(), event.disputeCount(), distance, alert, onRoute, distanceAhead,
-                        event.metadata().occurredAt(), event.version()));
+                boolean written = send(info, frame(frameType, event, distance, alert, onRoute, distanceAhead));
                 if (!written) continue;
                 metrics.recordNotificationLatency(event.metadata().occurredAt());
                 sent++;
@@ -142,6 +151,14 @@ public class NotificationConsumer {
                 }
             }
         }
+    }
+
+    private static HazardEventFrame frame(String frameType, HazardUpdatedEvent event, double distance, boolean alert,
+                                          boolean onRoute, Double distanceAhead) {
+        return new HazardEventFrame(frameType, event.change(), event.hazardId(), event.type(),
+                event.latitude(), event.longitude(), event.status(), event.severity(),
+                event.confirmationCount(), event.disputeCount(), distance, alert, onRoute, distanceAhead,
+                event.metadata().occurredAt(), event.version());
     }
 
     static String frameType(HazardChange change) {
