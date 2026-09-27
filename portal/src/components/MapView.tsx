@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import L from '../lib/leaflet';
+import { useThemeColors } from '../lib/theme';
 import 'leaflet.markercluster';
 import 'leaflet.heat';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
@@ -69,6 +70,9 @@ export function MapView({ hazards, selectedId, onSelect, layer, barangays, highl
   const markers = useRef(new Map<string, L.Marker & { hazard?: Hazard }>());
   const onSelectRef = useRef(onSelect);
   useEffect(() => { onSelectRef.current = onSelect; });
+  const colors = useThemeColors();
+  const navyRef = useRef(colors.navy);
+  useEffect(() => { navyRef.current = colors.navy; });
 
   useEffect(() => {
     const m = L.map(el.current!, { zoomControl: true, preferCanvas: false }).setView(MAKATI, 14);
@@ -104,10 +108,10 @@ export function MapView({ hazards, selectedId, onSelect, layer, barangays, highl
       })),
     } as GeoJSON.FeatureCollection, {
       interactive: false,
-      style: { color: '#173B67', weight: 1, opacity: 0.25, fillOpacity: 0 },
+      style: { color: colors.navy, weight: 1, opacity: colors.dark ? 0.45 : 0.25, fillOpacity: 0 },
     }).addTo(m);
     areas.current.bringToBack();
-  }, [barangays]);
+  }, [barangays, colors.navy, colors.dark]);
 
   useEffect(() => {
     const m = map.current;
@@ -117,10 +121,11 @@ export function MapView({ hazards, selectedId, onSelect, layer, barangays, highl
     if (!highlightArea) return;
     highlight.current = L.geoJSON({
       type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: highlightArea.polygons },
-    } as GeoJSON.Feature, { interactive: false, style: { color: '#173B67', weight: 2.5, opacity: 0.9, fillColor: '#173B67', fillOpacity: 0.06 } })
+    } as GeoJSON.Feature, { interactive: false, style: { color: colors.navy, weight: 2.5, opacity: 0.9, fillColor: colors.navy, fillOpacity: 0.08 } })
       .addTo(m);
     const [a, b, c, d] = highlightArea.bbox;
     m.flyToBounds([[a, b], [c, d]], { padding: [24, 24], duration: 0.6 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlightArea]);
 
   // Markers or heat.
@@ -205,9 +210,9 @@ export function MapView({ hazards, selectedId, onSelect, layer, barangays, highl
     regionLayer.current = null;
     if (!m || !region) return;
     regionLayer.current = L.rectangle([[region[0], region[1]], [region[2], region[3]]], {
-      color: '#173B67', weight: 2, dashArray: '6 4', fillColor: '#173B67', fillOpacity: 0.05, interactive: false,
+      color: colors.navy, weight: 2, dashArray: '6 4', fillColor: colors.navy, fillOpacity: 0.06, interactive: false,
     }).addTo(m);
-  }, [region]);
+  }, [region, colors.navy]);
 
   // Drawing a box: press, drag, release. Panning is off meanwhile; Esc cancels.
   const onDrawnRef = useRef(onDrawn);
@@ -225,7 +230,7 @@ export function MapView({ hazards, selectedId, onSelect, layer, barangays, highl
       if (!start) return;
       const bounds = L.latLngBounds(start, e.latlng);
       if (box) box.setBounds(bounds);
-      else box = L.rectangle(bounds, { color: '#173B67', weight: 2, fillOpacity: 0.08, interactive: false }).addTo(m);
+      else box = L.rectangle(bounds, { color: navyRef.current, weight: 2, fillOpacity: 0.08, interactive: false }).addTo(m);
     };
     const up = (e: L.LeafletMouseEvent) => {
       if (!start) return;

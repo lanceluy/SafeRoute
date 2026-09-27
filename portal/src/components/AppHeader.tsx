@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink } from 'react-router';
+import { Link, NavLink } from 'react-router';
 import { logout } from '../api/client';
 import type { Session } from '../api/types';
 import { LiveStatus } from './LiveStatus';
@@ -70,6 +70,7 @@ function AccountMenu({ session }: { session: Session }) {
             <span>{session.email}</span>
             <span className="muted">{ROLE_LABEL[session.role]} · Makati City</span>
           </div>
+          <Link to="/account" className="menu-item" onClick={() => setOpen(false)}>Account &amp; settings</Link>
           <button type="button" className="menu-item" onClick={logout}>Sign out</button>
         </div>
       )}
