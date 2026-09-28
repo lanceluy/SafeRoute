@@ -8,6 +8,22 @@ import { useSession } from './session';
 /** Metro Manila pilot area (saferoute.coverage in the backend's application.yml). */
 const WATCH_BBOX = [14.35, 120.9, 14.8, 121.15];
 const TOKEN_EXPIRED = 4001;
+/** Refresh a little early so a reconnect never races the token's expiry. */
+const EXPIRY_MARGIN_MS = 30_000;
+
+/**
+ * Whether the access token has expired (or is about to). A handshake with an expired token is
+ * refused with HTTP 401, which the browser reports only as close code 1006, so the client has
+ * to check for itself rather than wait for the server's 4001.
+ */
+function tokenExpired(token: string) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof payload.exp === 'number' && payload.exp * 1000 - EXPIRY_MARGIN_MS < Date.now();
+  } catch {
+    return false;
+  }
+}
 
 export type LiveStatus = 'connecting' | 'live' | 'reconnecting' | 'offline';
 
@@ -43,6 +59,8 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [version, setVersion] = useState(0);
   const listeners = useRef(new Set<(f: HazardFrame) => void>());
+  /** Survives token changes, so a reconnect with a fresh token still counts as a reconnect. */
+  const connectedBefore = useRef(false);
   const [subscribe] = useState(() => (listener: (f: HazardFrame) => void) => {
     listeners.current.add(listener);
     return () => { listeners.current.delete(listener); };
@@ -55,8 +73,20 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     let attempts = 0;
     let stopped = false;
 
-    const connect = () => {
-      setStatus(attempts === 0 ? 'connecting' : 'reconnecting');
+    const retryLater = () => {
+      attempts++;
+      retry = window.setTimeout(connect, Math.min(30_000, 1000 * 2 ** Math.min(attempts, 5)));
+    };
+
+    const connect = async () => {
+      setStatus(connectedBefore.current || attempts > 0 ? 'reconnecting' : 'connecting');
+      if (tokenExpired(token)) {
+        // A new token re-runs this effect, which connects with it.
+        if (await refreshToken()) return;
+        if (!stopped) retryLater();
+        return;
+      }
+      if (stopped) return;
       const url = `${API_ORIGIN.replace(/^http/, 'ws')}/ws/notifications`;
       // Browsers can't send an Authorization header here, so the token rides as a subprotocol.
       socket = new WebSocket(url, ['bearer', token]);
@@ -65,6 +95,9 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         setStatus('live');
         setUpdatedAt(Date.now());
         socket?.send(JSON.stringify({ type: 'watch', bbox: WATCH_BBOX }));
+        // Changes made while disconnected never arrive as frames, so have pages refetch.
+        if (connectedBefore.current) setVersion((v) => v + 1);
+        connectedBefore.current = true;
       };
       socket.onmessage = (event) => {
         let frame: HazardFrame;
@@ -83,8 +116,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         setStatus('reconnecting');
         // The session outlived its access token: get a new one; the token change reconnects.
         if (event.code === TOKEN_EXPIRED && await refreshToken()) return;
-        attempts++;
-        retry = window.setTimeout(connect, Math.min(30_000, 1000 * 2 ** Math.min(attempts, 5)));
+        if (!stopped) retryLater();
       };
     };
     connect();
