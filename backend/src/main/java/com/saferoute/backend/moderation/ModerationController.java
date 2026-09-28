@@ -73,7 +73,7 @@ public class ModerationController {
             description = "Default order: DISPUTED first, then reports from the lowest-reputation reporters. "
                     + "`view` picks a queue tab and replaces `statuses`; every other filter narrows it further.")
     public PageResponse<HazardResponse> queue(
-            @Parameter(description = "attention, high, contested, expiring, unconfirmed, active, removed or unassigned")
+            @Parameter(description = "recent, attention, high, contested, expiring, unconfirmed, active, removed or unassigned")
             @RequestParam(required = false) String view,
             @Parameter(description = "Comma-separated statuses (default: active ones). Ignored with `view`.")
             @RequestParam(required = false) String statuses,

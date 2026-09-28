@@ -30,9 +30,14 @@ export interface QueueControls {
 }
 
 export function useQueueControls(tabs: QueueTab[], barangays: Barangay[], initialTab?: string, initialArea?: string): QueueControls {
-  const [tabKey, setTab] = useState(initialTab && tabs.some((t) => t.key === initialTab) ? initialTab : tabs[0].key);
+  const [tabKey, setTabKey] = useState(initialTab && tabs.some((t) => t.key === initialTab) ? initialTab : tabs[0].key);
   const [filters, setFilters] = useState<Filters>({ ...NO_FILTERS, area: initialArea ?? '' });
-  const [sort, setSort] = useState<QueueSort>('review');
+  const [sort, setSort] = useState<QueueSort>(() => tabs.find((t) => t.key === tabKey)?.sort ?? 'review');
+  const setTab = (key: string) => {
+    setTabKey(key);
+    const next = tabs.find((t) => t.key === key)?.sort;
+    if (next) setSort(next);
+  };
   const [search, setSearch] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(!!initialArea);
   const tab = tabs.find((t) => t.key === tabKey) ?? tabs[0];

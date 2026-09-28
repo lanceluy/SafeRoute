@@ -8,11 +8,20 @@ export interface QueueTab {
   label: string;
   view?: QueueView;
   statuses?: HazardStatus[];
+  /** The order the tab opens in; otherwise the current sort is kept. */
+  sort?: QueueSort;
   /** Explains the tab when it's empty. */
   empty: { title: string; body: string };
 }
 
+/** First on both pages, so a report shows up the moment it arrives. */
+const NEW_TAB: QueueTab = {
+  key: 'new', label: 'New', view: 'recent', sort: 'newest',
+  empty: { title: 'No new reports', body: 'Reports from the last 24 hours appear here as they arrive.' },
+};
+
 export const MAP_TABS: QueueTab[] = [
+  NEW_TAB,
   { key: 'attention', label: 'Needs attention', view: 'attention',
     empty: { title: 'Nothing needs attention', body: 'No contested reports, unverified high-severity hazards, or reports waiting over a day.' } },
   { key: 'high', label: 'High severity', view: 'high',
@@ -28,11 +37,12 @@ export const MAP_TABS: QueueTab[] = [
 ];
 
 export const MODERATION_TABS: QueueTab[] = [
-  { key: 'attention', label: 'Needs review', view: 'attention', empty: MAP_TABS[0].empty },
-  { key: 'contested', label: 'Contested', view: 'contested', empty: MAP_TABS[2].empty },
+  NEW_TAB,
+  { key: 'attention', label: 'Needs review', view: 'attention', empty: MAP_TABS[1].empty },
+  { key: 'contested', label: 'Contested', view: 'contested', empty: MAP_TABS[3].empty },
   { key: 'unconfirmed', label: 'Unconfirmed', view: 'unconfirmed',
     empty: { title: 'No unconfirmed reports', body: 'Every active report has at least one community response.' } },
-  { key: 'expiring', label: 'Expiring soon', view: 'expiring', empty: MAP_TABS[3].empty },
+  { key: 'expiring', label: 'Expiring soon', view: 'expiring', empty: MAP_TABS[4].empty },
   { key: 'unassigned', label: 'Unassigned', view: 'unassigned',
     empty: { title: 'Everything is assigned', body: 'Every active hazard has a department handling it.' } },
   { key: 'removed', label: 'Removed reports', view: 'removed',

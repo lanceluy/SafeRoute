@@ -92,7 +92,7 @@ export interface Page<T> {
   hasMore: boolean;
 }
 
-export type QueueView = 'attention' | 'high' | 'contested' | 'expiring' | 'unconfirmed' | 'active' | 'removed' | 'unassigned';
+export type QueueView = 'recent' | 'attention' | 'high' | 'contested' | 'expiring' | 'unconfirmed' | 'active' | 'removed' | 'unassigned';
 export type QueueSort = 'review' | 'newest' | 'oldest' | 'severity' | 'confidence' | 'disputed' | 'confirmed' | 'expiring' | 'priority';
 
 export interface QueueQuery {

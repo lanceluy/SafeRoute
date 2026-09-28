@@ -48,6 +48,8 @@ class ModerationQueryIntegrationTest extends IntegrationTestBase {
         assertThat(queue(mod, "bbox", box, "view", "high")).containsExactly(manhole);
         // Unverified high severity needs attention, as does anything nobody has weighed in on for a day.
         assertThat(queue(mod, "bbox", box, "view", "attention")).containsExactly(manhole);
+        // New reports are listed from the moment they arrive, until they are a day old.
+        assertThat(queue(mod, "bbox", box, "view", "recent")).containsExactly(lighting);
         assertThat(queue(mod, "bbox", box, "q", "ayala")).containsExactly(lighting);
         assertThat(queue(mod, "bbox", box, "q", "open manhole")).containsExactly(manhole);
         assertThat(queue(mod, "bbox", box, "from", Instant.now().minus(2, ChronoUnit.DAYS).toString()))

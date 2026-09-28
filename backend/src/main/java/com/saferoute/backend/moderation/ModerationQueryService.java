@@ -35,7 +35,9 @@ public class ModerationQueryService {
         /** Disputed, unverified high severity, or nobody has weighed in for a day. */
         ATTENTION, HIGH, CONTESTED, EXPIRING, UNCONFIRMED, ACTIVE, REMOVED,
         /** Active and not yet assigned to a department. */
-        UNASSIGNED
+        UNASSIGNED,
+        /** Active and reported in the last day, so a new report is visible straight away. */
+        RECENT
     }
 
     public enum Sort { REVIEW, NEWEST, OLDEST, SEVERITY, CONFIDENCE, DISPUTED, CONFIRMED, EXPIRING, PRIORITY }
@@ -182,6 +184,7 @@ public class ModerationQueryService {
             case ACTIVE -> ACTIVE;
             case REMOVED -> "h.status = 'REMOVED'";
             case UNASSIGNED -> "(" + ACTIVE + " AND h.assigned_department IS NULL)";
+            case RECENT -> "(" + ACTIVE + " AND h.created_at >= CAST(:now AS timestamptz) - interval '24 hours')";
         };
     }
 
