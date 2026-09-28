@@ -72,10 +72,12 @@ docker-compose.yml   Postgres + PostGIS, Kafka and Kafka UI for local developmen
 ```bash
 cp .env.example .env    # edit if you want non-default credentials — never commit .env
 docker compose up -d postgres kafka kafka-ui
-cd backend
-JAVA_HOME=/opt/homebrew/opt/openjdk@21 SPRING_PROFILES_ACTIVE=dev \
-  SAFEROUTE_MODERATOR_EMAILS=mod@saferoute.local ./mvnw spring-boot:run
+backend/run-dev.sh      # dev profile on port 8080; finds Java 21 itself
 ```
+
+`run-dev.sh` is shorthand for `SPRING_PROFILES_ACTIVE=dev SAFEROUTE_MODERATOR_EMAILS=mod@saferoute.local
+./mvnw spring-boot:run` with `JAVA_HOME` pointed at JDK 21. On Macs where the default `java` is an old
+Intel-only browser plugin, running `./mvnw` without it fails with "Bad CPU type in executable".
 
 The **`dev` profile is for a local machine only**: it accepts the public development JWT key when
 `JWT_SECRET` is unset and promotes allowlisted emails to moderator without verifying them. Without
