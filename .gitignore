@@ -22,19 +22,15 @@ xcuserdata/
 # Benchmark output (keep the folder)
 benchmark/results/*
 !benchmark/results/.gitkeep
-node_modules/
-
-# Kept local (course material and working notes, not published)
-Grp3-CSS123P Project_ SafeRoute.pdf
-PROJECT_BRIEF.txt
-SafeRoute_Consolidated_Engineering_Review.txt
-SafeRoute_UI_UX_Design_Review.txt
-SafeRoute_Implementation_Summary.txt
-SafeRoute_Updated_Source_Code_Review.txt
-references/
-memory/
 
 # Municipal portal (Vite)
-portal/node_modules/
+node_modules/
 portal/dist/
 portal/*.tsbuildinfo
+
+# Kept local: course material, reviews and working notes live in references/
+references/
+# ...and stay unpublished if one lands in the root again
+/*.pdf
+/*.txt
+/memory/

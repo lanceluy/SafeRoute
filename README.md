@@ -49,6 +49,17 @@ Once anyone has confirmed, disputed or voted, the reporter can no longer change 
 location or severity. Each hazard has a content revision: a command accepted against an older
 revision (e.g. a vote cast before a moderator reopened it) is ignored.
 
+## Project layout
+
+```
+backend/     Spring Boot service: REST API, Kafka consumers, WebSocket, Flyway migrations
+ios/         SwiftUI + MapKit app (the Xcode project is generated from ios/project.yml)
+portal/      Municipal portal: React + Vite + TypeScript
+benchmark/   Event simulator, polling comparison and k6 load tests (results are git-ignored)
+docs/        Metrics definitions, benchmark results, paper alignment, logo (docs/assets/)
+docker-compose.yml   Postgres + PostGIS, Kafka and Kafka UI for local development
+```
+
 ## Prerequisites
 
 - Java 21 (`brew install openjdk@21`) — use `JAVA_HOME=/opt/homebrew/opt/openjdk@21`
