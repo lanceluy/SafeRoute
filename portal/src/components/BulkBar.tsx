@@ -26,16 +26,22 @@ async function runAll<T>(items: T[], fn: (item: T) => Promise<unknown>, concurre
  * Actions on the selected hazards. Deliberately no bulk Remove: removing is a judgement about
  * one report and penalises its reporter, so it stays one at a time.
  */
-export function BulkBar({ selected, departments, barangays, stats, onClear, onDone }: {
-  selected: Hazard[]; departments: Department[]; barangays: Barangay[]; stats: Stats | null;
-  onClear: () => void; onDone: () => void;
+export function BulkBar({ selected, total, allChecked, onToggleAll, departments, barangays, stats, onCancel, onDone }: {
+  selected: Hazard[]; total: number; allChecked: boolean; onToggleAll: () => void;
+  departments: Department[]; barangays: Barangay[]; stats: Stats | null;
+  /** Leaves select mode. */
+  onCancel: () => void; onDone: () => void;
 }) {
   const [dialog, setDialog] = useState<'resolve' | 'response' | null>(null);
   const activeOnes = selected.filter((h) => isActive(h.status));
 
   return (
     <div className="bulk-bar" role="region" aria-label="Selected hazards">
-      <strong>{plural(selected.length, 'selected', 'selected')}</strong>
+      <label className="bulk-all">
+        <input type="checkbox" checked={allChecked} onChange={onToggleAll} disabled={!total}
+          aria-label={allChecked ? 'Clear the selection' : `Select all ${total}`} />
+      </label>
+      <strong>{selected.length ? plural(selected.length, 'selected', 'selected') : `Select hazards (${total})`}</strong>
       <button type="button" className="btn btn-primary btn-sm" disabled={!activeOnes.length} onClick={() => setDialog('resolve')}>
         ✓ Resolve
       </button>
@@ -43,7 +49,7 @@ export function BulkBar({ selected, departments, barangays, stats, onClear, onDo
         Assign / priority
       </button>
       <ExportMenu hazards={selected} title="Selected hazards" barangays={barangays} departments={departments} stats={stats} />
-      <button type="button" className="btn-link" onClick={onClear}>Clear</button>
+      <button type="button" className="btn-link" onClick={onCancel}>Cancel</button>
       {dialog === 'resolve' && (
         <BulkResolve hazards={activeOnes} skipped={selected.length - activeOnes.length}
           onClose={() => setDialog(null)} onDone={onDone} />

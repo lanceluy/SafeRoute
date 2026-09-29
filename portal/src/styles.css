@@ -417,12 +417,32 @@ a.kpi:hover { border-color: var(--navy-tint-2); box-shadow: var(--shadow-2); }
 }
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--navy); border-bottom-color: var(--navy); }
+/* Tabs come in groups (inbox · risk · workflow · archive) with a quiet divider between them. */
+.tab-slot { display: inline-flex; align-items: flex-end; }
+.tab-slot.group-start { margin-left: var(--s2); padding-left: var(--s2); position: relative; }
+.tab-slot.group-start::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 1px; background: var(--border-strong); }
+/* Count badges: grey = information, navy = the queue you're in, red = needs attention (selected or not). */
 .tab-count { background: var(--fill); color: var(--text-2); border-radius: 999px; padding: 0 7px; font-size: 12px; min-width: 22px; text-align: center; }
 .tab.active .tab-count { background: var(--navy); color: var(--on-navy); }
-.tab-count.urgent { background: var(--sev-high-bg); color: var(--sev-high-text); }
-.tab.active .tab-count.urgent { background: var(--sev-high); color: #fff; }
+.tab-count.urgent, .tab.active .tab-count.urgent { background: var(--sev-high); color: #fff; }
+/* Needs review with items: the main work queue, tinted and marked. */
+.tab-urgent { background: var(--sev-high-bg); border-radius: 6px 6px 0 0; color: var(--sev-high-text); }
+.tab-urgent:hover { color: var(--sev-high-text); }
+.tab-urgent.active { color: var(--sev-high-text); border-bottom-color: var(--sev-high); }
+.tab-warn { font-size: 12px; }
 
 .filter-bar { padding: var(--s3) var(--s4) 0; display: flex; flex-direction: column; gap: var(--s2); flex-shrink: 0; }
+.toolbar { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; }
+.toolbar .search { flex: 1 1 240px; min-width: 200px; }
+.toolbar-sort { flex: 0 1 auto; }
+.toolbar-sort select { max-width: 220px; }
+.filter-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.filter-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 6px 0 10px; border-radius: 999px; border: 1px solid var(--navy-tint-2);
+  background: var(--navy-tint); color: var(--navy); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.filter-chip span { font-size: 14px; line-height: 1; opacity: 0.7; }
+.filter-chip:hover span { opacity: 1; }
 .filter-row { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
 .search { position: relative; flex: 1; display: flex; align-items: center; }
 .search input {
@@ -452,15 +472,23 @@ select, input[type="date"] {
 .chip.on { background: var(--navy); border-color: var(--navy); color: var(--on-navy); }
 .chip:has(input:focus-visible) { box-shadow: var(--focus); }
 .queue-summary { padding: var(--s2) var(--s4); font-size: 12px; color: var(--text-2); min-height: 32px; flex-shrink: 0; }
+.queue-summary strong { color: var(--text); }
+.summary-high { color: var(--sev-high-text); font-weight: 600; }
+.summary-stale { color: var(--sev-medium-text); font-weight: 600; }
 .queue-scroll { flex: 1; overflow-y: auto; padding: 0 var(--s2) var(--s4); position: relative; min-height: 0; }
-.hazard-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.hazard-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.hazard-item { position: relative; border-bottom: 1px solid var(--border); }
+.hazard-item:last-child { border-bottom: 0; }
 .hazard-row {
   width: 100%; display: flex; align-items: flex-start; gap: var(--s3); text-align: left; background: none; border: 1px solid transparent;
-  border-radius: var(--r-control); padding: var(--s3) var(--s3) var(--s3) var(--s3); cursor: pointer; position: relative;
+  border-radius: var(--r-control); padding: 10px var(--s3); cursor: pointer; position: relative; transition: background 0.12s, box-shadow 0.12s;
 }
-.hazard-row::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: transparent; }
-.hazard-row.sev-edge-high::before { background: var(--sev-high); }
-.hazard-row:hover { background: var(--hover); }
+/* The left rail means "needs action" (red) or "selected" (navy); severity already shows in the icon and badge. */
+.hazard-row::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: transparent; }
+.hazard-row.needs-action::before { background: var(--sev-high); }
+.hazard-row.selected::before { background: var(--navy); }
+.hazard-row:hover { background: var(--hover); box-shadow: var(--shadow-1); }
+.hazard-row:hover .row-chevron, .hazard-row.selected .row-chevron { color: var(--text-2); }
 .hazard-row.selected { background: var(--navy-tint); border-color: var(--navy-tint-2); }
 .hazard-row.selected::after { content: ""; position: absolute; inset: -1px; border: 2px solid var(--navy); border-radius: var(--r-control); pointer-events: none; }
 .hazard-row.is-new { animation: arrive 2.4s ease-out 1; }
@@ -470,7 +498,7 @@ select, input[type="date"] {
 }
 .row-icon.lg { width: 44px; height: 44px; }
 .row-icon.sm { width: 24px; height: 24px; }
-.row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .row-title { font-weight: 600; font-size: 15px; display: flex; gap: var(--s2); align-items: center; overflow-wrap: anywhere; }
 .row-badges { display: flex; flex-wrap: wrap; gap: 4px; }
 .row-place { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -592,7 +620,8 @@ select, input[type="date"] {
 .skeleton-row { display: flex; gap: var(--s3); padding: var(--s2); }
 .skeleton-icon { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; }
 .skeleton-lines { flex: 1; display: flex; flex-direction: column; gap: 8px; }
-.state-block { text-align: center; padding: var(--s6) var(--s4); display: flex; flex-direction: column; align-items: center; gap: var(--s2); }
+.state-block { text-align: center; padding: var(--s5) var(--s4) var(--s4); display: flex; flex-direction: column; align-items: center; gap: var(--s2); }
+.state-next { color: var(--text) !important; font-weight: 600; margin-top: var(--s2); }
 .state-block p { color: var(--text-2); max-width: 320px; }
 .state-icon { width: 40px; height: 40px; border-radius: 50%; background: var(--good-bg); color: var(--good); font-weight: 700; font-size: 18px; display: flex; align-items: center; justify-content: center; }
 .state-error .state-icon { background: var(--sev-high-bg); color: var(--sev-high-text); }
@@ -621,8 +650,7 @@ select, input[type="date"] {
   border-radius: 50%; background: var(--surface); border: 3px solid var(--navy); box-shadow: var(--shadow-2);
   display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;
 }
-.cluster strong { font-size: 14px; color: var(--text); }
-.cluster span { font-size: 8px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.03em; }
+.cluster strong { font-size: 15px; color: var(--text); }
 .cluster-high { border-color: var(--sev-high); }
 .cluster-medium { border-color: var(--sev-medium); }
 .cluster-low { border-color: var(--sev-low); }
@@ -644,9 +672,50 @@ select, input[type="date"] {
 .chart-tip { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-control); box-shadow: var(--shadow-2); padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 .chart-tip i { display: inline-block; width: 10px; height: 2px; margin-right: 6px; vertical-align: middle; }
 .chart-empty { padding: var(--s5) 0; text-align: center; }
+
+/* ---------- Weather ---------- */
+.weather-stale { color: var(--sev-medium-text); font-weight: 600; }
+.weather-now { display: grid; grid-template-columns: auto 1fr; gap: var(--s3) var(--s5); align-items: center; }
+.weather-now-icon { color: var(--navy); display: flex; }
+.weather-now-temp { font-size: 44px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.weather-now-label { font-size: 17px; font-weight: 600; }
+.weather-facts { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s3); margin: 0; padding-top: var(--s4); border-top: 1px solid var(--border); }
+.weather-facts dt { color: var(--text-2); font-size: 12px; font-weight: 600; }
+.weather-facts dd { margin: 2px 0 0; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* The tiles fill the full height of the current-conditions card beside them. */
+.advisories { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); grid-auto-rows: 1fr; gap: var(--s4); align-content: stretch; }
+.advisories .kpi { height: 100%; }
+.advisory-band { font-weight: 700; font-size: 14px; }
+/* The note sits at the bottom, so tall tiles don't leave a gap under the headline. */
+.advisory-note { font-size: 12px; margin-top: auto; }
+.weather-icon { display: inline-flex; color: var(--text-2); }
+.hour-strip { list-style: none; margin: var(--s4) 0 0; padding: var(--s3) 0 var(--s1); display: grid; grid-auto-flow: column; grid-auto-columns: minmax(52px, 1fr); gap: var(--s1); overflow-x: auto; border-top: 1px solid var(--border); }
+.hour-strip li { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.hour-strip strong { font-size: 14px; }
+.day-list { list-style: none; margin: 0; padding: 0; }
+.day-row { display: grid; grid-template-columns: 96px 28px minmax(0, 1fr) 90px 72px 48px; align-items: center; gap: var(--s3); padding: var(--s2) 0; border-top: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.day-row:first-child { border-top: 0; }
+.day-name { font-weight: 600; }
+.day-temps, .day-rain, .day-chance { text-align: right; }
+.rain-summary { margin: var(--s1) 0 0; font-size: 13px; }
+.area-map { height: 420px; border-radius: var(--r-control); border: 1px solid var(--border); overflow: hidden; }
+.rain-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); margin-top: var(--s3); font-size: 12px; }
+.rain-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -2px; }
+.rain-ramp { flex: 1; min-width: 120px; max-width: 320px; height: 10px; border-radius: 5px; }
+.rain-note { font-size: 12px; margin-top: var(--s2); }
+.rain-list-title { font-size: 14px; margin: 0 0 var(--s3); }
+.rain-list-title .muted { font-weight: 400; }
+.leaflet-tooltip.area-tip { font-family: var(--font); font-size: 13px; }
+@media (max-width: 767px) {
+  .area-map { height: 300px; }
+  .weather-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .day-row { grid-template-columns: 80px 24px minmax(0, 1fr) 72px; }
+  .day-condition { display: none; }
+  .day-chance { display: none; }
+}
 .bar-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .bar-row {
-  width: 100%; display: grid; grid-template-columns: minmax(110px, 38%) 1fr 64px; gap: var(--s3); align-items: center; padding: 6px 4px;
+  width: 100%; display: grid; grid-template-columns: minmax(110px, 38%) 1fr minmax(64px, max-content); gap: var(--s3); align-items: center; padding: 6px 4px;
   background: none; border: 0; border-radius: 6px; text-align: left; font-size: 13px;
 }
 button.bar-row { cursor: pointer; }
@@ -672,6 +741,35 @@ button.bar-row:hover { background: var(--fill); }
 .data-table tbody tr { cursor: pointer; }
 .data-table tbody tr:hover, .data-table tbody tr:focus-visible { background: var(--navy-tint); }
 .heat-card { display: flex; flex-direction: column; }
+
+/* ---------- Analytics additions ---------- */
+.card-head-stacked { flex-direction: column; align-items: flex-start; gap: 2px; }
+.kpi.static.kpi-toned::before { display: block; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.swatch.lg { width: 16px; height: 12px; margin: 0; }
+.chart-legend { margin-bottom: var(--s2); justify-content: flex-end; }
+.chart-empty-block { padding: var(--s4) 0; font-size: 13px; }
+.chart-empty-block p { margin: 0 0 var(--s1); }
+.select-label select { font-size: 13px; }
+.diverging-legend { display: flex; flex-wrap: wrap; gap: var(--s3); font-size: 12px; color: var(--text-2); margin-bottom: var(--s3); }
+.diverging-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.diverging-list li { display: grid; grid-template-columns: minmax(100px, 30%) 1fr 1fr; align-items: center; gap: var(--s2); font-size: 13px; }
+.diverging-side { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.diverging-side.left { justify-content: flex-end; border-right: 1px solid var(--axis); padding-right: 2px; }
+.diverging-side.right { padding-left: 2px; }
+.diverging-fill { display: block; height: 10px; min-width: 2px; }
+.diverging-side.left .diverging-fill { background: var(--series-2); border-radius: 4px 0 0 4px; }
+.diverging-side.right .diverging-fill { background: var(--series-1); border-radius: 0 4px 4px 0; }
+.diverging-value { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-2); white-space: nowrap; }
+/* Stacked segments sit 2 px apart on the surface. */
+.stack-track { display: flex; gap: 2px; background: transparent; }
+.stack-seg { display: block; height: 100%; min-width: 2px; }
+.stack-seg:last-child { border-radius: 0 4px 4px 0; }
+.heatgrid-wrap { overflow-x: auto; }
+.heatgrid { border-collapse: separate; border-spacing: 2px; width: 100%; min-width: 520px; font-size: 11px; }
+.heatgrid th { color: var(--text-2); font-weight: 600; text-align: left; padding: 0 4px 0 0; white-space: nowrap; }
+.heatgrid thead th { text-align: left; font-weight: 500; }
+.heatgrid td { height: 20px; background: var(--fill); border-radius: 3px; }
 .heat-map { position: relative; flex: 1; min-height: 360px; border-radius: var(--r-control); overflow: hidden; margin-bottom: var(--s2); }
 
 /* ---------- Activity ---------- */
@@ -715,6 +813,8 @@ button.bar-row:hover { background: var(--fill); }
 .prio-high { color: var(--sev-high-text); border-color: var(--high-border); background: var(--sev-high-bg); }
 .prio-normal { color: var(--navy); border-color: var(--navy-tint-2); background: var(--navy-tint); }
 .hazard-list li.checkable { display: flex; align-items: flex-start; gap: 4px; }
+.bulk-all { display: inline-flex; align-items: center; }
+.bulk-all input { width: 16px; height: 16px; accent-color: var(--navy); }
 .hazard-list li.checkable .hazard-row { flex: 1; min-width: 0; }
 .row-check { margin: 18px 0 0 8px; width: 16px; height: 16px; accent-color: var(--navy); flex-shrink: 0; }
 .select-row { padding: var(--s2) var(--s4) 0; }
@@ -815,4 +915,51 @@ a.menu-item { text-decoration: none; color: var(--text); font-weight: 600; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
+}
+
+/* ---------- Moderation queue: row details, quick actions, table layout ---------- */
+.btn-xs { min-height: 26px; padding: 0 var(--s2); font-size: 12px; }
+.action-pill { background: var(--sev-high-bg); color: var(--sev-high-text); font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px; }
+.assign-chip { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  background: var(--navy-tint); color: var(--navy); border: 1px solid var(--navy-tint-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.assign-chip.unassigned { background: var(--surface); color: var(--text-2); border-style: dashed; border-color: var(--border-strong); }
+.row-reason { font-size: 12px; font-weight: 600; color: var(--navy); }
+.stale { color: var(--sev-medium-text); font-weight: 600; }
+.signal-yes { color: var(--good); font-weight: 600; }
+.signal-no { color: var(--text-2); }
+.kbd-hint { color: var(--text-3); font-size: 12px; }
+.kbd-hint kbd { position: static; }
+
+/* Quick actions appear on hover or keyboard focus; Remove stays in the drawer. */
+.row-actions {
+  position: absolute; right: 36px; top: 50%; transform: translateY(-50%); display: none; gap: 4px; padding: 4px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-control); box-shadow: var(--shadow-2);
+}
+.hazard-item:hover .row-actions, .hazard-item:focus-within .row-actions { display: flex; }
+
+/* Stacked in a narrow queue (the map rail, or with the drawer open); a table when there's room. */
+.queue { container-type: inline-size; container-name: queue; }
+.table-only { display: none; }
+/* Column minimums + gaps + padding come to about 905 px, so the table starts at 920 px. The
+   Moderation page shows it at full width and stacks when the detail drawer narrows the queue. */
+@container queue (min-width: 920px) {
+  .stacked-only { display: none !important; }
+  .hazard-row, .queue-head {
+    display: grid; align-items: center; gap: 10px;
+    grid-template-columns: 32px minmax(160px, 2.4fr) 80px 104px 110px minmax(80px, 1fr) 70px minmax(96px, 1.2fr) 44px 12px;
+  }
+  .hazard-row { padding: 8px var(--s3); }
+  .hazard-row .table-only { display: flex; align-items: center; gap: 4px; min-width: 0; flex-wrap: wrap; }
+  .hazard-row .row-place { font-size: 12px; color: var(--text-2); }
+  .hazard-row .row-title { font-size: 14px; }
+  .cell { font-size: 13px; }
+  .cell-area { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block !important; }
+  .cell-num { justify-content: flex-end; font-variant-numeric: tabular-nums; }
+  .queue-head {
+    /* Lines up with the rows: same side margin as the list, row padding plus the row's 1 px border. */
+    padding: 6px calc(var(--s3) + 1px); margin: 0 var(--s2); border-bottom: 1px solid var(--border-strong);
+    font-size: 11px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0;
+  }
+  .queue-head .num { text-align: right; }
+  .row-actions { right: 28px; }
 }

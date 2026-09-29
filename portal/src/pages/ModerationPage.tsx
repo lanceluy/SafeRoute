@@ -29,7 +29,7 @@ export function ModerationPage() {
   useShortcuts({
     '/': () => searchRef.current?.focus(),
     f: c.toggleFilters,
-    m: () => navigate(selectedId ? `/map?hazard=${selectedId}` : '/map'),
+    m: () => { navigate(selectedId ? `/map?hazard=${selectedId}` : '/map'); },
   });
 
   return (
@@ -37,13 +37,15 @@ export function ModerationPage() {
       <div className="page-head">
         <div>
           <h1>Moderation</h1>
-          <p className="muted">Work through reports that need a decision. Open one to see its photo, history and actions.</p>
+          <p className="muted">Work through reports that need a decision. Open one to see its photo, history and actions.
+            <span className="kbd-hint"> <kbd>↑</kbd> <kbd>↓</kbd> move · <kbd>/</kbd> search · <kbd>Esc</kbd> close</span></p>
         </div>
       </div>
       <div className="moderation-body">
         <section className="card moderation-queue">
           <QueuePanel c={c} tabs={MODERATION_TABS} stats={stats} barangays={barangays} selectedId={selectedId}
-            onSelect={select} searchRef={searchRef} page="moderation" />
+            onSelect={select} searchRef={searchRef} page="moderation"
+            onShowOnMap={(h) => navigate(`/map?hazard=${h.id}&tab=active`)} />
         </section>
         {selectedId && (
           <HazardDrawer key={selectedId} hazardId={selectedId} barangays={barangays} onClose={() => select(null)} onChanged={c.queue.reload}

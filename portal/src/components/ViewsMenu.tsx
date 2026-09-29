@@ -4,7 +4,17 @@ import type { SavedView } from '../api/types';
 import { parseViewConfig, type ViewConfig } from '../lib/views';
 import { useToast } from '../state/toast';
 import { Dialog } from './Dialog';
+import { NO_FILTERS, type Filters } from './FilterBar';
 import { Menu } from './Menu';
+
+/** Ready-made setups for common workflows; they keep the current tab and replace filters and sort. */
+const SUGGESTED: { name: string; hint: string; filters: Filters; sort: ViewConfig['sort'] }[] = [
+  { name: 'High severity, well supported', hint: 'High severity with medium or high confidence',
+    filters: { ...NO_FILTERS, severities: ['HIGH'], confidences: ['HIGH', 'MEDIUM'] }, sort: 'oldest' },
+  { name: 'Older than 7 days', hint: 'Oldest first', filters: { ...NO_FILTERS, date: 'older7' }, sort: 'oldest' },
+  { name: 'Accessibility issues', hint: 'Accessibility barriers', filters: { ...NO_FILTERS, types: ['ACCESSIBILITY_BARRIER'] }, sort: 'severity' },
+  { name: 'Unassigned high severity', hint: 'No department yet', filters: { ...NO_FILTERS, severities: ['HIGH'], departments: ['UNASSIGNED'] }, sort: 'oldest' },
+];
 
 /** Named queue setups for this official, kept on the server so they follow them anywhere. */
 export function ViewsMenu({ page, current, onApply }: {
@@ -30,10 +40,14 @@ export function ViewsMenu({ page, current, onApply }: {
       <Menu label="Saved views" align="left" trigger={<span className="btn btn-secondary btn-sm">Views ▾</span>}
         items={[
           ...mine.map((v) => ({ label: v.name, hint: 'Apply', onSelect: () => { const c = parseViewConfig(v.config); if (c) onApply(c); } })),
+          ...SUGGESTED.map((s) => ({
+            label: s.name, hint: `Suggested · ${s.hint}`,
+            onSelect: () => onApply({ page, tab: current().tab, filters: s.filters, sort: s.sort, search: '' }),
+          })),
           { label: 'Save current view…', hint: 'Tab, filters, sort and search', onSelect: () => setNaming(true) },
           mine.length ? { label: 'Delete a view…', hint: `${mine.length} saved`, danger: true, onSelect: () => setConfirmDelete(mine[0]) } : null,
         ]}
-        footer={!mine.length ? <p className="menu-empty">No saved views on this page yet.</p> : null} />
+        footer={!mine.length ? <p className="menu-empty">None saved on this page yet. The suggested views above are a starting point.</p> : null} />
       {naming && <NameDialog onClose={() => setNaming(false)} existing={mine.map((v) => v.name)} onSave={async (name) => {
         await api.saveView(name, JSON.stringify(current()));
         toast({ kind: 'success', message: `Saved view “${name}”` });

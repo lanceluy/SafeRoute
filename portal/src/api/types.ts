@@ -93,7 +93,7 @@ export interface Page<T> {
 }
 
 export type QueueView = 'recent' | 'attention' | 'high' | 'contested' | 'expiring' | 'unconfirmed' | 'active' | 'removed' | 'unassigned';
-export type QueueSort = 'review' | 'newest' | 'oldest' | 'severity' | 'confidence' | 'disputed' | 'confirmed' | 'expiring' | 'priority';
+export type QueueSort = 'review' | 'newest' | 'oldest' | 'severity' | 'confidence' | 'disputed' | 'confirmed' | 'expiring' | 'priority' | 'updated';
 
 export interface QueueQuery {
   view?: QueueView;
@@ -126,13 +126,26 @@ export interface Stats {
   queueCounts: Record<QueueView, number>;
   activeByType: { key: HazardType; count: number }[];
   activeBySeverity: { key: Severity; count: number }[];
-  daily: { date: string; reported: number; resolved: number; backlog: number }[];
+  daily: {
+    date: string; reported: number; resolved: number; backlog: number;
+    reportedHigh: number; reportedMedium: number; reportedLow: number;
+    /** Reports that created a hazard, and reports merged into an existing one. */
+    newReports: number; mergedReports: number;
+  }[];
   resolution: {
     averageHours: number | null;
     previousAverageHours: number | null;
     resolvedCount: number;
     byType: { type: HazardType; averageHours: number; count: number }[];
   };
+  /** Status changes in the range. */
+  outcomes: { resolved: number; expired: number; removed: number; reopened: number };
+  /** Report-to-verified time of hazards first verified in the range. */
+  verification: { averageHours: number | null; verifiedCount: number; byType: { type: HazardType; averageHours: number; count: number }[] };
+  /** Reports by local weekday (1 = Monday) and hour; empty cells are left out. */
+  reportTimes: { dayOfWeek: number; hour: number; count: number }[];
+  /** Places (~165 m) with repeated hazards in the range, busiest first. */
+  hotspots: { latitude: number; longitude: number; count: number; topType: HazardType }[];
 }
 
 export interface ActivityEntry {

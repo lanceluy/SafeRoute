@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { useSearchParams } from 'react-router';
 import { api } from '../api/client';
-import type { Hazard } from '../api/types';
+import type { Hazard, HazardType } from '../api/types';
 import { HazardDrawer } from '../components/HazardDrawer';
 import { LayerSwitcher, MapLegend } from '../components/MapControls';
 import { MapView, type MapLayer } from '../components/MapView';
 import { QueuePanel, useQueueControls } from '../components/QueuePanel';
 import { plural } from '../lib/format';
+import { TYPE_LABEL } from '../lib/hazards';
 import { MAP_TABS } from '../lib/queue';
 import { useShortcuts } from '../lib/shortcuts';
 import { useBarangays } from '../state/places';
@@ -30,7 +31,9 @@ function storedWidth() {
 export function MapPage() {
   const [params, setParams] = useSearchParams();
   const barangays = useBarangays();
-  const c = useQueueControls(MAP_TABS, barangays, params.get('tab') ?? undefined, params.get('area') ?? undefined);
+  const typeParam = params.get('type');
+  const c = useQueueControls(MAP_TABS, barangays, params.get('tab') ?? undefined, params.get('area') ?? undefined,
+    typeParam && typeParam in TYPE_LABEL ? typeParam as HazardType : undefined);
   const { stats } = useStats();
   const selectedId = params.get('hazard');
   const [layer, setLayer] = useState<MapLayer>('markers');

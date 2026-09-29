@@ -9,6 +9,7 @@ const NAV = [
   { to: '/map', label: 'Hazard Map' },
   { to: '/moderation', label: 'Moderation' },
   { to: '/analytics', label: 'Analytics' },
+  { to: '/weather', label: 'Weather' },
   { to: '/activity', label: 'Activity' },
 ];
 

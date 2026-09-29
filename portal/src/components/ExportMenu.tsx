@@ -9,8 +9,10 @@ import { useToast } from '../state/toast';
 import { Menu } from './Menu';
 
 /** CSV of the hazards in view, or a printable report (the browser's Save as PDF). */
-export function ExportMenu({ hazards, title, barangays, departments, stats }: {
+export function ExportMenu({ hazards, title, barangays, departments, stats, compact = false }: {
   hazards: Hazard[]; title: string; barangays: Barangay[]; departments: Department[]; stats: Stats | null;
+  /** A "•••" more-actions button, for toolbars where export is a less frequent action. */
+  compact?: boolean;
 }) {
   const toast = useToast();
   const [printing, setPrinting] = useState(false);
@@ -27,15 +29,16 @@ export function ExportMenu({ hazards, title, barangays, departments, stats }: {
   const none = hazards.length === 0;
   return (
     <>
-      <Menu label="Export" align="right" trigger={<span className="btn btn-secondary btn-sm">Export ▾</span>} items={[
+      <Menu label={compact ? 'More actions' : 'Export'} align="right"
+        trigger={<span className="btn btn-secondary btn-sm">{compact ? <span aria-hidden="true">•••</span> : 'Export ▾'}</span>} items={[
         {
-          label: 'CSV spreadsheet', hint: none ? 'Nothing to export' : plural(hazards.length, 'hazard'), disabled: none,
+          label: compact ? 'Export CSV spreadsheet' : 'CSV spreadsheet', hint: none ? 'Nothing to export' : plural(hazards.length, 'hazard'), disabled: none,
           onSelect: () => {
             downloadCsv(hazards, barangays, departments, title.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
             toast({ kind: 'success', message: `Exported ${plural(hazards.length, 'hazard')}` });
           },
         },
-        { label: 'PDF report', hint: 'Summary and table, for meetings', disabled: none, onSelect: () => setPrinting(true) },
+        { label: compact ? 'Export PDF report' : 'PDF report', hint: 'Summary and table, for meetings', disabled: none, onSelect: () => setPrinting(true) },
       ]} />
       {printing && createPortal(
         <PrintReport hazards={hazards} title={title} barangays={barangays} departments={departments} stats={stats} />,

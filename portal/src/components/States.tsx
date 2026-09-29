@@ -17,12 +17,22 @@ export function SkeletonRows({ count = 6 }: { count?: number }) {
   );
 }
 
-export function EmptyState({ title, children, icon = '✓' }: { title: string; children?: ReactNode; icon?: string }) {
+export function EmptyState({ title, children, icon = '✓', action }: {
+  title: string; children?: ReactNode; icon?: string;
+  /** A next step, e.g. another queue that still has work in it. */
+  action?: { text: string; label: string; onClick: () => void } | null;
+}) {
   return (
     <div className="state-block">
       <div className="state-icon" aria-hidden="true">{icon}</div>
       <h3>{title}</h3>
       {children && <p>{children}</p>}
+      {action && (
+        <>
+          <p className="state-next">{action.text}</p>
+          <button type="button" className="btn btn-primary btn-sm" onClick={action.onClick}>{action.label}</button>
+        </>
+      )}
     </div>
   );
 }

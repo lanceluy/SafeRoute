@@ -228,6 +228,9 @@ preview, the safer-route comparison or navigation) · **Reports** (My Reports wi
 - **Moderation:** the review queue on its own (needs review, contested, unconfirmed, expiring,
   removed).
 - **Analytics:** reports vs resolved, backlog, resolution time, and per-barangay numbers.
+- **Weather:** live Makati conditions, the next 24 hours of rain and a 7-day forecast from
+  [Open-Meteo](https://open-meteo.com/) (no key needed), with PAGASA rainfall and heat index bands and
+  a link to active flooding reports. Refreshes every 10 minutes.
 - **Activity:** the audit trail of staff actions and status changes.
 
 Across the queues:

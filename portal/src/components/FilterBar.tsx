@@ -5,8 +5,10 @@ import {
 } from '../api/types';
 import type { Barangay } from '../lib/geo';
 import { CONFIDENCE_HINT, CONFIDENCE_LABEL, PRIORITY_HINT, PRIORITY_LABEL, SEVERITY_LABEL, TYPE_LABEL } from '../lib/hazards';
+import { filterChips } from '../lib/queue';
 
-export type DateRange = 'any' | 'today' | '7d' | '30d';
+/** Reported within a period, or `older7`: reported more than a week ago. */
+export type DateRange = 'any' | 'today' | '7d' | '30d' | 'older7';
 
 export interface Filters {
   types: HazardType[];
@@ -31,23 +33,28 @@ export function activeFilterCount(f: Filters) {
 }
 
 export function dateFrom(range: DateRange): string | undefined {
-  if (range === 'any') return undefined;
+  if (range === 'any' || range === 'older7') return undefined;
   const d = new Date();
   if (range === 'today') d.setHours(0, 0, 0, 0);
   else d.setDate(d.getDate() - (range === '7d' ? 7 : 30));
   return d.toISOString();
 }
 
+export function dateTo(range: DateRange): string | undefined {
+  return range === 'older7' ? new Date(Date.now() - 7 * 86_400_000).toISOString() : undefined;
+}
+
 export const SORTS: { value: QueueSort; label: string }[] = [
   { value: 'review', label: 'Review priority' },
   { value: 'newest', label: 'Newest reports' },
-  { value: 'oldest', label: 'Oldest reports' },
+  { value: 'oldest', label: 'Oldest unresolved' },
   { value: 'severity', label: 'Highest severity' },
   { value: 'confidence', label: 'Lowest confidence' },
   { value: 'disputed', label: 'Most disputed' },
   { value: 'confirmed', label: 'Most confirmed' },
   { value: 'expiring', label: 'Expiring soon' },
   { value: 'priority', label: 'City priority' },
+  { value: 'updated', label: 'Recently updated' },
 ];
 
 const DATES: { value: DateRange; label: string }[] = [
@@ -55,6 +62,7 @@ const DATES: { value: DateRange; label: string }[] = [
   { value: 'today', label: 'Today' },
   { value: '7d', label: 'Last 7 days' },
   { value: '30d', label: 'Last 30 days' },
+  { value: 'older7', label: 'Older than 7 days' },
 ];
 
 function toggle<T>(list: T[], value: T) {
@@ -69,13 +77,15 @@ export const FilterBar = forwardRef<HTMLInputElement, {
   barangays: Barangay[];
   departments: Department[];
   open: boolean; onToggle: () => void;
-  /** Saved views and export, next to Filters. */
+  /** Saved views, more actions and Select, at the end of the toolbar. */
   extra?: React.ReactNode;
 }>(function FilterBar({ search, onSearch, sort, onSort, filters, onFilters, barangays, departments, open, onToggle, extra }, searchRef) {
   const count = activeFilterCount(filters);
+  const chips = filterChips(filters, (code) => (code === UNASSIGNED ? 'Unassigned' : departments.find((d) => d.code === code)?.name ?? code));
   return (
     <div className="filter-bar">
-      <div className="filter-row">
+      {/* One toolbar: Search | Sort | Filters | Views | ••• | Select. It wraps in the map's narrow rail. */}
+      <div className="toolbar" role="toolbar" aria-label="Queue controls">
         <label className="search">
           <span className="sr-only">Search hazards</span>
           <span aria-hidden="true" className="search-icon">⌕</span>
@@ -83,20 +93,27 @@ export const FilterBar = forwardRef<HTMLInputElement, {
             onChange={(e) => onSearch(e.target.value)} />
           <kbd aria-hidden="true">/</kbd>
         </label>
-      </div>
-      <div className="filter-row">
-        <label className="select-inline">
-          <span>Sort</span>
-          <select value={sort} onChange={(e) => onSort(e.target.value as QueueSort)}>
-            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+        <label className="select-inline toolbar-sort">
+          <span className="sr-only">Sort</span>
+          <select value={sort} onChange={(e) => onSort(e.target.value as QueueSort)} aria-label="Sort">
+            {SORTS.map((s) => <option key={s.value} value={s.value}>Sort: {s.label}</option>)}
           </select>
         </label>
         <button type="button" className={`btn btn-secondary btn-sm${count ? ' has-count' : ''}`} aria-expanded={open} onClick={onToggle}>
           Filters{count ? ` · ${count}` : ''} <span aria-hidden="true">{open ? '▴' : '▾'}</span>
         </button>
-        {count > 0 && <button type="button" className="btn-link" onClick={() => onFilters(NO_FILTERS)}>Clear</button>}
+        {extra}
       </div>
-      {extra && <div className="filter-row">{extra}</div>}
+      {chips.length > 0 && (
+        <div className="filter-chips" aria-label="Active filters">
+          {chips.map((c) => (
+            <button key={c.key} type="button" className="filter-chip" onClick={() => onFilters(c.remove(filters))} aria-label={`Remove filter: ${c.label}`}>
+              {c.label} <span aria-hidden="true">×</span>
+            </button>
+          ))}
+          <button type="button" className="btn-link" onClick={() => onFilters(NO_FILTERS)}>Clear all</button>
+        </div>
+      )}
       {open && (
         <div className="filter-panel">
           <fieldset>

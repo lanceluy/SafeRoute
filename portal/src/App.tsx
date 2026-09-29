@@ -12,6 +12,7 @@ const OverviewPage = lazy(() => import('./pages/OverviewPage').then((m) => ({ de
 const MapPage = lazy(() => import('./pages/MapPage').then((m) => ({ default: m.MapPage })));
 const ModerationPage = lazy(() => import('./pages/ModerationPage').then((m) => ({ default: m.ModerationPage })));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })));
+const WeatherPage = lazy(() => import('./pages/WeatherPage').then((m) => ({ default: m.WeatherPage })));
 const ActivityPage = lazy(() => import('./pages/ActivityPage').then((m) => ({ default: m.ActivityPage })));
 const AccountPage = lazy(() => import('./pages/AccountPage').then((m) => ({ default: m.AccountPage })));
 
@@ -32,6 +33,7 @@ export function App() {
                     <Route path="/map" element={<MapPage />} />
                     <Route path="/moderation" element={<ModerationPage />} />
                     <Route path="/analytics" element={<AnalyticsPage />} />
+                    <Route path="/weather" element={<WeatherPage />} />
                     <Route path="/activity" element={<ActivityPage />} />
                     <Route path="/account" element={<AccountPage />} />
                     <Route path="*" element={<Navigate to="/" replace />} />

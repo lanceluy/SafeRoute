@@ -8,11 +8,20 @@ import type { Hazard, Severity } from '../api/types';
 import type { Barangay } from '../lib/geo';
 import { SEVERITY_RANK, STATUS_LABEL, STATUS_MARK, TYPE_LABEL, typeIcon } from '../lib/hazards';
 
-export type MapLayer = 'markers' | 'density' | 'severity';
+/** density: every hazard alike · severity: high counts most · high: high severity only · age: older counts more. */
+export type MapLayer = 'markers' | 'density' | 'severity' | 'high' | 'age';
 
 const MAKATI: L.LatLngTuple = [14.5547, 121.0244];
 const FOCUS_ZOOM = 17;
 const HEAT_WEIGHT: Record<Severity, number> = { HIGH: 1, MEDIUM: 0.6, LOW: 0.3 };
+/** In the age layer a hazard reaches full weight after two weeks unresolved. */
+const AGE_FULL_DAYS = 14;
+
+function heatWeight(h: Hazard, layer: MapLayer, now: number) {
+  if (layer === 'severity') return HEAT_WEIGHT[h.severity];
+  if (layer === 'age') return Math.max(0.15, Math.min(1, (now - Date.parse(h.createdAt)) / 86_400_000 / AGE_FULL_DAYS));
+  return 0.7;
+}
 
 function pinIcon(h: Hazard, selected: boolean, pulse: boolean) {
   const status = h.status.toLowerCase();
@@ -33,7 +42,8 @@ function clusterIcon(cluster: L.MarkerCluster) {
   return L.divIcon({
     className: 'pin-wrap',
     iconSize: [size, size],
-    html: `<div class="cluster cluster-${worst.toLowerCase()}" style="width:${size}px;height:${size}px"><strong>${n}</strong><span>hazards</span></div>`,
+    // Just the number on the map; the full wording stays for hover and screen readers.
+    html: `<div class="cluster cluster-${worst.toLowerCase()}" style="width:${size}px;height:${size}px" role="img" aria-label="${n} hazards" title="${n} hazards"><strong>${n}</strong></div>`,
   });
 }
 
@@ -155,11 +165,13 @@ export function MapView({ hazards, selectedId, onSelect, layer, barangays, highl
       if (!m.hasLayer(group)) m.addLayer(group);
     } else {
       if (m.hasLayer(group)) m.removeLayer(group);
+      const now = Date.now();
       heat.current = L.heatLayer(
-        hazards.map((h) => [h.latitude, h.longitude, layer === 'severity' ? HEAT_WEIGHT[h.severity] : 0.7] as L.HeatLatLngTuple),
+        (layer === 'high' ? hazards.filter((h) => h.severity === 'HIGH') : hazards)
+          .map((h) => [h.latitude, h.longitude, heatWeight(h, layer, now)] as L.HeatLatLngTuple),
         {
           radius: 28, blur: 22, maxZoom: 17, minOpacity: 0.3,
-          gradient: layer === 'severity'
+          gradient: layer === 'severity' || layer === 'high'
             ? { 0.2: '#F6D365', 0.5: '#F79009', 0.8: '#D92D20', 1: '#7A1A12' }
             : { 0.2: '#9EC5F8', 0.5: '#3B7DD8', 0.8: '#173B67', 1: '#0B1F3A' },
         },
