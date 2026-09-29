@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import type { Hazard } from '../api/types';
 import { HazardDrawer } from '../components/HazardDrawer';
 import { QueuePanel, useQueueControls } from '../components/QueuePanel';
-import { MODERATION_TABS } from '../lib/queue';
+import { MODERATION_CHIPS, MODERATION_TABS } from '../lib/queue';
 import { useShortcuts } from '../lib/shortcuts';
 import { useBarangays } from '../state/places';
 import { useStats } from '../state/useStats';
@@ -13,7 +13,7 @@ export function ModerationPage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const barangays = useBarangays();
-  const c = useQueueControls(MODERATION_TABS, barangays, params.get('tab') ?? undefined);
+  const c = useQueueControls(MODERATION_TABS, MODERATION_CHIPS, barangays, params.get('tab') ?? undefined);
   const { stats } = useStats();
   const selectedId = params.get('hazard');
   const searchRef = useRef<HTMLInputElement>(null);

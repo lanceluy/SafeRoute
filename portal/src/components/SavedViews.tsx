@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError } from '../api/client';
 import type { SavedView } from '../api/types';
 import { parseViewConfig, type ViewConfig } from '../lib/views';
 import { useToast } from '../state/toast';
 import { Dialog } from './Dialog';
 import { NO_FILTERS, type Filters } from './FilterBar';
-import { Menu } from './Menu';
+import type { MenuHeading, MenuItem } from './Menu';
 
 /** Ready-made setups for common workflows; they keep the current tab and replace filters and sort. */
 const SUGGESTED: { name: string; hint: string; filters: Filters; sort: ViewConfig['sort'] }[] = [
@@ -16,10 +16,13 @@ const SUGGESTED: { name: string; hint: string; filters: Filters; sort: ViewConfi
   { name: 'Unassigned high severity', hint: 'No department yet', filters: { ...NO_FILTERS, severities: ['HIGH'], departments: ['UNASSIGNED'] }, sort: 'oldest' },
 ];
 
-/** Named queue setups for this official, kept on the server so they follow them anywhere. */
-export function ViewsMenu({ page, current, onApply }: {
+/**
+ * Named queue setups for this official, kept on the server so they follow them anywhere, plus a few
+ * suggested ones. Returns menu entries and the dialogs (naming, deleting) to render beside them.
+ */
+export function useSavedViews({ page, current, onApply }: {
   page: ViewConfig['page']; current: () => ViewConfig; onApply: (v: ViewConfig) => void;
-}) {
+}): { items: (MenuItem | MenuHeading)[]; dialogs: ReactNode } {
   const toast = useToast();
   const [views, setViews] = useState<SavedView[]>([]);
   const [naming, setNaming] = useState(false);
@@ -35,33 +38,35 @@ export function ViewsMenu({ page, current, onApply }: {
 
   const mine = views.filter((v) => parseViewConfig(v.config)?.page === page);
 
-  return (
-    <>
-      <Menu label="Saved views" align="left" trigger={<span className="btn btn-secondary btn-sm">Views ▾</span>}
-        items={[
-          ...mine.map((v) => ({ label: v.name, hint: 'Apply', onSelect: () => { const c = parseViewConfig(v.config); if (c) onApply(c); } })),
-          ...SUGGESTED.map((s) => ({
-            label: s.name, hint: `Suggested · ${s.hint}`,
-            onSelect: () => onApply({ page, tab: current().tab, filters: s.filters, sort: s.sort, search: '' }),
-          })),
-          { label: 'Save current view…', hint: 'Tab, filters, sort and search', onSelect: () => setNaming(true) },
-          mine.length ? { label: 'Delete a view…', hint: `${mine.length} saved`, danger: true, onSelect: () => setConfirmDelete(mine[0]) } : null,
-        ]}
-        footer={!mine.length ? <p className="menu-empty">None saved on this page yet. The suggested views above are a starting point.</p> : null} />
-      {naming && <NameDialog onClose={() => setNaming(false)} existing={mine.map((v) => v.name)} onSave={async (name) => {
-        await api.saveView(name, JSON.stringify(current()));
-        toast({ kind: 'success', message: `Saved view “${name}”` });
-        reload();
-      }} />}
-      {confirmDelete && (
-        <DeleteDialog views={mine} initial={confirmDelete} onClose={() => setConfirmDelete(null)} onDelete={async (v) => {
-          await api.deleteView(v.id);
-          toast({ kind: 'success', message: `Deleted view “${v.name}”` });
+  return {
+    items: [
+      ...(mine.length ? [{ heading: 'Your views' }] : []),
+      ...mine.map((v) => ({ label: v.name, hint: 'Apply', onSelect: () => { const c = parseViewConfig(v.config); if (c) onApply(c); } })),
+      { heading: 'Suggested views' },
+      ...SUGGESTED.map((s) => ({
+        label: s.name, hint: s.hint,
+        onSelect: () => onApply({ page, tab: current().tab, chips: current().chips, filters: s.filters, sort: s.sort, search: '' }),
+      })),
+      { label: 'Save current view…', hint: 'Tab, filters, sort and search', onSelect: () => setNaming(true) },
+      ...(mine.length ? [{ label: 'Delete a view…', hint: `${mine.length} saved`, danger: true, onSelect: () => setConfirmDelete(mine[0]) }] : []),
+    ],
+    dialogs: (
+      <>
+        {naming && <NameDialog onClose={() => setNaming(false)} existing={mine.map((v) => v.name)} onSave={async (name) => {
+          await api.saveView(name, JSON.stringify(current()));
+          toast({ kind: 'success', message: `Saved view “${name}”` });
           reload();
-        }} />
-      )}
-    </>
-  );
+        }} />}
+        {confirmDelete && (
+          <DeleteDialog views={mine} initial={confirmDelete} onClose={() => setConfirmDelete(null)} onDelete={async (v) => {
+            await api.deleteView(v.id);
+            toast({ kind: 'success', message: `Deleted view “${v.name}”` });
+            reload();
+          }} />
+        )}
+      </>
+    ),
+  };
 }
 
 function NameDialog({ onClose, onSave, existing }: { onClose: () => void; onSave: (name: string) => Promise<void>; existing: string[] }) {

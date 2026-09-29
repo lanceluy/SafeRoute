@@ -3,56 +3,94 @@ import { dateFrom, dateTo, type Filters } from '../components/FilterBar';
 import { barangayAt, cachedStreet, contains, type Barangay } from './geo';
 import { CONFIDENCE_LABEL, PRIORITY_LABEL, SEVERITY_LABEL, TYPE_LABEL, isActive, shortId } from './hazards';
 
-/** What a tab is for; tabs are drawn in these groups, with a divider between groups. */
-export type TabGroup = 'inbox' | 'risk' | 'workflow' | 'archive';
-export const TAB_GROUP_LABEL: Record<TabGroup, string> = { inbox: 'Inbox', risk: 'Risk', workflow: 'Workflow', archive: 'Archive' };
-
 export interface QueueTab {
   key: string;
   label: string;
-  group: TabGroup;
   view?: QueueView;
   statuses?: HazardStatus[];
   /** The order the tab opens in; otherwise the current sort is kept. */
   sort?: QueueSort;
+  /** Closed hazards: the "Filter by" chips don't apply. */
+  archive?: boolean;
   /** Explains the tab when it's empty. */
+  empty: { title: string; body: string };
+}
+
+/**
+ * A "Filter by" chip: narrows whichever tab is open, in the browser. Several chips combine (and).
+ * `count` in the tab bar is how many of the current tab's hazards match.
+ */
+export interface QueueChip {
+  key: string;
+  label: string;
+  match: (h: Hazard, now: number) => boolean;
   empty: { title: string; body: string };
 }
 
 /** First on both pages, so a report shows up the moment it arrives. */
 const NEW_TAB: QueueTab = {
-  key: 'new', label: 'New', group: 'inbox', view: 'recent', sort: 'newest',
+  key: 'new', label: 'New', view: 'recent', sort: 'newest',
   empty: { title: 'No new reports', body: 'Reports from the last 24 hours appear here as they arrive.' },
 };
+const ACTIVE_TAB: QueueTab = {
+  key: 'active', label: 'All active', view: 'active',
+  empty: { title: 'No active hazards', body: 'Nothing is reported in the selected area right now.' },
+};
+const ATTENTION_EMPTY = { title: 'Nothing needs attention', body: 'No contested reports, unverified high-severity hazards, or reports waiting over a day.' };
 
+/** Primary tabs: where am I? Four per page. */
 export const MAP_TABS: QueueTab[] = [
   NEW_TAB,
-  { key: 'attention', label: 'Needs attention', group: 'inbox', view: 'attention',
-    empty: { title: 'Nothing needs attention', body: 'No contested reports, unverified high-severity hazards, or reports waiting over a day.' } },
-  { key: 'high', label: 'High severity', group: 'risk', view: 'high',
-    empty: { title: 'No high-severity hazards', body: 'There are no active high-severity hazards in the selected area.' } },
-  { key: 'contested', label: 'Contested', group: 'risk', view: 'contested',
-    empty: { title: 'No contested reports', body: 'The community agrees on every active report.' } },
-  { key: 'expiring', label: 'Expiring soon', group: 'risk', view: 'expiring',
-    empty: { title: 'Nothing expiring soon', body: 'Every active hazard was confirmed recently.' } },
-  { key: 'active', label: 'All active', group: 'workflow', view: 'active',
-    empty: { title: 'No active hazards', body: 'Nothing is reported in the selected area right now.' } },
-  { key: 'closed', label: 'Closed', group: 'archive', statuses: ['RESOLVED', 'EXPIRED', 'REMOVED'],
+  { key: 'attention', label: 'Needs attention', view: 'attention', empty: ATTENTION_EMPTY },
+  ACTIVE_TAB,
+  { key: 'closed', label: 'Closed', statuses: ['RESOLVED', 'EXPIRED', 'REMOVED'], archive: true,
     empty: { title: 'No closed hazards', body: 'Resolved, expired and removed reports appear here.' } },
 ];
 
 export const MODERATION_TABS: QueueTab[] = [
   NEW_TAB,
-  { key: 'attention', label: 'Needs review', group: 'inbox', view: 'attention', empty: MAP_TABS[1].empty },
-  { key: 'contested', label: 'Contested', group: 'risk', view: 'contested', empty: MAP_TABS[3].empty },
-  { key: 'unconfirmed', label: 'Unconfirmed', group: 'risk', view: 'unconfirmed',
-    empty: { title: 'No unconfirmed reports', body: 'Every active report has at least one community response.' } },
-  { key: 'expiring', label: 'Expiring soon', group: 'risk', view: 'expiring', empty: MAP_TABS[4].empty },
-  { key: 'unassigned', label: 'Unassigned', group: 'workflow', view: 'unassigned',
-    empty: { title: 'Everything is assigned', body: 'Every active hazard has a department handling it.' } },
-  { key: 'removed', label: 'Removed reports', group: 'archive', view: 'removed',
+  { key: 'attention', label: 'Needs review', view: 'attention', empty: ATTENTION_EMPTY },
+  ACTIVE_TAB,
+  { key: 'removed', label: 'Removed', view: 'removed', archive: true,
     empty: { title: 'No removed reports', body: 'Reports removed as false, spam or invalid appear here.' } },
 ];
+
+/** Mirrors ExpiryPolicy.java's default time to live per type (hours). */
+const TTL_HOURS: Record<Hazard['type'], number> = {
+  FLOODING: 12, PATH_OBSTRUCTION: 24, CONSTRUCTION: 72, OPEN_MANHOLE: 168, POOR_LIGHTING: 720, BROKEN_SIDEWALK: 1080, ACCESSIBILITY_BARRIER: 2160,
+};
+
+/** In the last fifth of its time to live, like ExpiryPolicy.isExpiringSoon. */
+export function isExpiringSoon(h: Hazard, now = Date.now()) {
+  if (!isActive(h.status) || !h.expiresAt) return false;
+  const remaining = Date.parse(h.expiresAt) - now;
+  return remaining >= 0 && remaining <= (TTL_HOURS[h.type] * 3_600_000) / 5;
+}
+
+const CHIP_HIGH: QueueChip = { key: 'high', label: 'High severity', match: (h) => h.severity === 'HIGH',
+  empty: { title: 'No high-severity hazards here', body: 'None of the hazards in this tab are high severity.' } };
+const CHIP_CONTESTED: QueueChip = { key: 'contested', label: 'Contested', match: (h) => h.status === 'DISPUTED',
+  empty: { title: 'No contested reports here', body: 'The community agrees on every report in this tab.' } };
+const CHIP_EXPIRING: QueueChip = { key: 'expiring', label: 'Expiring soon', match: (h, now) => isExpiringSoon(h, now),
+  empty: { title: 'Nothing expiring soon here', body: 'Every hazard in this tab was confirmed recently.' } };
+const CHIP_UNCONFIRMED: QueueChip = { key: 'unconfirmed', label: 'Unconfirmed', match: (h) => h.confidence === 'UNCONFIRMED',
+  empty: { title: 'No unconfirmed reports here', body: 'Every report in this tab has at least one community response.' } };
+const CHIP_UNASSIGNED: QueueChip = { key: 'unassigned', label: 'Unassigned', match: (h) => isActive(h.status) && !h.assignedDepartment,
+  empty: { title: 'Everything here is assigned', body: 'Every hazard in this tab has a department handling it.' } };
+
+/** Secondary "Filter by" chips: how do I narrow this down? */
+export const MAP_CHIPS: QueueChip[] = [CHIP_HIGH, CHIP_CONTESTED, CHIP_EXPIRING];
+export const MODERATION_CHIPS: QueueChip[] = [CHIP_CONTESTED, CHIP_UNCONFIRMED, CHIP_EXPIRING, CHIP_UNASSIGNED];
+
+/**
+ * A tab key from a link or an older saved view. Keys that are now chips (tab=high, tab=contested…)
+ * open All active with that chip on, so existing links keep working.
+ */
+export function resolveTab(tabs: QueueTab[], chips: QueueChip[], key?: string): { tab: string; chips: string[] } {
+  if (key && tabs.some((t) => t.key === key)) return { tab: key, chips: [] };
+  if (key && chips.some((c) => c.key === key)) return { tab: ACTIVE_TAB.key, chips: [key] };
+  return { tab: tabs[0].key, chips: [] };
+}
 
 export function buildQuery(tab: QueueTab, filters: Filters, sort: QueueSort, barangays: Barangay[]): QueueQuery {
   const area = filters.area ? barangays.find((b) => b.name === filters.area) : undefined;
@@ -136,10 +174,14 @@ function inHours(iso: string, now: number) {
   return `Expires in ${plural(Math.round(hours / 24), 'day')}`;
 }
 
-/** Why this hazard is in the selected queue, in a few words; null where the tab says it all. */
-export function queueReason(tabKey: string, h: Hazard, now = Date.now()): string | null {
+/**
+ * Why this hazard is in the selected queue, in a few words: from the tab (Needs review) or, when
+ * chips narrow the list, the first chip's reason; null where the tab says it all.
+ */
+export function queueReason(tabKey: string, chipKeys: string[], h: Hazard, now = Date.now()): string | null {
+  const key = tabKey === 'attention' ? tabKey : chipKeys[0] ?? tabKey;
   const days = ageDays(h, now);
-  switch (tabKey) {
+  switch (key) {
     case 'attention':
       if (h.status === 'DISPUTED') return `Contested: ${plural(h.confirmationCount, 'confirmation')} vs ${plural(h.disputeCount, 'dispute')}`;
       if (h.status === 'REPORTED' && h.severity === 'HIGH') return 'High severity, not yet verified';

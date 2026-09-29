@@ -3,6 +3,7 @@ import { Link, NavLink } from 'react-router';
 import { logout } from '../api/client';
 import type { Session } from '../api/types';
 import { LiveStatus } from './LiveStatus';
+import { Chevron } from './Chevron';
 
 const NAV = [
   { to: '/', label: 'Overview', end: true },
@@ -62,7 +63,7 @@ function AccountMenu({ session }: { session: Session }) {
           <span className="account-role">{ROLE_LABEL[session.role]}</span>
           <span className="account-city">Makati City</span>
         </span>
-        <span aria-hidden="true" className="caret">▾</span>
+        <span aria-hidden="true" className="caret"><Chevron /></span>
       </button>
       {open && (
         <div className="account-menu">

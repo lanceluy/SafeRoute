@@ -6,6 +6,7 @@ import {
 import type { Barangay } from '../lib/geo';
 import { CONFIDENCE_HINT, CONFIDENCE_LABEL, PRIORITY_HINT, PRIORITY_LABEL, SEVERITY_LABEL, TYPE_LABEL } from '../lib/hazards';
 import { filterChips } from '../lib/queue';
+import { Chevron } from './Chevron';
 
 /** Reported within a period, or `older7`: reported more than a week ago. */
 export type DateRange = 'any' | 'today' | '7d' | '30d' | 'older7';
@@ -45,14 +46,14 @@ export function dateTo(range: DateRange): string | undefined {
 }
 
 export const SORTS: { value: QueueSort; label: string }[] = [
-  { value: 'review', label: 'Review priority' },
-  { value: 'newest', label: 'Newest reports' },
+  { value: 'review', label: 'Review order' },
+  { value: 'newest', label: 'Newest first' },
   { value: 'oldest', label: 'Oldest unresolved' },
   { value: 'severity', label: 'Highest severity' },
   { value: 'confidence', label: 'Lowest confidence' },
   { value: 'disputed', label: 'Most disputed' },
   { value: 'confirmed', label: 'Most confirmed' },
-  { value: 'expiring', label: 'Expiring soon' },
+  { value: 'expiring', label: 'Expiring soonest' },
   { value: 'priority', label: 'City priority' },
   { value: 'updated', label: 'Recently updated' },
 ];
@@ -77,32 +78,33 @@ export const FilterBar = forwardRef<HTMLInputElement, {
   barangays: Barangay[];
   departments: Department[];
   open: boolean; onToggle: () => void;
-  /** Saved views, more actions and Select, at the end of the toolbar. */
+  /** The ••• menu, pushed to the right of the toolbar. */
   extra?: React.ReactNode;
 }>(function FilterBar({ search, onSearch, sort, onSort, filters, onFilters, barangays, departments, open, onToggle, extra }, searchRef) {
   const count = activeFilterCount(filters);
   const chips = filterChips(filters, (code) => (code === UNASSIGNED ? 'Unassigned' : departments.find((d) => d.code === code)?.name ?? code));
   return (
     <div className="filter-bar">
-      {/* One toolbar: Search | Sort | Filters | Views | ••• | Select. It wraps in the map's narrow rail. */}
-      <div className="toolbar" role="toolbar" aria-label="Queue controls">
-        <label className="search">
-          <span className="sr-only">Search hazards</span>
-          <span aria-hidden="true" className="search-icon">⌕</span>
-          <input ref={searchRef} type="search" placeholder="Search hazards, streets or barangays" value={search}
-            onChange={(e) => onSearch(e.target.value)} />
-          <kbd aria-hidden="true">/</kbd>
-        </label>
+      {/* Search on its own row; then Sort and Filters on the left, the ••• menu on the right. */}
+      <label className="search">
+        <span className="sr-only">Search hazards</span>
+        <span aria-hidden="true" className="search-icon">⌕</span>
+        <input ref={searchRef} type="search" placeholder="Search hazards"
+          title="Search by hazard type, description, street or barangay" value={search}
+          onChange={(e) => onSearch(e.target.value)} />
+        <kbd aria-hidden="true">/</kbd>
+      </label>
+      <div className="toolbar" role="toolbar" aria-label="Sort, filter and more">
         <label className="select-inline toolbar-sort">
           <span className="sr-only">Sort</span>
           <select value={sort} onChange={(e) => onSort(e.target.value as QueueSort)} aria-label="Sort">
-            {SORTS.map((s) => <option key={s.value} value={s.value}>Sort: {s.label}</option>)}
+            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
         </label>
         <button type="button" className={`btn btn-secondary btn-sm${count ? ' has-count' : ''}`} aria-expanded={open} onClick={onToggle}>
-          Filters{count ? ` · ${count}` : ''} <span aria-hidden="true">{open ? '▴' : '▾'}</span>
+          Filters{count ? ` · ${count}` : ''}<Chevron up={open} />
         </button>
-        {extra}
+        {extra && <span className="toolbar-end">{extra}</span>}
       </div>
       {chips.length > 0 && (
         <div className="filter-chips" aria-label="Active filters">

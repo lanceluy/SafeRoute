@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface MenuItem {
   label: string;
@@ -8,34 +9,84 @@ export interface MenuItem {
   onSelect: () => void;
 }
 
-/** A button that opens a small list of actions. Esc or a click outside closes it. */
+/** A small section label between groups of items. */
+export interface MenuHeading { heading: string }
+type Entry = MenuItem | MenuHeading;
+const isHeading = (e: Entry): e is MenuHeading => 'heading' in e;
+
+/** Space kept between the list and the window edge. */
+const EDGE = 8;
+const GAP = 6;
+
+/**
+ * A button that opens a small list of actions. Esc or a click outside closes it.
+ *
+ * The list is drawn at the top of the page (a portal) and positioned against the button, so a
+ * narrow or scrolling container (the map's side rail, the detail drawer) can never clip it. It is
+ * kept inside the window: shifted in from either edge, flipped up when there's no room below, and
+ * scrollable when it's still too tall.
+ */
 export function Menu({ label, trigger, items, align = 'right', direction = 'down', footer }: {
-  label: string; trigger: ReactNode; items: (MenuItem | null)[]; align?: 'left' | 'right'; direction?: 'up' | 'down';
+  label: string; trigger: ReactNode; items: (Entry | null)[]; align?: 'left' | 'right'; direction?: 'up' | 'down';
   /** Extra content under the items (e.g. an empty-state line). */
   footer?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const id = useId();
+
+  // Place the list before the browser paints it, and keep it attached while the page moves.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const button = ref.current?.getBoundingClientRect();
+      const list = listRef.current;
+      if (!button || !list) return;
+      list.style.maxHeight = '';
+      const width = list.offsetWidth;
+      const height = list.offsetHeight;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const preferred = align === 'right' ? button.right - width : button.left;
+      list.style.left = `${Math.max(EDGE, Math.min(preferred, vw - width - EDGE))}px`;
+      const below = vh - button.bottom - GAP - EDGE;
+      const above = button.top - GAP - EDGE;
+      const down = direction === 'down' ? below >= height || below >= above : !(above >= height || above >= below);
+      const room = down ? below : above;
+      list.style.maxHeight = `${Math.max(120, room)}px`;
+      list.style.top = `${down ? button.bottom + GAP : button.top - GAP - Math.min(height, room)}px`;
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true); // capture: any scrolling container moves the button
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open, align, direction]);
 
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!ref.current?.contains(target) && !listRef.current?.contains(target)) setOpen(false);
+    };
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey, true);
-    ref.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not([disabled])')?.focus();
+    listRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not([disabled])')?.focus({ preventScroll: true });
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey, true);
     };
   }, [open]);
 
-  const shown = items.filter((i): i is MenuItem => i !== null);
+  const shown = items.filter((i): i is Entry => i !== null);
   const moveFocus = (e: ReactKeyboardEvent) => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     e.preventDefault();
-    const buttons = Array.from(ref.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ?? []);
+    const buttons = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ?? []);
     const i = buttons.indexOf(document.activeElement as HTMLButtonElement);
     buttons[(i + (e.key === 'ArrowDown' ? 1 : buttons.length - 1)) % buttons.length]?.focus();
   };
@@ -46,9 +97,11 @@ export function Menu({ label, trigger, items, align = 'right', direction = 'down
         aria-label={label} onClick={() => setOpen((o) => !o)}>
         {trigger}
       </button>
-      {open && (
-        <div className={`menu-list menu-${align} menu-${direction}`} role="menu" id={id} onKeyDown={moveFocus}>
-          {shown.map((item) => (
+      {open && createPortal(
+        <div className="menu-list" role="menu" id={id} ref={listRef} onKeyDown={moveFocus}>
+          {shown.map((item) => isHeading(item) ? (
+            <div key={`h-${item.heading}`} className="menu-heading" role="presentation">{item.heading}</div>
+          ) : (
             <button key={item.label} type="button" role="menuitem" disabled={item.disabled}
               className={item.danger ? 'menu-item danger' : 'menu-item'}
               onClick={() => { setOpen(false); item.onSelect(); }}>
@@ -57,7 +110,8 @@ export function Menu({ label, trigger, items, align = 'right', direction = 'down
             </button>
           ))}
           {footer}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

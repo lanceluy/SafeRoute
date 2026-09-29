@@ -8,7 +8,7 @@ import { MapView, type MapLayer } from '../components/MapView';
 import { QueuePanel, useQueueControls } from '../components/QueuePanel';
 import { plural } from '../lib/format';
 import { TYPE_LABEL } from '../lib/hazards';
-import { MAP_TABS } from '../lib/queue';
+import { MAP_CHIPS, MAP_TABS } from '../lib/queue';
 import { useShortcuts } from '../lib/shortcuts';
 import { useBarangays } from '../state/places';
 import { useStats } from '../state/useStats';
@@ -32,7 +32,7 @@ export function MapPage() {
   const [params, setParams] = useSearchParams();
   const barangays = useBarangays();
   const typeParam = params.get('type');
-  const c = useQueueControls(MAP_TABS, barangays, params.get('tab') ?? undefined, params.get('area') ?? undefined,
+  const c = useQueueControls(MAP_TABS, MAP_CHIPS, barangays, params.get('tab') ?? undefined, params.get('area') ?? undefined,
     typeParam && typeParam in TYPE_LABEL ? typeParam as HazardType : undefined);
   const { stats } = useStats();
   const selectedId = params.get('hazard');

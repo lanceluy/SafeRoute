@@ -16,6 +16,7 @@ import { CityResponse } from './CityResponse';
 import { ConfidenceBadge, InfoTip, SeverityBadge, StatusBadge, TypeIcon } from './Badges';
 import { Menu } from './Menu';
 import { ErrorState } from './States';
+import { Chevron } from './Chevron';
 
 /** Everything about one hazard, and the municipal actions on it. Render with key={hazardId}. */
 export function HazardDrawer({ hazardId, barangays, onClose, onChanged, onShowOnMap }: {
@@ -191,7 +192,7 @@ function DrawerBody({ detail, history, barangays, showAllHistory, onShowAllHisto
           {active
             ? <button type="button" className="btn btn-primary" onClick={() => onAction('resolve')}>✓ Mark as resolved</button>
             : <button type="button" className="btn btn-primary" onClick={() => onAction('reopen')}>Reopen hazard</button>}
-          <Menu label="More actions" trigger={<span className="btn btn-secondary">More actions ▾</span>} align="left" direction="up" items={[
+          <Menu label="More actions" trigger={<span className="btn btn-secondary">More actions<Chevron /></span>} align="left" direction="up" items={[
             active ? { label: 'Mark as resolved', hint: 'Fixed or no longer present', onSelect: () => onAction('resolve') } : null,
             !active ? { label: 'Reopen hazard', hint: 'It’s back, or was closed by mistake', onSelect: () => onAction('reopen') } : null,
             h.status !== 'REMOVED'
