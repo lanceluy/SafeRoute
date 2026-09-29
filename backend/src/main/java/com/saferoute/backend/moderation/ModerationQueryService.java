@@ -40,7 +40,7 @@ public class ModerationQueryService {
         RECENT
     }
 
-    public enum Sort { REVIEW, NEWEST, OLDEST, SEVERITY, CONFIDENCE, DISPUTED, CONFIRMED, EXPIRING, PRIORITY }
+    public enum Sort { REVIEW, NEWEST, OLDEST, SEVERITY, CONFIDENCE, DISPUTED, CONFIRMED, EXPIRING, PRIORITY, UPDATED }
 
     /** In the {@code departments} filter: hazards nobody is assigned to. */
     public static final String UNASSIGNED = "UNASSIGNED";
@@ -210,6 +210,7 @@ public class ModerationQueryService {
             case DISPUTED -> "h.dispute_count DESC, h.created_at DESC";
             case CONFIRMED -> "h.confirmation_count DESC, h.created_at DESC";
             case EXPIRING -> "h.expires_at ASC";
+            case UPDATED -> "h.updated_at DESC";
             // Unset priority sorts after LOW: the city hasn't ranked it yet.
             case PRIORITY -> "CASE h.municipal_priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'NORMAL' THEN 2"
                     + " WHEN 'LOW' THEN 3 ELSE 4 END, CASE h.severity WHEN 'HIGH' THEN 0 WHEN 'MEDIUM' THEN 1 ELSE 2 END,"
@@ -278,10 +279,22 @@ public class ModerationQueryService {
                             AND h.resolved_at >= b.day_start AND h.resolved_at < b.day_end) AS resolved,
                        (SELECT count(*) FROM hazards h WHERE h.created_at < b.day_end
                             AND COALESCE(h.resolved_at, CASE WHEN h.status = 'EXPIRED' THEN h.updated_at END,
-                                         'infinity'::timestamptz) >= b.day_end) AS backlog
-                FROM bounds b ORDER BY b.day
+                                         'infinity'::timestamptz) >= b.day_end) AS backlog,
+                       r.high, r.medium, r.low, s.created, s.merged
+                FROM bounds b
+                CROSS JOIN LATERAL (
+                    SELECT count(*) FILTER (WHERE h.severity = 'HIGH') AS high,
+                           count(*) FILTER (WHERE h.severity = 'MEDIUM') AS medium,
+                           count(*) FILTER (WHERE h.severity = 'LOW') AS low
+                    FROM hazards h WHERE h.created_at >= b.day_start AND h.created_at < b.day_end) r
+                CROSS JOIN LATERAL (
+                    SELECT count(*) FILTER (WHERE s.processing_status = 'CREATED') AS created,
+                           count(*) FILTER (WHERE s.processing_status = 'MERGED') AS merged
+                    FROM hazard_submissions s WHERE s.created_at >= b.day_start AND s.created_at < b.day_end) s
+                ORDER BY b.day
                 """, p, (rs, i) -> new ModerationStats.Day(rs.getObject("day", LocalDate.class),
-                rs.getLong("reported"), rs.getLong("resolved"), rs.getLong("backlog")));
+                rs.getLong("reported"), rs.getLong("resolved"), rs.getLong("backlog"),
+                rs.getLong("high"), rs.getLong("medium"), rs.getLong("low"), rs.getLong("created"), rs.getLong("merged")));
 
         String hours = "avg(extract(epoch FROM h.resolved_at - h.created_at)) / 3600.0";
         Double average = jdbc.queryForObject("SELECT " + hours + " FROM hazards h WHERE h.status = 'RESOLVED'"
@@ -293,8 +306,56 @@ public class ModerationQueryService {
                         + " GROUP BY h.type ORDER BY hours DESC", p,
                 (rs, i) -> new ModerationStats.TypeResolution(rs.getString("type"), rs.getDouble("hours"), rs.getLong("n")));
 
+        ModerationStats.Outcomes outcomes = jdbc.queryForObject("""
+                SELECT count(*) FILTER (WHERE new_status = 'RESOLVED') AS resolved,
+                       count(*) FILTER (WHERE new_status = 'EXPIRED') AS expired,
+                       count(*) FILTER (WHERE new_status = 'REMOVED') AS removed,
+                       count(*) FILTER (WHERE old_status = 'RESOLVED' AND new_status IN ('REPORTED', 'VERIFIED', 'DISPUTED')) AS reopened
+                FROM hazard_status_history WHERE changed_at >= :from AND changed_at < :to
+                """, p, (rs, i) -> new ModerationStats.Outcomes(
+                rs.getLong("resolved"), rs.getLong("expired"), rs.getLong("removed"), rs.getLong("reopened")));
+
+        // A hazard can be verified, disputed and verified again: the first time is what counts.
+        String firstVerified = "WITH fv AS (SELECT hazard_id, min(changed_at) AS at FROM hazard_status_history"
+                + " WHERE new_status = 'VERIFIED' GROUP BY hazard_id)";
+        String verifyHours = "avg(extract(epoch FROM fv.at - h.created_at)) / 3600.0";
+        ModerationStats.Verification verification = jdbc.queryForObject(firstVerified
+                        + " SELECT " + verifyHours + " AS hours, count(*) AS n FROM fv JOIN hazards h ON h.id = fv.hazard_id"
+                        + " WHERE fv.at >= :from AND fv.at < :to", p,
+                (rs, i) -> new ModerationStats.Verification(nullableDouble(rs, "hours"), rs.getLong("n"), jdbc.query(firstVerified
+                                + " SELECT h.type, " + verifyHours + " AS hours, count(*) AS n FROM fv JOIN hazards h ON h.id = fv.hazard_id"
+                                + " WHERE fv.at >= :from AND fv.at < :to GROUP BY h.type ORDER BY hours DESC", p,
+                        (r, j) -> new ModerationStats.TypeResolution(r.getString("type"), r.getDouble("hours"), r.getLong("n")))));
+
+        // Every report counts here, including ones merged into an existing hazard.
+        List<ModerationStats.HourCount> reportTimes = jdbc.query("""
+                SELECT extract(isodow FROM s.created_at AT TIME ZONE :tz)::int AS dow,
+                       extract(hour FROM s.created_at AT TIME ZONE :tz)::int AS hr, count(*) AS n
+                FROM hazard_submissions s WHERE s.created_at >= :from AND s.created_at < :to
+                GROUP BY 1, 2 ORDER BY 1, 2
+                """, p, (rs, i) -> new ModerationStats.HourCount(rs.getInt("dow"), rs.getInt("hr"), rs.getLong("n")));
+
+        // 0.0015° is about 165 m here: close enough to be "the same place" for a pedestrian.
+        List<ModerationStats.Hotspot> hotspots = jdbc.query("""
+                SELECT avg(ST_Y(h.location::geometry)) AS lat, avg(ST_X(h.location::geometry)) AS lon, count(*) AS n,
+                       mode() WITHIN GROUP (ORDER BY h.type) AS top_type
+                FROM hazards h
+                WHERE h.created_at >= :from AND h.created_at < :to AND h.status <> 'REMOVED'
+                GROUP BY floor(ST_Y(h.location::geometry) / 0.0015), floor(ST_X(h.location::geometry) / 0.0015)
+                HAVING count(*) >= 2
+                ORDER BY n DESC, lat LIMIT 8
+                """, p, (rs, i) -> new ModerationStats.Hotspot(rs.getDouble("lat"), rs.getDouble("lon"), rs.getLong("n"),
+                rs.getString("top_type")));
+
         return new ModerationStats(start, end, zone.getId(), now, totals, queueCounts, byType, bySeverity, daily,
-                new ModerationStats.Resolution(average, previous, resolved, resolutionByType));
+                new ModerationStats.Resolution(average, previous, resolved, resolutionByType),
+                outcomes, verification, reportTimes, hotspots);
+    }
+
+    /** Postgres averages come back as numeric (BigDecimal); null when nothing matched. */
+    private static Double nullableDouble(ResultSet rs, String column) throws SQLException {
+        double value = rs.getDouble(column);
+        return rs.wasNull() ? null : value;
     }
 
     /** Active hazards per value of {@code column}, including zeroes, largest first. */

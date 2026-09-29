@@ -85,7 +85,7 @@ public class ModerationController {
             @Parameter(description = "Reported before (ISO-8601 instant)") @RequestParam(required = false) String to,
             @Parameter(description = "minLat,minLon,maxLat,maxLon") @RequestParam(required = false) String bbox,
             @Parameter(description = "Matches the description or the hazard type") @RequestParam(required = false) String q,
-            @Parameter(description = "review (default), newest, oldest, severity, confidence, disputed, confirmed, expiring, priority")
+            @Parameter(description = "review (default), newest, oldest, severity, confidence, disputed, confirmed, expiring, priority, updated")
             @RequestParam(required = false) String sort,
             @Parameter(description = "Comma-separated department codes; UNASSIGNED for none")
             @RequestParam(required = false) String departments,

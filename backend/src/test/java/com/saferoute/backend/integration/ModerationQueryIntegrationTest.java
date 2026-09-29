@@ -43,6 +43,8 @@ class ModerationQueryIntegrationTest extends IntegrationTestBase {
         assertThat(queue(mod, "bbox", box, "sort", "newest")).containsExactly(lighting, flooding, manhole);
         assertThat(queue(mod, "bbox", box, "sort", "severity").get(0)).isEqualTo(manhole);
         assertThat(queue(mod, "bbox", box, "sort", "disputed").get(0)).isEqualTo(flooding);
+        jdbc.update("UPDATE hazards SET updated_at = now() + interval '1 minute' WHERE id = ?", manhole);
+        assertThat(queue(mod, "bbox", box, "sort", "updated").get(0)).isEqualTo(manhole);
         assertThat(queue(mod, "bbox", box, "types", "OPEN_MANHOLE,FLOODING")).containsExactlyInAnyOrder(manhole, flooding);
         assertThat(queue(mod, "bbox", box, "severities", "HIGH")).containsExactly(manhole);
         assertThat(queue(mod, "bbox", box, "view", "high")).containsExactly(manhole);
@@ -105,6 +107,51 @@ class ModerationQueryIntegrationTest extends IntegrationTestBase {
         assertThat(after.at("/resolution/byType").findValuesAsText("type")).contains("BROKEN_SIDEWALK");
 
         json(mvc.perform(get("/api/moderation/stats").param("tz", "Mars/Olympus").with(bearer(mod))).andReturn(), 400);
+    }
+
+    @Test
+    void statsBreakDownOutcomesVerificationReportTimesAndHotspots() throws Exception {
+        TestUser alice = registerUser();
+        TestUser bob = registerUser();
+        TestUser carol = registerUser();
+        TestUser mod = registerModerator();
+        JsonNode before = stats(mod);
+        Instant start = Instant.now().minusSeconds(1);
+        // Three different types within 30 m along one axis: at least two share a hotspot cell.
+        Location at = freshLocation();
+        UUID manhole = reportAndAwaitHazard(alice, "OPEN_MANHOLE", at);
+        UUID lighting = reportAndAwaitHazard(alice, "POOR_LIGHTING", at.offsetMeters(0, 15));
+        reportAndAwaitHazard(alice, "CONSTRUCTION", at.offsetMeters(0, 30));
+        confirm(bob, manhole, "VERIFY");
+        confirm(carol, manhole, "VERIFY");
+        awaitHazard(mod, manhole, h -> "VERIFIED".equals(h.get("status").asText()));
+        resolve(mod, lighting);
+
+        JsonNode after = stats(mod);
+        assertThat(after.at("/outcomes/resolved").asLong()).isEqualTo(before.at("/outcomes/resolved").asLong() + 1);
+        assertThat(after.at("/verification/verifiedCount").asLong()).isEqualTo(before.at("/verification/verifiedCount").asLong() + 1);
+        assertThat(after.at("/verification/byType").findValuesAsText("type")).contains("OPEN_MANHOLE");
+        assertThat(sumCounts(after.get("reportTimes"))).isEqualTo(sumCounts(before.get("reportTimes")) + 3);
+        for (JsonNode day : after.get("daily")) {
+            assertThat(day.get("reportedHigh").asLong() + day.get("reportedMedium").asLong() + day.get("reportedLow").asLong())
+                    .isEqualTo(day.get("reported").asLong());
+        }
+        JsonNode today = after.get("daily").get(after.get("daily").size() - 1);
+        assertThat(today.get("newReports").asLong()).isGreaterThanOrEqualTo(3);
+        // Only the busiest places are listed, so look at this test's own reports alone.
+        JsonNode mine = json(mvc.perform(get("/api/moderation/stats").param("from", start.toString()).with(bearer(mod))).andReturn(), 200);
+        boolean hotspotHere = false;
+        for (JsonNode h : mine.get("hotspots")) {
+            if (Math.abs(h.get("latitude").asDouble() - at.lat()) < 0.002 && Math.abs(h.get("longitude").asDouble() - at.lon()) < 0.002
+                    && h.get("count").asLong() >= 2) hotspotHere = true;
+        }
+        assertThat(hotspotHere).as("a hotspot at the three reports").isTrue();
+    }
+
+    private static long sumCounts(JsonNode cells) {
+        long total = 0;
+        for (JsonNode c : cells) total += c.get("count").asLong();
+        return total;
     }
 
     @Test
