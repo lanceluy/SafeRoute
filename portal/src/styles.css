@@ -1764,3 +1764,4 @@ a.menu-item { text-decoration: none; color: var(--text); font-weight: 600; }
 .queue-panel.floating .filter-row .sort-control { margin-left: auto; }
 .preview-main { min-width: 140px; }
 .preview-main strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brand-logo { border-radius: 9px; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12); }

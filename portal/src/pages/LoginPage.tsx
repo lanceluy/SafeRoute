@@ -25,7 +25,7 @@ export function LoginPage() {
     <main className="login">
       <section className="login-brand" aria-hidden="true">
         <div className="login-brand-top">
-          <img src="/logo-mark.png" alt="" width={34} height={40} />
+          <img src="/logo-mark.png" alt="" width={36} height={36} className="brand-logo" />
           <span>SafeRoute</span>
         </div>
         <MakatiOutline />
@@ -38,7 +38,7 @@ export function LoginPage() {
       <section className="login-panel">
         <form className="login-form" onSubmit={submit}>
           <div className="login-mobile-brand">
-            <img src="/logo-mark.png" alt="" width={30} height={35} />
+            <img src="/logo-mark.png" alt="" width={32} height={32} className="brand-logo" />
             <span>SafeRoute</span>
           </div>
           <div>

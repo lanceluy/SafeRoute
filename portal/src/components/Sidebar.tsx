@@ -36,7 +36,7 @@ export function Sidebar({ rail, canToggle, onToggle, onNavigate, needsReview }: 
   return (
     <aside className="sidebar" aria-label="Portal sections">
       <NavLink to="/" className="sidebar-brand" onClick={onNavigate} aria-label="SafeRoute overview">
-        <img src="/logo-mark.png" alt="" width={30} height={35} />
+        <img src="/logo-mark.png" alt="" width={32} height={32} className="brand-logo" />
         <div>
           <strong>SafeRoute</strong>
           <span>Municipal Portal</span>

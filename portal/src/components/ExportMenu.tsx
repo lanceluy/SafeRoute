@@ -91,7 +91,7 @@ function PrintReport({ hazards, meta, barangays, departments, stats }: {
   return (
     <div className="print-report">
       <header className="print-letterhead">
-        <img src="/logo-mark.png" alt="" width={34} height={40} />
+        <img src="/logo-mark.png" alt="" width={36} height={36} />
         <div className="print-org">
           <p className="print-kicker">Makati City · Municipal Hazard Monitoring</p>
           <h1>SafeRoute Municipal Hazard Report</h1>
