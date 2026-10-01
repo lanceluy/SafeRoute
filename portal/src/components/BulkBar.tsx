@@ -5,6 +5,7 @@ import { plural } from '../lib/format';
 import type { Barangay } from '../lib/geo';
 import { PRIORITY_HINT, PRIORITY_LABEL, isActive } from '../lib/hazards';
 import { useToast } from '../state/toast';
+import { Check, UserPlus, X } from 'lucide-react';
 import { Dialog } from './Dialog';
 import { ExportMenu } from './ExportMenu';
 
@@ -45,13 +46,13 @@ export function BulkBar({ selected, total, allChecked, onToggleAll, departments,
       </label>
       <strong>{selected.length ? plural(selected.length, 'selected', 'selected') : `Select hazards (${total})`}</strong>
       <button type="button" className="btn btn-primary btn-sm" disabled={!activeOnes.length} onClick={() => setDialog('resolve')}>
-        ✓ Resolve
+        <Check size={15} aria-hidden="true" />Resolve
       </button>
       <button type="button" className="btn btn-secondary btn-sm" disabled={!selected.length} onClick={() => setDialog('response')}>
-        Assign / priority
+        <UserPlus size={15} aria-hidden="true" />Assign / priority
       </button>
       {exportable && <ExportMenu hazards={selected} title="Selected hazards" barangays={barangays} departments={departments} stats={stats} />}
-      <button type="button" className="btn-link" onClick={onCancel}>Cancel</button>
+      <button type="button" className="icon-btn bulk-cancel" onClick={onCancel} aria-label="Leave select mode" title="Done selecting"><X size={17} aria-hidden="true" /></button>
       {dialog === 'resolve' && (
         <BulkResolve hazards={activeOnes} skipped={selected.length - activeOnes.length}
           onClose={() => setDialog(null)} onDone={onDone} />
@@ -80,10 +81,10 @@ function BulkResolve({ hazards, skipped, onClose, onDone }: {
     onClose();
   };
   return (
-    <Dialog title={`Mark ${plural(hazards.length, 'hazard')} as resolved?`} onClose={onClose} footer={<>
+    <Dialog title={`Mark ${plural(hazards.length, 'hazard')} as resolved?`} icon={<Check size={18} />} onClose={onClose} footer={<>
       <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
       <button type="button" className="btn btn-primary" disabled={busy} onClick={submit}>
-        {busy ? 'Resolving…' : `✓ Resolve ${hazards.length}`}
+        {busy ? 'Resolving…' : `Resolve ${hazards.length}`}
       </button>
     </>}>
       <p className="dialog-lead">They’ll no longer appear as active hazards to commuters. Use this when they’ve all been fixed or are gone.</p>
@@ -124,7 +125,7 @@ function BulkResponse({ hazards, departments, onClose, onDone }: {
     onClose();
   };
   return (
-    <Dialog title={`City response for ${plural(hazards.length, 'hazard')}`} onClose={onClose} footer={<>
+    <Dialog title={`City response for ${plural(hazards.length, 'hazard')}`} icon={<UserPlus size={18} />} onClose={onClose} footer={<>
       <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
       <button type="button" className="btn btn-primary" disabled={busy || unchanged} onClick={submit}>{busy ? 'Saving…' : 'Apply'}</button>
     </>}>

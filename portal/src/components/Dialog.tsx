@@ -1,8 +1,10 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 
 /** Modal dialog: focus stays inside, Esc closes, focus returns to where it was. */
-export function Dialog({ title, onClose, children, footer, tone = 'default' }: {
+export function Dialog({ title, onClose, children, footer, tone = 'default', icon }: {
   title: string; onClose: () => void; children: ReactNode; footer: ReactNode; tone?: 'default' | 'danger';
+  /** Shown in a tinted circle beside the title. */
+  icon?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -34,7 +36,10 @@ export function Dialog({ title, onClose, children, footer, tone = 'default' }: {
   return (
     <div className="dialog-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className={`dialog dialog-${tone}`} role="dialog" aria-modal="true" aria-labelledby={titleId} ref={ref}>
-        <h2 id={titleId}>{title}</h2>
+        <div className="dialog-head">
+          {icon && <span className="dialog-icon" aria-hidden="true">{icon}</span>}
+          <h2 id={titleId}>{title}</h2>
+        </div>
         <div className="dialog-body">{children}</div>
         <div className="dialog-footer">{footer}</div>
       </div>

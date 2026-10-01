@@ -3,6 +3,7 @@ import { api, ApiError } from '../api/client';
 import type { Hazard } from '../api/types';
 import { REMOVAL_REASONS, TYPE_LABEL, shortId } from '../lib/hazards';
 import { useToast } from '../state/toast';
+import { Check, RotateCcw, Trash2 } from 'lucide-react';
 import { Dialog } from './Dialog';
 
 export type HazardAction = 'resolve' | 'reopen' | 'remove';
@@ -50,7 +51,7 @@ export function ActionDialog({ action, hazard, onClose, onDone }: {
 
   if (action === 'remove') {
     return (
-      <Dialog title="Remove this report?" tone="danger" onClose={onClose} footer={<>
+      <Dialog title="Remove this report?" tone="danger" icon={<Trash2 size={18} />} onClose={onClose} footer={<>
         <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
         <button type="button" className="btn btn-danger" disabled={!reason || (reason === 'Other' && !note.trim()) || busy} onClick={submit}>
           {busy ? 'Removing…' : 'Remove report'}
@@ -86,10 +87,11 @@ export function ActionDialog({ action, hazard, onClose, onDone }: {
 
   const resolving = action === 'resolve';
   return (
-    <Dialog title={resolving ? 'Mark this hazard as resolved?' : 'Reopen this hazard?'} onClose={onClose} footer={<>
+    <Dialog title={resolving ? 'Mark this hazard as resolved?' : 'Reopen this hazard?'}
+      icon={resolving ? <Check size={18} /> : <RotateCcw size={18} />} onClose={onClose} footer={<>
       <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
       <button type="button" className="btn btn-primary" disabled={busy} onClick={submit}>
-        {busy ? 'Saving…' : resolving ? '✓ Mark as resolved' : 'Reopen hazard'}
+        {busy ? 'Saving…' : resolving ? 'Mark as resolved' : 'Reopen hazard'}
       </button>
     </>}>
       <p className="dialog-lead">

@@ -244,13 +244,13 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
         )}
         {!queue.loading && !queue.error && shown.length === 0 && (
           activeChips.length && !c.search && !activeFilterCount(c.filters)
-            ? <EmptyState icon="⌕" title={activeChips.length === 1 ? activeChips[0].empty.title : 'Nothing matches these filters'}
+            ? <EmptyState icon="search" title={activeChips.length === 1 ? activeChips[0].empty.title : 'Nothing matches these filters'}
                 action={{ text: `${plural(queue.hazards.length, 'hazard')} in ${c.tab.label} without ${activeChips.length === 1 ? 'this filter' : 'these filters'}.`,
                   label: activeChips.length === 1 ? 'Clear filter' : 'Clear filters', onClick: c.clearChips }}>
                 {activeChips.length === 1 ? activeChips[0].empty.body : 'No hazard in this tab matches all of them.'}
               </EmptyState>
             : c.search || activeFilterCount(c.filters) || activeChips.length
-            ? <EmptyState icon="⌕" title="No hazards match">Try a different search, or clear the filters.</EmptyState>
+            ? <EmptyState icon="search" title="No hazards match">Try a different search, or clear the filters.</EmptyState>
             : <EmptyState title={c.tab.empty.title} action={elsewhere ? {
                 text: `You still have ${plural(counts(elsewhere), 'report')} in ${elsewhere.label}.`,
                 label: `Go to ${elsewhere.label}`, onClick: () => c.setTab(elsewhere.key),
