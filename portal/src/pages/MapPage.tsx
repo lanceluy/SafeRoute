@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { useSearchParams } from 'react-router';
-import { ArrowRight, BoxSelect, List, Map as MapIcon, PanelRight, X } from 'lucide-react';
+import { ArrowRight, BoxSelect, ChevronDown, ChevronUp, List, Map as MapIcon, PanelRight, X } from 'lucide-react';
 import { api } from '../api/client';
 import type { Hazard, HazardType } from '../api/types';
 import { SeverityDot, StatusBadge, TypeIcon } from '../components/Badges';
@@ -15,9 +15,14 @@ import { MAP_CHIPS, MAP_TABS } from '../lib/queue';
 import { useShortcuts } from '../lib/shortcuts';
 import { useBarangays, usePlace } from '../state/places';
 import { useStats } from '../state/useStats';
+import { useToast } from '../state/toast';
+import { useRadar } from '../state/useWeather';
+import { RADAR_MAX_ZOOM, RADAR_SOURCE_URL } from '../lib/weather';
 
 type Mode = 'split' | 'map' | 'list';
 const MODE_KEY = 'saferoute.map.mode';
+const RAIN_KEY = 'saferoute.map.rain';
+const SUMMARY_KEY = 'saferoute.map.summary';
 const WIDTH_KEY = 'saferoute.queue.width';
 const MIN_WIDTH = 340;
 const MAX_WIDTH = 560;
@@ -52,6 +57,15 @@ export function MapPage() {
     const n = Number(v);
     return n >= MIN_WIDTH && n <= MAX_WIDTH ? n : 400;
   }));
+  const [rain, setRainState] = useState(() => stored(RAIN_KEY, (v) => v === '1'));
+  const setRain = (on: boolean) => { setRainState(on); remember(RAIN_KEY, on ? '1' : '0'); };
+  const radar = useRadar(rain);
+  const toast = useToast();
+  const radarFailed = rain && !!radar.error && !radar.data;
+  useEffect(() => { if (radarFailed) toast({ kind: 'error', message: 'Live radar unavailable right now.' }); }, [radarFailed, toast]);
+  const weatherOverlay = rain && radar.data ? {
+    url: radar.data.tileUrl, maxNativeZoom: RADAR_MAX_ZOOM + 1, attribution: `Radar: <a href="${RADAR_SOURCE_URL}">RainViewer</a>`,
+  } : null;
   const searchRef = useRef<HTMLInputElement>(null);
   const mapRef = useRef<HTMLDivElement>(null);
   const setMode = (m: Mode) => { setModeState(m); remember(MODE_KEY, m); };
@@ -129,14 +143,14 @@ export function MapPage() {
           onSelect={(id) => { if (id !== selectedId) setPreviewId(id); }}
           barangays={barangays} highlightArea={c.area} pulseIds={c.queue.newIds} fitKey={c.filterKey}
           loading={c.queue.loading} insetRight={panelOpen ? width + GUTTER * 2 : 0}
-          region={c.filters.region} drawing={drawing} controls
+          region={c.filters.region} drawing={drawing} controls weatherOverlay={weatherOverlay}
           onDrawn={(box) => { setDrawing(false); if (box) c.setFilters({ ...c.filters, region: box }); }}
           toolbar={<>
             <button type="button" className={drawing ? 'on' : undefined} aria-pressed={drawing} onClick={() => setDrawing((d) => !d)}
               aria-label={drawing ? 'Cancel area selection' : 'Select an area'} title={drawing ? 'Cancel (Esc)' : 'Select an area'}>
               <BoxSelect size={18} aria-hidden="true" />
             </button>
-            <LayersButton layer={layer} onChange={setLayer} />
+            <LayersButton layer={layer} onChange={setLayer} rain={rain} onRain={setRain} />
           </>} />
 
         <div className="view-switch" role="group" aria-label="View">
@@ -153,7 +167,13 @@ export function MapPage() {
           </div>
         )}
 
-        <MapLegend layer={layer} />
+        <MapLegend layer={layer} rain={rain} />
+
+        {mode !== 'list' && (
+          <HazardSummary hazards={mapHazards} shown={c.shown} area={c.filters.area} needsReview={stats?.totals.needsReview}
+            tabLabel={c.tab.label}
+            onViewList={() => { if (mode === 'map') setMode('split'); window.setTimeout(() => searchRef.current?.focus(), 0); }} />
+        )}
 
         {preview && !selectedId && (
           <PreviewCard hazard={preview} barangays={barangays} onOpen={() => open(preview.id)} onClose={() => setPreviewId(null)} />
@@ -198,5 +218,46 @@ function PreviewCard({ hazard: h, barangays, onOpen, onClose }: {
       <button type="button" className="btn btn-primary btn-sm" onClick={onOpen} autoFocus>Open report<ArrowRight size={15} aria-hidden="true" /></button>
       <button type="button" className="icon-btn" onClick={onClose} aria-label="Close preview"><X size={16} aria-hidden="true" /></button>
     </div>
+  );
+}
+
+/**
+ * Totals for what the map shows, floating over it: Makati by default, or the barangay picked
+ * through the filters, search or a Places suggestion. Collapses to a pill.
+ */
+function HazardSummary({ hazards, shown, area, needsReview, tabLabel, onViewList }: {
+  hazards: Hazard[]; shown: Hazard[]; area: string; needsReview?: number; tabLabel: string; onViewList: () => void;
+}) {
+  const [open, setOpen] = useState(() => stored(SUMMARY_KEY, (v) => v !== '0'));
+  const toggle = () => setOpen((o) => { remember(SUMMARY_KEY, o ? '0' : '1'); return !o; });
+  const list = area ? shown : hazards;
+  const high = list.filter((h) => h.severity === 'HIGH').length;
+  const byType = new Map<HazardType, number>();
+  for (const h of list) byType.set(h.type, (byType.get(h.type) ?? 0) + 1);
+  const top = [...byType].sort((a, b) => b[1] - a[1])[0];
+  const title = area || 'Makati';
+
+  if (!open) {
+    return (
+      <button type="button" className="hazard-summary-pill glass" onClick={toggle} aria-expanded={false}>
+        <strong>{title}</strong><span>{list.length}</span><ChevronDown size={14} aria-hidden="true" />
+      </button>
+    );
+  }
+  return (
+    <section className="hazard-summary glass" aria-label={`${title} summary`}>
+      <div className="hazard-summary-head">
+        <span><strong>{title}</strong><small>{tabLabel}</small></span>
+        <button type="button" className="icon-btn" onClick={toggle} aria-label="Collapse summary" aria-expanded={true}><ChevronUp size={15} aria-hidden="true" /></button>
+      </div>
+      <dl>
+        <div><dt>Hazards</dt><dd>{list.length}</dd></div>
+        <div><dt>High severity</dt><dd className={high ? 'hot' : undefined}>{high}</dd></div>
+        {area
+          ? <div><dt>Most common</dt><dd>{top ? `${top[1]} ${TYPE_LABEL[top[0]].toLowerCase()}` : '—'}</dd></div>
+          : <div><dt>Needs review</dt><dd>{needsReview ?? '–'}</dd></div>}
+      </dl>
+      <button type="button" className="btn-link" onClick={onViewList}>View list<ArrowRight size={14} aria-hidden="true" /></button>
+    </section>
   );
 }

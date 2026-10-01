@@ -65,8 +65,9 @@ export function useRainHistory(barangays: Barangay[]): Polled<RainHistory> {
 }
 
 /** The newest radar frame; RainViewer publishes every 10 minutes. */
-export function useRadar(): Polled<RadarFrame> {
-  return usePolled(fetchRadarFrame, 5 * 60_000);
+/** `enabled: false` skips fetching (e.g. while the Hazard Map's rain overlay is off). */
+export function useRadar(enabled = true): Polled<RadarFrame> {
+  return usePolled(fetchRadarFrame, 5 * 60_000, '', enabled);
 }
 
 /**

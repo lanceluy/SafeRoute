@@ -63,7 +63,7 @@ function clusterIcon(cluster: L.MarkerCluster) {
  * status) or a heatmap, plus barangay outlines. Selecting reveals and enlarges the marker.
  */
 export function MapView({ hazards, selectedId, highlightId, onSelect, layer, barangays, highlightArea, pulseIds, fitKey, loading, insetRight = 0,
-  region, drawing = false, onDrawn, toolbar, controls = false }: {
+  region, drawing = false, onDrawn, toolbar, controls = false, weatherOverlay }: {
   hazards: Hazard[];
   selectedId?: string | null;
   /** Shown like the selection (bigger, others dimmed) without moving the map: a marker preview. */
@@ -72,6 +72,8 @@ export function MapView({ hazards, selectedId, highlightId, onSelect, layer, bar
   toolbar?: ReactNode;
   /** Show the floating toolbar (zoom, recenter, then `toolbar`). Otherwise Leaflet's zoom control. */
   controls?: boolean;
+  /** Live rain radar tiles drawn above the streets and below the markers. */
+  weatherOverlay?: { url: string; maxNativeZoom: number; attribution: string } | null;
   onSelect?: (id: string) => void;
   layer: MapLayer;
   barangays?: Barangay[];
@@ -110,6 +112,9 @@ export function MapView({ hazards, selectedId, highlightId, onSelect, layer, bar
       disableClusteringAtZoom: FOCUS_ZOOM,
       chunkedLoading: true,
     });
+    // Rain radar sits above the tiles and outlines (400 is the overlay pane) but below the markers (600).
+    m.createPane('weather').style.zIndex = '450';
+    m.getPane('weather')!.style.pointerEvents = 'none';
     map.current = m;
     const resize = new ResizeObserver(() => m.invalidateSize());
     resize.observe(el.current!);
@@ -127,8 +132,21 @@ export function MapView({ hazards, selectedId, highlightId, onSelect, layer, bar
     const m = map.current;
     if (!m) return;
     base.current?.remove();
-    base.current = baseTiles(colors.dark).addTo(m);
-  }, [colors.dark]);
+    base.current = baseTiles(colors.dark, barangays).addTo(m);
+  }, [colors.dark, barangays]);
+
+  // Live rain radar, when asked for.
+  const radar = useRef<L.TileLayer | null>(null);
+  useEffect(() => {
+    const m = map.current;
+    radar.current?.remove();
+    radar.current = null;
+    if (!m || !weatherOverlay) return;
+    radar.current = L.tileLayer(weatherOverlay.url, {
+      pane: 'weather', opacity: 0.6, tileSize: 512, zoomOffset: -1, maxNativeZoom: weatherOverlay.maxNativeZoom,
+      attribution: weatherOverlay.attribution,
+    }).addTo(m);
+  }, [weatherOverlay?.url, weatherOverlay?.maxNativeZoom, weatherOverlay?.attribution]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Barangay outlines, faint; the selected area stands out.
   useEffect(() => {

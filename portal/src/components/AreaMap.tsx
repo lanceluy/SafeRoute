@@ -8,6 +8,15 @@ const MAKATI: L.LatLngTuple = [14.5547, 121.0244];
 /** The "wide" framing: Metro Manila around Makati, e.g. for live radar. */
 const WIDE_ZOOM = 11;
 
+/** Makati framed with even padding at the map's real size. */
+function fitMakati(m: L.Map, barangays: Barangay[], animate: boolean) {
+  if (!barangays.length) return;
+  m.invalidateSize();
+  const bounds = L.latLngBounds(barangays.flatMap((b) => [[b.bbox[0], b.bbox[1]], [b.bbox[2], b.bbox[3]]] as L.LatLngTuple[]));
+  if (animate) m.flyToBounds(bounds, { padding: [28, 28], duration: 0.6 });
+  else m.fitBounds(bounds, { padding: [28, 28], animate: false });
+}
+
 export interface MapOverlay {
   /** Leaflet tile URL template. */
   url: string;
@@ -41,12 +50,19 @@ export function AreaMap({ barangays, values, max, format, overlay, framing = 'fi
   const colors = useThemeColors();
   const formatRef = useRef(format);
   useEffect(() => { formatRef.current = format; });
+  const barangaysRef = useRef(barangays);
+  const framingRef = useRef(framing);
+  useEffect(() => { barangaysRef.current = barangays; framingRef.current = framing; });
 
   useEffect(() => {
-    const m = L.map(el.current!, { scrollWheelZoom: false, zoomControl: true }).setView(MAKATI, 13);
+    // Quarter-zoom steps let a fit frame Makati snugly instead of rounding down a whole level.
+    const m = L.map(el.current!, { scrollWheelZoom: false, zoomControl: true, zoomSnap: 0.25 }).setView(MAKATI, 13);
     m.createPane('overlay').style.zIndex = '250'; // above the street tiles (200), below the shapes (400)
     map.current = m;
-    const resize = new ResizeObserver(() => m.invalidateSize());
+    const resize = new ResizeObserver(() => {
+      m.invalidateSize();
+      if (framingRef.current === 'fit') fitMakati(m, barangaysRef.current, false);
+    });
     resize.observe(el.current!);
     return () => { resize.disconnect(); m.remove(); map.current = null; };
   }, []);
@@ -57,18 +73,17 @@ export function AreaMap({ barangays, values, max, format, overlay, framing = 'fi
     const m = map.current;
     if (!m) return;
     base.current?.remove();
-    base.current = baseTiles(colors.dark).addTo(m);
-  }, [colors.dark]);
+    base.current = baseTiles(colors.dark, barangays).addTo(m);
+  }, [colors.dark, barangays]);
 
+  const framed = useRef(false);
   useEffect(() => {
     const m = map.current;
     if (!m || !barangays.length) return;
-    if (framing === 'wide') {
-      m.setView(MAKATI, WIDE_ZOOM);
-    } else {
-      m.fitBounds(L.latLngBounds(barangays.flatMap((b) => [[b.bbox[0], b.bbox[1]], [b.bbox[2], b.bbox[3]]] as L.LatLngTuple[])),
-        { padding: [12, 12] });
-    }
+    if (framing === 'wide') m.setView(MAKATI, WIDE_ZOOM);
+    // The first fit is instant; switching from the wide radar view flies in.
+    else fitMakati(m, barangays, framed.current);
+    framed.current = true;
   }, [framing, barangays]);
 
   useEffect(() => {
@@ -86,7 +101,8 @@ export function AreaMap({ barangays, values, max, format, overlay, framing = 'fi
         const value = values?.get(f?.properties.name);
         return value == null
           ? { ...outline, fillColor: colors.navy, fillOpacity: values ? 0.08 : 0 }
-          : { ...outline, fillColor: sequentialColor(value, max), fillOpacity: 0.62 };
+          // Lighter than before so Makati's streets still read under the shading.
+          : { ...outline, fillColor: sequentialColor(value, max), fillOpacity: 0.5 };
       },
       onEachFeature: (f, layer) => {
         layer.bindTooltip(() => `<strong>${f.properties.name}</strong><br>${formatRef.current(values?.get(f.properties.name) ?? null, f.properties.name)}`,
