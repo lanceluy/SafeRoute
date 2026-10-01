@@ -4,6 +4,7 @@ import type { HazardFrame } from '../api/types';
 import { TYPE_LABEL } from '../lib/hazards';
 import { highSeverityNotices } from '../lib/prefs';
 import { useHazardFrames } from '../state/live';
+import { pushNotice } from '../state/notices';
 import { useToast } from '../state/toast';
 
 const BATCH_MS = 4000;
@@ -19,7 +20,10 @@ export function LiveNotices() {
   const timer = useRef<number | undefined>(undefined);
 
   useHazardFrames((frame) => {
-    if (frame.type !== 'hazard_created' || frame.severity !== 'HIGH' || !highSeverityNotices()) return;
+    if (frame.type !== 'hazard_created' || frame.severity !== 'HIGH') return;
+    // The bell always keeps them; the pop-up notice is a preference.
+    pushNotice(frame);
+    if (!highSeverityNotices()) return;
     pending.current.push(frame);
     if (timer.current !== undefined) return;
     timer.current = window.setTimeout(() => {

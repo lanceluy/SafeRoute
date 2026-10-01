@@ -36,11 +36,13 @@ export function AreaFrequencyCard({ barangays, from, to }: { barangays: Barangay
     bbox: selected?.bbox,
   }), [from, to, type, selected]);
   const queue = useQueue(query, 3000);
+  // Fixed for the card's lifetime: an open-ended range ends when the card opened.
+  const [opened] = useState(() => Date.now());
 
   const { rows, hazards, reports, topTypes } = useMemo(() => {
     const inArea = selected ? queue.hazards.filter((h) => contains(selected, h.latitude, h.longitude)) : queue.hazards;
     const start = Date.parse(from);
-    const end = to ? Date.parse(to) : Date.now();
+    const end = to ? Date.parse(to) : opened;
     const weekly = end - start > 31 * DAY;
     const buckets = new Map<number, { hazards: number; reports: number }>();
     for (let t = bucketStart(start, weekly); t < end; t += (weekly ? 7 : 1) * DAY) {
@@ -62,7 +64,7 @@ export function AreaFrequencyCard({ barangays, from, to }: { barangays: Barangay
     for (const h of inArea) byType.set(h.type, (byType.get(h.type) ?? 0) + 1);
     const topTypes = [...byType].sort((a, b) => b[1] - a[1]).slice(0, 3);
     return { rows, hazards: inArea.length, reports: inArea.reduce((n, h) => n + h.mergedReportCount + 1, 0), topTypes };
-  }, [queue.hazards, selected, from, to]);
+  }, [queue.hazards, selected, from, to, opened]);
 
   const where = selected ? `Barangay ${selected.name}` : 'all of Makati';
   const what = type === ALL ? 'hazards' : `${TYPE_LABEL[type].toLowerCase()} hazards`;

@@ -1,5 +1,5 @@
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import type { Severity, Stats } from '../api/types';
 import { dayLabel } from '../lib/format';
@@ -15,31 +15,36 @@ import { useThemeColors } from '../lib/theme';
 function useChartColors() {
   const c = useThemeColors();
   return {
-    reported: c.series1, resolved: c.series2, grid: c.grid, surface: c.surface,
+    reported: c.series1, resolved: c.series2, fixed: c.good, grid: c.grid, surface: c.surface,
     axis: { stroke: c.axis, fontSize: 12, tickLine: false, axisLine: false },
   };
 }
 
 /**
- * Reported (line) vs resolved (bars) per day. Both are counts on one axis; bars keep a handful of
- * resolutions visible next to many reports, where a second thin line would vanish along the floor.
+ * Reported (blue) and resolved (green) per day as two quiet lines over a faint fill. Not animated:
+ * live updates re-render the chart, and a draw-in animation would restart (and get cut off) each time.
  */
 export function TrendChart({ daily, height = 240 }: { daily: Stats['daily']; height?: number }) {
-  const { reported, resolved, grid, surface, axis } = useChartColors();
+  const { reported, fixed, grid, surface, axis } = useChartColors();
   const data = daily.map((d) => ({ ...d, label: dayLabel(d.date) }));
+  const dot = (fill: string) => (data.length <= 14 ? { r: 3, strokeWidth: 2, stroke: surface, fill } : false);
   return (
     <figure className="chart" aria-label="Hazards reported and resolved per day">
+      <div className="diverging-legend chart-legend">
+        <span><i className="swatch line" style={{ background: reported }} />Reported</span>
+        <span><i className="swatch line" style={{ background: fixed }} />Resolved</span>
+      </div>
       <ResponsiveContainer width="100%" height={height}>
-        <ComposedChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
+        <AreaChart data={data} margin={{ top: 8, right: 20, bottom: 0, left: -12 }}>
           <CartesianGrid stroke={grid} vertical={false} />
           <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={16} />
           <YAxis allowDecimals={false} {...axis} width={40} />
-          <Tooltip content={<DayTooltip />} cursor={{ fill: grid }} />
-          <Legend verticalAlign="top" align="right" height={28} wrapperStyle={{ fontSize: 13 }} />
-          <Bar dataKey="resolved" name="Resolved" fill={resolved} radius={[4, 4, 0, 0]} maxBarSize={18} legendType="square" />
-          <Line type="monotone" dataKey="reported" name="Reported" stroke={reported} strokeWidth={2} legendType="plainline"
-            dot={data.length <= 14 ? { r: 4, strokeWidth: 2, stroke: surface, fill: reported } : false} activeDot={{ r: 5, stroke: surface, strokeWidth: 2 }} />
-        </ComposedChart>
+          <Tooltip content={<DayTooltip />} cursor={{ stroke: axis.stroke, strokeDasharray: '3 3' }} />
+          <Area type="monotone" dataKey="reported" name="Reported" stroke={reported} strokeWidth={2} fill={reported} fillOpacity={0.08}
+            dot={dot(reported)} activeDot={{ r: 5, stroke: surface, strokeWidth: 2 }} isAnimationActive={false} />
+          <Area type="monotone" dataKey="resolved" name="Resolved" stroke={fixed} strokeWidth={2} fill={fixed} fillOpacity={0.08}
+            dot={dot(fixed)} activeDot={{ r: 5, stroke: surface, strokeWidth: 2 }} isAnimationActive={false} />
+        </AreaChart>
       </ResponsiveContainer>
     </figure>
   );
@@ -213,7 +218,7 @@ function DayTooltip({ active, payload, only }: {
         ? <span>{d.backlog} unresolved at day’s end</span>
         : <>
           <span><i style={{ background: colors.reported }} />{d.reported} reported</span>
-          <span><i style={{ background: colors.resolved }} />{d.resolved} resolved</span>
+          <span><i style={{ background: colors.fixed }} />{d.resolved} resolved</span>
         </>}
     </div>
   );

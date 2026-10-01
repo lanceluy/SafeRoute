@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useSearchParams } from 'react-router';
 import { UNASSIGNED, type Hazard, type HazardType, type QueueSort, type Stats } from '../api/types';
 import { plural } from '../lib/format';
 import type { Barangay } from '../lib/geo';
@@ -82,6 +83,24 @@ export function useQueueControls(tabs: QueueTab[], chipDefs: QueueChip[], barang
       setFiltersOpen(activeFilterCount(v.filters) > 0);
     },
   };
+}
+
+/**
+ * Applies a search from the top bar (?q=, with an optional ?tab=), then drops it from the URL so the
+ * same search can be run again and a reload doesn't repeat it.
+ */
+export function useSearchLink(c: QueueControls) {
+  const [params, setParams] = useSearchParams();
+  const q = params.get('q');
+  const { setSearch, setTab } = c;
+  useEffect(() => {
+    if (q == null) return;
+    const tab = params.get('tab');
+    if (tab) setTab(tab);
+    setSearch(q);
+    setParams((p) => { const next = new URLSearchParams(p); next.delete('q'); return next; }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
 }
 
 /** Tabs, search/sort/filters and the compact hazard list. */

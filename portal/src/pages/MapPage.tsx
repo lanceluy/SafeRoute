@@ -5,7 +5,7 @@ import type { Hazard, HazardType } from '../api/types';
 import { HazardDrawer } from '../components/HazardDrawer';
 import { LayerSwitcher, MapLegend } from '../components/MapControls';
 import { MapView, type MapLayer } from '../components/MapView';
-import { QueuePanel, useQueueControls } from '../components/QueuePanel';
+import { QueuePanel, useQueueControls, useSearchLink } from '../components/QueuePanel';
 import { plural } from '../lib/format';
 import { TYPE_LABEL } from '../lib/hazards';
 import { MAP_CHIPS, MAP_TABS } from '../lib/queue';
@@ -34,6 +34,7 @@ export function MapPage() {
   const typeParam = params.get('type');
   const c = useQueueControls(MAP_TABS, MAP_CHIPS, barangays, params.get('tab') ?? undefined, params.get('area') ?? undefined,
     typeParam && typeParam in TYPE_LABEL ? typeParam as HazardType : undefined);
+  useSearchLink(c);
   const { stats } = useStats();
   const selectedId = params.get('hazard');
   const [layer, setLayer] = useState<MapLayer>('markers');

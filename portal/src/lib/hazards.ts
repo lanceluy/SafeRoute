@@ -30,7 +30,7 @@ export function typeIcon(type: HazardType, size = 18) {
 export const SEVERITY_LABEL: Record<Severity, string> = { HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' };
 export const SEVERITY_RANK: Record<Severity, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 /** Marker fill per severity; the same values as --sev-* in styles.css. */
-export const SEVERITY_COLOR: Record<Severity, string> = { HIGH: '#D92D20', MEDIUM: '#E07B0B', LOW: '#EAB308' };
+export const SEVERITY_COLOR: Record<Severity, string> = { HIGH: '#D92D20', MEDIUM: '#E87500', LOW: '#EAB308' };
 
 export const STATUS_LABEL: Record<HazardStatus, string> = {
   REPORTED: 'Reported',

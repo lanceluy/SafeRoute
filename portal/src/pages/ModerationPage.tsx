@@ -2,7 +2,7 @@ import { useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import type { Hazard } from '../api/types';
 import { HazardDrawer } from '../components/HazardDrawer';
-import { QueuePanel, useQueueControls } from '../components/QueuePanel';
+import { QueuePanel, useQueueControls, useSearchLink } from '../components/QueuePanel';
 import { MODERATION_CHIPS, MODERATION_TABS } from '../lib/queue';
 import { useShortcuts } from '../lib/shortcuts';
 import { useBarangays } from '../state/places';
@@ -14,6 +14,7 @@ export function ModerationPage() {
   const navigate = useNavigate();
   const barangays = useBarangays();
   const c = useQueueControls(MODERATION_TABS, MODERATION_CHIPS, barangays, params.get('tab') ?? undefined);
+  useSearchLink(c);
   const { stats } = useStats();
   const selectedId = params.get('hazard');
   const searchRef = useRef<HTMLInputElement>(null);
