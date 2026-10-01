@@ -3,14 +3,14 @@ import { useSearchParams } from 'react-router';
 import { UNASSIGNED, type Hazard, type HazardType, type QueueSort, type Stats } from '../api/types';
 import { plural } from '../lib/format';
 import type { Barangay } from '../lib/geo';
-import { buildQuery, filterChips, isStale, refine, resolveTab, STALE_DAYS, type QueueChip, type QueueTab } from '../lib/queue';
+import { buildQuery, filterChips, refine, resolveTab, type QueueChip, type QueueTab } from '../lib/queue';
 import { useShortcuts } from '../lib/shortcuts';
 import { ActionDialog } from './ActionDialog';
 import type { ViewConfig } from '../lib/views';
 import { useDepartments } from '../state/departments';
 import { useQueue } from '../state/useQueue';
 import { BulkBar } from './BulkBar';
-import { FilterBar, NO_FILTERS, activeFilterCount, type Filters } from './FilterBar';
+import { FilterBar, NO_FILTERS, SORTS, activeFilterCount, type Filters } from './FilterBar';
 import { HazardRow } from './HazardRow';
 import { EmptyState, ErrorState, SkeletonRows } from './States';
 import { QueueMoreMenu } from './QueueMoreMenu';
@@ -50,7 +50,8 @@ export function useQueueControls(tabs: QueueTab[], chipDefs: QueueChip[], barang
     if (next?.archive) setChips([]);
   };
   const [search, setSearch] = useState('');
-  const [filtersOpen, setFiltersOpen] = useState(!!initialArea || !!initialType);
+  // Active filters show as pills under the dropdowns, so the More panel only opens when asked.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -80,7 +81,6 @@ export function useQueueControls(tabs: QueueTab[], chipDefs: QueueChip[], barang
       setFilters(v.filters);
       setSort(v.sort);
       setSearch(v.search);
-      setFiltersOpen(activeFilterCount(v.filters) > 0);
     },
   };
 }
@@ -133,8 +133,6 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
-  const highCount = shown.filter((h) => h.severity === 'HIGH').length;
-  const staleCount = shown.filter((h) => isStale(h, now)).length;
 
   // Bring the selected row into view (e.g. after clicking its marker).
   useEffect(() => {
@@ -181,41 +179,26 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
   return (
     <div className="queue">
       {title && <h2 className="queue-title">{title}</h2>}
-      {/* 1. Where am I? The primary tabs. Only the urgent count stands out. */}
+      {/* 1. Where am I? The primary tabs; only a waiting review count is red. */}
       <div className="tabs" role="tablist" aria-label="Queue">
         {tabs.map((t) => {
           const count = t.view ? stats?.queueCounts[t.view] : undefined;
-          // Needs attention / review is the main work queue: tinted, with a warning mark, whenever it has items.
           const urgent = t.key === 'attention' && !!count;
           return (
             <button key={t.key} type="button" role="tab" aria-selected={c.tab.key === t.key}
-              className={`tab${c.tab.key === t.key ? ' active' : ''}${urgent ? ' tab-urgent' : ''}`} onClick={() => c.setTab(t.key)}>
-              {urgent && <span className="tab-warn" aria-hidden="true">⚠</span>}
+              className={`tab${c.tab.key === t.key ? ' active' : ''}`} onClick={() => c.setTab(t.key)}>
               {t.label}
               {count !== undefined && <span className={`tab-count${urgent ? ' urgent' : ''}${count === 0 ? ' zero' : ''}`}>{count}</span>}
             </button>
           );
         })}
       </div>
-      {/* 2. How do I narrow it down? Chips narrow the open tab; they can combine. */}
-      {!c.tab.archive && c.chipDefs.length > 0 && (
-        <div className="queue-chips" role="group" aria-label="Filter by">
-          <span className="queue-chips-label">Filter by</span>
-          {c.chipDefs.map((ch) => {
-            const on = c.chips.includes(ch.key);
-            return (
-              <button key={ch.key} type="button" className={`queue-chip${on ? ' on' : ''}`} aria-pressed={on} onClick={() => c.toggleChip(ch.key)}>
-                {ch.label}
-                <span className="queue-chip-count">{c.chipCounts[ch.key] ?? 0}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-      <FilterBar ref={searchRef} search={c.search} onSearch={c.setSearch} sort={c.sort} onSort={c.setSort}
+      {/* 2. Search, then the filters as dropdowns; active ones show as removable pills. */}
+      <FilterBar ref={searchRef} search={c.search} onSearch={c.setSearch}
         filters={c.filters} onFilters={c.setFilters} barangays={barangays} departments={departments}
+        chipDefs={c.chipDefs} chips={c.chips} onToggleChip={c.toggleChip} onClearChips={c.clearChips} showStatus={!c.tab.archive}
         open={c.filtersOpen} onToggle={c.toggleFilters} extra={
-          // 3. What can I do here? Views, export and select share one menu.
+          // Views, export and select share one menu.
           <QueueMoreMenu page={page} onApply={c.apply}
             current={() => ({ page, tab: c.tab.key, chips: c.chips, filters: c.filters, sort: c.sort, search: c.search })}
             hazards={shown} title={listTitle} filters={exportFilters} barangays={barangays} departments={departments} stats={stats}
@@ -227,23 +210,28 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
           departments={departments} barangays={barangays} stats={stats} exportable={page === 'moderation'}
           onCancel={endSelect} onDone={() => { setChecked(new Set()); window.setTimeout(queue.reload, 900); }} />
       )}
-      <p className="queue-summary" aria-live="polite">
-        {!queue.loading && !queue.error && shown.length > 0 && (
-          <>
-            <strong>{plural(shown.length, 'hazard')}</strong>
-            {c.search || c.filters.area ? ` of ${queue.hazards.length}` : ''}
-            {queue.truncated && ` (first ${queue.hazards.length} of ${queue.total})`}
-            {' · '}<span className={highCount ? 'summary-high' : undefined}>{highCount} high severity</span>
-            {' · '}<span className={staleCount ? 'summary-stale' : undefined} title={`Active and reported more than ${STALE_DAYS} days ago`}>{staleCount} older than {STALE_DAYS} days</span>
-            {activeFilterCount(c.filters) > 0 && ' · filtered'}
-          </>
-        )}
-      </p>
+      {/* 3. How many, and in what order. */}
+      <div className="list-head">
+        <p className="queue-summary" aria-live="polite">
+          {!queue.loading && !queue.error && (
+            <>
+              <strong>{plural(shown.length, 'hazard')}</strong>
+              {shown.length !== queue.hazards.length || c.search ? <span> of {queue.hazards.length}</span> : null}
+              {queue.truncated && <span> (first {queue.hazards.length} of {queue.total})</span>}
+            </>
+          )}
+        </p>
+        <label className="sort-control">
+          <span>Sort</span>
+          <select value={c.sort} onChange={(e) => c.setSort(e.target.value as QueueSort)} aria-label="Sort">
+            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+        </label>
+      </div>
       {!queue.loading && !queue.error && shown.length > 0 && !selectMode && (
         <div className="queue-head table-only" aria-hidden="true">
-          <span />
-          <span>Hazard</span><span>Severity</span><span>Status</span><span>Confidence</span><span>Area</span>
-          <span className="num">Community</span><span>Assigned</span><span className="num">Age</span><span />
+          <span>Hazard</span><span>Priority</span><span>Verification</span><span>Location</span>
+          <span className="num">Community</span><span>Assignment</span><span className="num">Age</span><span />
         </div>
       )}
       <div className="queue-scroll" ref={listRef} onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 80)}>

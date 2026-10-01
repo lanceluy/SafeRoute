@@ -1,11 +1,17 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { Check } from 'lucide-react';
 
 export interface MenuItem {
   label: string;
   hint?: string;
   danger?: boolean;
   disabled?: boolean;
+  /** A checkbox (or, with `radio`, a radio) item: shows a tick and leaves the menu open. */
+  checked?: boolean;
+  radio?: boolean;
+  /** Shown before the label (e.g. a severity dot). */
+  icon?: ReactNode;
   onSelect: () => void;
 }
 
@@ -13,6 +19,7 @@ export interface MenuItem {
 export interface MenuHeading { heading: string }
 type Entry = MenuItem | MenuHeading;
 const isHeading = (e: Entry): e is MenuHeading => 'heading' in e;
+const ITEMS = '[role^="menuitem"]:not([disabled])';
 
 /** Space kept between the list and the window edge. */
 const EDGE = 8;
@@ -75,7 +82,7 @@ export function Menu({ label, trigger, items, align = 'right', direction = 'down
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey, true);
-    listRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not([disabled])')?.focus({ preventScroll: true });
+    listRef.current?.querySelector<HTMLButtonElement>(ITEMS)?.focus({ preventScroll: true });
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey, true);
@@ -86,7 +93,7 @@ export function Menu({ label, trigger, items, align = 'right', direction = 'down
   const moveFocus = (e: ReactKeyboardEvent) => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     e.preventDefault();
-    const buttons = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ?? []);
+    const buttons = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>(ITEMS) ?? []);
     const i = buttons.indexOf(document.activeElement as HTMLButtonElement);
     buttons[(i + (e.key === 'ArrowDown' ? 1 : buttons.length - 1)) % buttons.length]?.focus();
   };
@@ -102,12 +109,25 @@ export function Menu({ label, trigger, items, align = 'right', direction = 'down
           {shown.map((item) => isHeading(item) ? (
             <div key={`h-${item.heading}`} className="menu-heading" role="presentation">{item.heading}</div>
           ) : (
-            <button key={item.label} type="button" role="menuitem" disabled={item.disabled}
-              className={item.danger ? 'menu-item danger' : 'menu-item'}
-              onClick={() => { setOpen(false); item.onSelect(); }}>
-              <span className="menu-item-label">{item.label}</span>
-              {item.hint && <span className="menu-item-hint">{item.hint}</span>}
-            </button>
+            item.checked === undefined ? (
+              <button key={item.label} type="button" role="menuitem" disabled={item.disabled}
+                className={item.danger ? 'menu-item danger' : 'menu-item'}
+                onClick={() => { setOpen(false); item.onSelect(); }}>
+                <span className="menu-item-label">{item.icon}{item.label}</span>
+                {item.hint && <span className="menu-item-hint">{item.hint}</span>}
+              </button>
+            ) : (
+              // Checkbox items stay open so several can be ticked; a radio choice closes the menu.
+              <button key={item.label} type="button" role={item.radio ? 'menuitemradio' : 'menuitemcheckbox'} aria-checked={item.checked}
+                disabled={item.disabled} className={`menu-item menu-check${item.checked ? ' on' : ''}`}
+                onClick={() => { if (item.radio) setOpen(false); item.onSelect(); }}>
+                <span className="menu-item-label">
+                  <span className={`check-box${item.radio ? ' radio' : ''}`} aria-hidden="true">{item.checked && <Check size={12} strokeWidth={3} />}</span>
+                  {item.icon}{item.label}
+                </span>
+                {item.hint && <span className="menu-item-hint">{item.hint}</span>}
+              </button>
+            )
           ))}
           {footer}
         </div>,

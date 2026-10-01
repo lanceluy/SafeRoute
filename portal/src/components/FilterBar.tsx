@@ -5,8 +5,10 @@ import {
 } from '../api/types';
 import type { Barangay } from '../lib/geo';
 import { CONFIDENCE_HINT, CONFIDENCE_LABEL, PRIORITY_HINT, PRIORITY_LABEL, SEVERITY_LABEL, TYPE_LABEL } from '../lib/hazards';
-import { filterChips } from '../lib/queue';
+import { Search, SlidersHorizontal, X } from 'lucide-react';
+import { filterChips, type QueueChip } from '../lib/queue';
 import { Chevron } from './Chevron';
+import { Menu, type MenuHeading, type MenuItem } from './Menu';
 
 /** Reported within a period, or `older7`: reported more than a week ago. */
 export type DateRange = 'any' | 'today' | '7d' | '30d' | 'older7';
@@ -70,73 +72,100 @@ function toggle<T>(list: T[], value: T) {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
 
-/** Search, sort and a collapsible set of filters above a hazard list. */
+/** Chips with their own dropdown elsewhere (Severity, Assignment) stay out of the Status menu. */
+const NOT_STATUS = new Set(['high', 'unassigned']);
+
+/** A dropdown filter button: "Severity", or "Severity · 2" while it narrows the list. */
+function Dropdown({ label, count, items, wide }: { label: string; count: number; items: (MenuItem | MenuHeading | null)[]; wide?: boolean }) {
+  return (
+    <Menu label={`Filter by ${label.toLowerCase()}`} align="left"
+      trigger={<span className={`filter-drop${count ? ' on' : ''}${wide ? ' wide' : ''}`}>{label}{count ? <span className="filter-drop-count">{count}</span> : null}<Chevron /></span>}
+      items={items} />
+  );
+}
+
+/**
+ * Search, then one row of dropdown filters (Severity, Status, Barangay, Assignment, More), then the
+ * active filters as removable pills. Status toggles the page's queue chips (client-side); the
+ * others set server-side query filters.
+ */
 export const FilterBar = forwardRef<HTMLInputElement, {
   search: string; onSearch: (s: string) => void;
-  sort: QueueSort; onSort: (s: QueueSort) => void;
   filters: Filters; onFilters: (f: Filters) => void;
   barangays: Barangay[];
   departments: Department[];
+  chipDefs: QueueChip[]; chips: string[]; onToggleChip: (key: string) => void; onClearChips: () => void;
+  /** Hidden for closed tabs, where queue chips don't apply. */
+  showStatus: boolean;
   open: boolean; onToggle: () => void;
-  /** The ••• menu, pushed to the right of the toolbar. */
+  /** The ••• menu, pushed to the right of the filter row. */
   extra?: React.ReactNode;
-}>(function FilterBar({ search, onSearch, sort, onSort, filters, onFilters, barangays, departments, open, onToggle, extra }, searchRef) {
-  const count = activeFilterCount(filters);
-  const chips = filterChips(filters, (code) => (code === UNASSIGNED ? 'Unassigned' : departments.find((d) => d.code === code)?.name ?? code));
+}>(function FilterBar({
+  search, onSearch, filters, onFilters, barangays, departments, chipDefs, chips: activeChips, onToggleChip, onClearChips, showStatus, open, onToggle, extra,
+}, searchRef) {
+  const deptName = (code: string) => (code === UNASSIGNED ? 'Unassigned' : departments.find((d) => d.code === code)?.name ?? code);
+  const filterPills = filterChips(filters, deptName);
+  const statusChips = chipDefs.filter((c) => activeChips.includes(c.key));
+  const more = filters.types.length + filters.confidences.length + filters.priorities.length + (filters.date !== 'any' ? 1 : 0);
+  const statusDefs = chipDefs.filter((c) => !NOT_STATUS.has(c.key));
+  const anyActive = filterPills.length + statusChips.length > 0;
+
   return (
     <div className="filter-bar">
-      {/* Search on its own row; then Sort and Filters on the left, the ••• menu on the right. */}
       <label className="search">
         <span className="sr-only">Search hazards</span>
-        <span aria-hidden="true" className="search-icon">⌕</span>
-        <input ref={searchRef} type="search" placeholder="Search hazards"
-          title="Search by hazard type, description, street or barangay" value={search}
+        <Search aria-hidden="true" className="search-icon" size={16} />
+        <input ref={searchRef} type="search" placeholder="Search hazards, streets, barangays or report IDs…"
+          title="Search by hazard type, description, street, barangay or reference" value={search}
           onChange={(e) => onSearch(e.target.value)} />
         <kbd aria-hidden="true">/</kbd>
       </label>
-      <div className="toolbar" role="toolbar" aria-label="Sort, filter and more">
-        <label className="select-inline toolbar-sort">
-          <span className="sr-only">Sort</span>
-          <select value={sort} onChange={(e) => onSort(e.target.value as QueueSort)} aria-label="Sort">
-            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-        </label>
-        <button type="button" className={`btn btn-secondary btn-sm${count ? ' has-count' : ''}`} aria-expanded={open} onClick={onToggle}>
-          Filters{count ? ` · ${count}` : ''}<Chevron up={open} />
+
+      <div className="filter-row" role="toolbar" aria-label="Filters">
+        <Dropdown label="Severity" count={filters.severities.length} items={SEVERITIES.map((s) => ({
+          label: SEVERITY_LABEL[s], checked: filters.severities.includes(s),
+          icon: <span className={`sev-dot sev-bg-${s.toLowerCase()}`} aria-hidden="true" />,
+          onSelect: () => onFilters({ ...filters, severities: toggle(filters.severities, s) }),
+        }))} />
+        {showStatus && statusDefs.length > 0 && (
+          <Dropdown label="Status" count={statusChips.filter((c) => !NOT_STATUS.has(c.key)).length} items={statusDefs.map((c) => ({
+            label: c.label, checked: activeChips.includes(c.key), onSelect: () => onToggleChip(c.key),
+          }))} />
+        )}
+        <Dropdown label={filters.area || 'Barangay'} count={filters.area ? 1 : 0} wide items={[
+          { label: 'All of Makati', checked: !filters.area, radio: true, onSelect: () => onFilters({ ...filters, area: '' }) },
+          ...barangays.map((b) => ({ label: b.name, checked: filters.area === b.name, radio: true, onSelect: () => onFilters({ ...filters, area: b.name }) })),
+        ]} />
+        <Dropdown label="Assignment" count={filters.departments.length} items={[
+          ...[{ code: UNASSIGNED, name: 'Unassigned' }, ...departments].map((d) => ({
+            label: d.name, checked: filters.departments.includes(d.code),
+            onSelect: () => onFilters({ ...filters, departments: toggle(filters.departments, d.code) }),
+          })),
+        ]} />
+        <button type="button" className={`filter-drop${more ? ' on' : ''}`} aria-expanded={open} onClick={onToggle}>
+          <SlidersHorizontal size={15} aria-hidden="true" />More filters{more ? <span className="filter-drop-count">{more}</span> : null}
         </button>
         {extra && <span className="toolbar-end">{extra}</span>}
       </div>
-      {chips.length > 0 && (
+
+      {anyActive && (
         <div className="filter-chips" aria-label="Active filters">
-          {chips.map((c) => (
-            <button key={c.key} type="button" className="filter-chip" onClick={() => onFilters(c.remove(filters))} aria-label={`Remove filter: ${c.label}`}>
-              {c.label} <span aria-hidden="true">×</span>
+          {statusChips.map((c) => (
+            <button key={c.key} type="button" className="filter-chip" onClick={() => onToggleChip(c.key)} aria-label={`Remove filter: ${c.label}`}>
+              {c.label}<X size={13} aria-hidden="true" />
             </button>
           ))}
-          <button type="button" className="btn-link" onClick={() => onFilters(NO_FILTERS)}>Clear all</button>
+          {filterPills.map((c) => (
+            <button key={c.key} type="button" className="filter-chip" onClick={() => onFilters(c.remove(filters))} aria-label={`Remove filter: ${c.label}`}>
+              {c.label}<X size={13} aria-hidden="true" />
+            </button>
+          ))}
+          <button type="button" className="btn-link" onClick={() => { onFilters(NO_FILTERS); onClearChips(); }}>Clear all</button>
         </div>
       )}
+
       {open && (
         <div className="filter-panel">
-          <fieldset>
-            <legend>Area</legend>
-            <select value={filters.area} onChange={(e) => onFilters({ ...filters, area: e.target.value })} aria-label="Barangay">
-              <option value="">All of Makati</option>
-              {barangays.map((b) => <option key={b.name} value={b.name}>Barangay {b.name}</option>)}
-            </select>
-          </fieldset>
-          <fieldset>
-            <legend>Severity</legend>
-            <div className="chips">
-              {SEVERITIES.map((s) => (
-                <label key={s} className={`chip${filters.severities.includes(s) ? ' on' : ''}`}>
-                  <input type="checkbox" checked={filters.severities.includes(s)}
-                    onChange={() => onFilters({ ...filters, severities: toggle(filters.severities, s) })} />
-                  <span className={`sev-dot sev-bg-${s.toLowerCase()}`} aria-hidden="true" />{SEVERITY_LABEL[s]}
-                </label>
-              ))}
-            </div>
-          </fieldset>
           <fieldset>
             <legend>Type</legend>
             <div className="chips">
@@ -157,18 +186,6 @@ export const FilterBar = forwardRef<HTMLInputElement, {
                   <input type="checkbox" checked={filters.confidences.includes(c)}
                     onChange={() => onFilters({ ...filters, confidences: toggle(filters.confidences, c) })} />
                   {CONFIDENCE_LABEL[c]}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <fieldset>
-            <legend>Department</legend>
-            <div className="chips">
-              {[...departments, { code: UNASSIGNED, name: 'Unassigned' }].map((d) => (
-                <label key={d.code} className={`chip${filters.departments.includes(d.code) ? ' on' : ''}`}>
-                  <input type="checkbox" checked={filters.departments.includes(d.code)}
-                    onChange={() => onFilters({ ...filters, departments: toggle(filters.departments, d.code) })} />
-                  {d.name}
                 </label>
               ))}
             </div>

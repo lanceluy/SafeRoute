@@ -1,3 +1,4 @@
+import { MoreHorizontal } from 'lucide-react';
 import type { Department, Hazard, Stats } from '../api/types';
 import type { Barangay } from '../lib/geo';
 import type { ViewConfig } from '../lib/views';
@@ -21,7 +22,7 @@ export function QueueMoreMenu({ page, current, onApply, hazards, title, filters,
   return (
     <>
       <Menu label={canExport ? 'More actions: views, export and select' : 'More actions: views and select'} align="right"
-        trigger={<span className="btn btn-secondary btn-sm toolbar-more"><span aria-hidden="true">•••</span></span>}
+        trigger={<span className="btn btn-secondary btn-sm toolbar-more"><MoreHorizontal size={17} aria-hidden="true" /></span>}
         items={[
           { heading: 'Select' },
           { label: 'Select several…', hint: canExport ? 'Resolve, assign or export many at once' : 'Resolve or assign many at once',
