@@ -91,18 +91,19 @@ export const HazardRow = memo(function HazardRow({
                 {hazard.mergedReportCount + 1} reports
               </span>
             )}
+            <span className="stacked-only row-age">{age}</span>
           </span>
           <span className="row-place">
             {street}
             {place.street && place.barangay && <span className="stacked-only"> · {place.barangay}</span>}
           </span>
           {showReason && <span className="row-reason">{reason}</span>}
-          {/* Narrow queues: severity, status and age on one quiet line. */}
+          {/* Narrow queues: severity, then exceptions only (verified is the normal case). */}
           <span className="row-meta stacked-only">
             <SeverityDot severity={hazard.severity} />
-            <StatusBadge status={hazard.status} plain />
+            {hazard.status === 'DISPUTED' && <span className="pill pill-contested">Contested</span>}
+            {!isActive(hazard.status) && <StatusBadge status={hazard.status} plain />}
             {flag}
-            {age}
           </span>
         </span>
 

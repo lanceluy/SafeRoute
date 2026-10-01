@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import L from '../lib/leaflet';
+import L, { baseTiles } from '../lib/leaflet';
 import type { Barangay } from '../lib/geo';
 import { sequentialColor } from '../lib/scales';
 import { useThemeColors } from '../lib/theme';
@@ -44,16 +44,21 @@ export function AreaMap({ barangays, values, max, format, overlay, framing = 'fi
 
   useEffect(() => {
     const m = L.map(el.current!, { scrollWheelZoom: false, zoomControl: true }).setView(MAKATI, 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors (ODbL)',
-    }).addTo(m);
     m.createPane('overlay').style.zIndex = '250'; // above the street tiles (200), below the shapes (400)
     map.current = m;
     const resize = new ResizeObserver(() => m.invalidateSize());
     resize.observe(el.current!);
     return () => { resize.disconnect(); m.remove(); map.current = null; };
   }, []);
+
+  // The base map follows the theme.
+  const base = useRef<L.LayerGroup | null>(null);
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    base.current?.remove();
+    base.current = baseTiles(colors.dark).addTo(m);
+  }, [colors.dark]);
 
   useEffect(() => {
     const m = map.current;

@@ -100,9 +100,10 @@ export const FilterBar = forwardRef<HTMLInputElement, {
   open: boolean; onToggle: () => void;
   /** The ••• menu, at the end of the row. */
   extra?: React.ReactNode;
+  placeholder?: string;
 }>(function FilterBar({
   search, onSearch, sort, onSort, filters, onFilters, barangays, departments, chipDefs, chips: activeChips, onToggleChip, onClearChips,
-  showStatus, open, onToggle, extra,
+  showStatus, open, onToggle, extra, placeholder = 'Search reports…',
 }, searchRef) {
   const deptName = (code: string) => (code === UNASSIGNED ? 'Unassigned' : departments.find((d) => d.code === code)?.name ?? code);
   const filterPills = filterChips(filters, deptName);
@@ -116,7 +117,7 @@ export const FilterBar = forwardRef<HTMLInputElement, {
         <label className="search">
           <span className="sr-only">Search reports</span>
           <Search aria-hidden="true" className="search-icon" size={16} />
-          <input ref={searchRef} type="search" placeholder="Search reports…"
+          <input ref={searchRef} type="search" placeholder={placeholder}
             title="Search by hazard type, description, street, barangay or reference" value={search}
             onChange={(e) => onSearch(e.target.value)} />
           <kbd aria-hidden="true">/</kbd>

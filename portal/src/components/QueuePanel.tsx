@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useSearchParams } from 'react-router';
+import { MapPin } from 'lucide-react';
 import { UNASSIGNED, type Hazard, type HazardType, type QueueSort, type Stats } from '../api/types';
 import { plural } from '../lib/format';
 import type { Barangay } from '../lib/geo';
@@ -171,6 +172,9 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
   const counts = (t: QueueTab) => tabCount(t, stats?.queueCounts) ?? 0;
   const primaryTabs = tabs.filter((t) => !t.more);
   const noun = page === 'moderation' ? 'report' : 'hazard';
+  const term = c.search.trim().toLowerCase();
+  const places = page === 'map' && term.length >= 2
+    ? barangays.filter((b) => b.name.toLowerCase().includes(term) && b.name !== c.filters.area).slice(0, 3) : [];
   const moreTabs = tabs.filter((t) => t.more);
   const elsewhere = tabs.filter((t) => t.key !== c.tab.key && !t.archive && counts(t) > 0)
     .sort((a, b) => (a.key === 'attention' ? -1 : b.key === 'attention' ? 1 : 0))[0];
@@ -209,6 +213,7 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
       </div>
       {/* 2. Search, then the filters as dropdowns; active ones show as removable pills. */}
       <FilterBar ref={searchRef} search={c.search} onSearch={c.setSearch} sort={c.sort} onSort={c.setSort}
+        placeholder={page === 'map' ? 'Search hazards or places…' : undefined}
         filters={c.filters} onFilters={c.setFilters} barangays={barangays} departments={departments}
         chipDefs={c.chipDefs} chips={c.chips} onToggleChip={c.toggleChip} onClearChips={c.clearChips} showStatus={!c.tab.archive}
         open={c.filtersOpen} onToggle={c.toggleFilters} extra={
@@ -223,6 +228,18 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
           onToggleAll={() => setChecked(allChecked ? new Set() : new Set(shown.map((h) => h.id)))}
           departments={departments} barangays={barangays} stats={stats} exportable={page === 'moderation'}
           onCancel={endSelect} onDone={() => { setChecked(new Set()); window.setTimeout(queue.reload, 900); }} />
+      )}
+      {/* On the map, a search that names a barangay offers to show that place. */}
+      {places.length > 0 && (
+        <div className="place-results" aria-label="Places">
+          <span className="place-results-label">Places</span>
+          {places.map((b) => (
+            <button key={b.name} type="button" className="place-result"
+              onClick={() => { c.setFilters({ ...c.filters, area: b.name }); c.setSearch(''); }}>
+              <MapPin size={14} aria-hidden="true" />{b.name}<span>Show area</span>
+            </button>
+          ))}
+        </div>
       )}
       {/* 3. How many. */}
       <p className="queue-summary" aria-live="polite">
