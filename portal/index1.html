@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SafeRoute Municipal Portal</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <header>
+    <h1>SafeRoute Municipal Hazard Portal</h1>
+    <div id="auth-status">
+      <input type="email" id="email" placeholder="Official Email">
+      <input type="password" id="password" placeholder="Password">
+      <button onclick="login()">Login</button>
+      <button onclick="showRegisterModal()" class="btn-sec">Register Agent</button>
+    </div>
+  </header>
+
+  <nav id="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab('map-tab')">Hazard Map</button>
+    <button class="tab-btn" onclick="switchTab('moderation-tab')">Moderation Queue</button>
+    <button class="tab-btn" onclick="switchTab('duplicates-tab')">Collated / Duplicates</button>
+    <button class="tab-btn" onclick="switchTab('archived-tab')">Archived (>1 Wk)</button>
+    <button class="tab-btn" onclick="switchTab('analytics-tab')">Analytics</button>
+  </nav>
+
+  <main>
+  
+    <div id="map-tab" class="tab-content active">
+      <div id="map"></div>
+    </div>
+
+    <div id="moderation-tab" class="tab-content">
+      <div class="tab-header">
+        <h2>Active Moderation Queue</h2>
+        <button class="btn btn-export" onclick="exportFormalReport('moderation')">Export Formal Report (CSV)</button>
+      </div>
+      <div id="moderation-list" class="card-grid">Log in to view active queue...</div>
+    </div>
+
+    <div id="duplicates-tab" class="tab-content">
+      <div class="tab-header">
+        <h2>Collated Nearby Duplicate Reports</h2>
+      </div>
+      <div id="duplicates-list" class="card-grid">No collated duplicates detected.</div>
+    </div>
+
+    <div id="archived-tab" class="tab-content">
+      <div class="tab-header">
+        <h2>Archived Reports (Unreviewed > 7 Days)</h2>
+      </div>
+      <div id="archived-list" class="card-grid">No archived hazards.</div>
+    </div>
+
+    <div id="analytics-tab" class="tab-content">
+      <div class="tab-header">
+        <h2>Hazard Frequency & Distribution Analytics</h2>
+      </div>
+      <div class="analytics-controls">
+        <label for="barangay-select">Select Barangay:</label>
+        <select id="barangay-select" onchange="renderAnalyticsChart()">
+          <option value="ALL">All Barangays (Makati)</option>
+          <option value="Poblacion">Poblacion</option>
+          <option value="San Lorenzo">San Lorenzo</option>
+          <option value="Bel-Air">Bel-Air</option>
+          <option value="Urdaneta">Urdaneta</option>
+          <option value="Bangkal">Bangkal</option>
+        </select>
+      </div>
+      <div class="chart-container">
+        <canvas id="hazardChart"></canvas>
+      </div>
+    </div>
+  </main>
+
+  <div id="register-modal" class="modal">
+    <div class="modal-content">
+      <h3>Register LGU Agent Account</h3>
+      <input type="text" id="reg-name" placeholder="Full Name">
+      <input type="email" id="reg-email" placeholder="Agent Email (@makati.gov.ph)">
+      <input type="password" id="reg-pass" placeholder="Password">
+      <select id="reg-city">
+        <option value="Makati City">Makati City</option>
+        <option value="Taguig City">Taguig City</option>
+        <option value="Pasig City">Pasig City</option>
+        <option value="Quezon City">Quezon City</option>
+      </select>
+      <div class="modal-actions">
+        <button onclick="registerAgent()" class="btn btn-resolve">Create Account</button>
+        <button onclick="closeRegisterModal()" class="btn btn-remove">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
