@@ -1,7 +1,7 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ArrowRight, CheckCircle2, CircleAlert, FilePlus2, Map as MapIcon, MessageSquareWarning, ScanSearch, Timer, TriangleAlert } from 'lucide-react';
-import { BarList, TrendChart } from '../components/Charts';
+import { ActivityWave, BarList } from '../components/Charts';
 import { LiveStatus } from '../components/LiveStatus';
 import { ErrorState } from '../components/States';
 import { Card, StatCard, percentChange } from '../components/ui';
@@ -101,10 +101,7 @@ export function OverviewPage() {
       </div>
 
       <div className="grid-main-side">
-        <Card title="Reports over time" subtitle="Reported and resolved per day, last 7 days"
-          action={<Link to="/analytics" className="btn btn-ghost btn-sm">Analytics<ArrowRight size={15} aria-hidden="true" /></Link>}>
-          {stats ? <TrendChart daily={stats.daily} height={260} /> : <div className="skeleton" style={{ height: 260 }} />}
-        </Card>
+        <ReportsOverTime />
         <Card title="Hazards by type" subtitle="Active right now">
           {stats
             ? <BarList rows={stats.activeByType.map((t) => ({ key: t.key, label: TYPE_LABEL[t.key], value: t.count }))}
@@ -158,5 +155,38 @@ function AreaList({ areas, onSelect }: { areas: ReturnType<typeof areaStats>; on
         </li>
       ))}
     </ol>
+  );
+}
+
+const PERIODS = [{ days: 7, label: 'Last 7 days' }, { days: 30, label: 'Last 30 days' }, { days: 90, label: 'Last 90 days' }];
+
+/** Its own period, so changing it doesn't move the rest of the page (which stays on this week). */
+function ReportsOverTime() {
+  const [days, setDays] = useState(7);
+  const from = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - (days - 1));
+    return d.toISOString();
+  }, [days]);
+  const { stats } = useStats(from);
+  return (
+    <Card title="Reports over time" subtitle="Reporting and resolution activity"
+      action={
+        <div className="card-head-tools">
+          <span className="card-legend" aria-hidden="true">
+            <span><i style={{ background: 'var(--wave-up)' }} />Reported</span>
+            <span><i style={{ background: 'var(--wave-down)' }} />Resolved</span>
+          </span>
+          <label>
+            <span className="sr-only">Period</span>
+            <select className="period-select" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+              {PERIODS.map((p) => <option key={p.days} value={p.days}>{p.label}</option>)}
+            </select>
+          </label>
+        </div>
+      }>
+      {stats ? <ActivityWave daily={stats.daily} height={240} /> : <div className="skeleton" style={{ height: 240 }} />}
+    </Card>
   );
 }

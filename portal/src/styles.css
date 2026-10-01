@@ -81,6 +81,15 @@
   --conf-none: #D5DBE5;
   --dot-off: #EEF2F7;
   --dot-on: #9ec5f4;
+  /* Reports over time waveform (validated pair: #2563EB / #16A36A). */
+  --wave-up: #1D4ED8;
+  --wave-up-top: #3B82F6;
+  --wave-down: #16A36A;
+  --wave-down-bottom: #059669;
+  --wave-env: rgba(148, 163, 184, 0.22);
+  --wave-grid: rgba(226, 232, 240, 0.9);
+  --wave-zero: #CBD5E1;
+  --wave-cursor: rgba(37, 99, 235, 0.06);
 
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
   --r-sm: 8px;
@@ -164,6 +173,14 @@
     --conf-none: #3A465C;
     --dot-off: #222D40;
     --dot-on: #256abf;
+    --wave-up: #3B7BEF;
+    --wave-up-top: #6EA2F9;
+    --wave-down: #20A874;
+    --wave-down-bottom: #188A5F;
+    --wave-env: rgba(148, 163, 184, 0.16);
+    --wave-grid: rgba(53, 66, 88, 0.7);
+    --wave-zero: #3A465C;
+    --wave-cursor: rgba(110, 168, 254, 0.08);
     --shadow-card: 0 4px 18px rgba(0, 0, 0, 0.25);
     --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.45);
@@ -231,6 +248,14 @@
   --conf-none: #3A465C;
   --dot-off: #222D40;
   --dot-on: #256abf;
+  --wave-up: #3B7BEF;
+  --wave-up-top: #6EA2F9;
+  --wave-down: #20A874;
+  --wave-down-bottom: #188A5F;
+  --wave-env: rgba(148, 163, 184, 0.16);
+  --wave-grid: rgba(53, 66, 88, 0.7);
+  --wave-zero: #3A465C;
+  --wave-cursor: rgba(110, 168, 254, 0.08);
   --shadow-card: 0 4px 18px rgba(0, 0, 0, 0.25);
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.45);
@@ -1765,3 +1790,21 @@ a.menu-item { text-decoration: none; color: var(--text); font-weight: 600; }
 .preview-main { min-width: 140px; }
 .preview-main strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .brand-logo { border-radius: 9px; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12); }
+
+/* Reports over time waveform */
+.wave { position: relative; }
+.wave-tag { position: absolute; left: 4px; z-index: 1; font-size: 11.5px; font-weight: 600; color: var(--text-3); pointer-events: none; }
+.wave-tag.up { top: 4px; }
+.wave-tag.down { bottom: 26px; }
+.wave-tip { min-width: 170px; }
+.wave-tip span { display: flex; align-items: center; gap: 6px; }
+.wave-tip b { margin-left: auto; font-variant-numeric: tabular-nums; }
+.wave-tip i { width: 8px; height: 8px; border-radius: 2px; margin-right: 0; }
+.wave-net { border-top: 1px solid var(--border); padding-top: 4px; margin-top: 2px; font-weight: 600; }
+.wave-net.up b { color: var(--sev-medium-text); }
+.wave-net.good b { color: var(--good); }
+.card-legend { display: inline-flex; align-items: center; gap: 14px; font-size: 13px; color: var(--text-2); }
+.card-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.card-legend i { width: 9px; height: 9px; border-radius: 50%; }
+.card-head-tools { display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap; }
+.period-select { height: 32px; font-size: 13px; font-weight: 500; border-radius: var(--r-sm); }
