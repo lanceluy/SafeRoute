@@ -12,6 +12,8 @@ export interface MenuItem {
   radio?: boolean;
   /** Shown before the label (e.g. a severity dot). */
   icon?: ReactNode;
+  /** Shown at the end of the label line (e.g. a count). */
+  meta?: ReactNode;
   onSelect: () => void;
 }
 
@@ -113,7 +115,7 @@ export function Menu({ label, trigger, items, align = 'right', direction = 'down
               <button key={item.label} type="button" role="menuitem" disabled={item.disabled}
                 className={item.danger ? 'menu-item danger' : 'menu-item'}
                 onClick={() => { setOpen(false); item.onSelect(); }}>
-                <span className="menu-item-label">{item.icon}{item.label}</span>
+                <span className="menu-item-label">{item.icon}{item.label}{item.meta !== undefined && <span className="menu-meta">{item.meta}</span>}</span>
                 {item.hint && <span className="menu-item-hint">{item.hint}</span>}
               </button>
             ) : (
@@ -124,6 +126,7 @@ export function Menu({ label, trigger, items, align = 'right', direction = 'down
                 <span className="menu-item-label">
                   <span className={`check-box${item.radio ? ' radio' : ''}`} aria-hidden="true">{item.checked && <Check size={12} strokeWidth={3} />}</span>
                   {item.icon}{item.label}
+                  {item.meta !== undefined && <span className="menu-meta">{item.meta}</span>}
                 </span>
                 {item.hint && <span className="menu-item-hint">{item.hint}</span>}
               </button>

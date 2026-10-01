@@ -18,12 +18,13 @@ const SHORTCUTS: [string, string][] = [
 ];
 
 const TAB_HELP: Record<string, string> = {
-  new: 'Reports from the last 24 hours, newest first. Opens by default so nothing new is missed.',
+  new: 'Reports from the last 24 hours, newest first. The map opens on it; on Moderation it is under More, and new reports also appear at the top of Active.',
   attention: 'Contested reports, unverified high-severity hazards, and reports waiting over a day. Called Needs attention on the map.',
-  active: 'Every hazard currently on the commuter map.',
-  duplicates: 'Hazards that collected more than one report: when two people report the same hazard, the reports are combined.',
+  active: 'The working queue: open reports, minus archived ones. On the Hazard Map, All active shows every open hazard.',
+  open: 'Every open report, archived or not. Under More on Moderation.',
+  duplicates: 'Under More. Hazards that collected more than one report: when two people report the same hazard, the reports are combined.',
   archived: 'Reports nobody on staff acted on within 7 days. They stay on the commuter map until resolved or expired.',
-  removed: 'Reports removed as false, spam or invalid.',
+  removed: 'Under More. Reports removed as false, spam or invalid.',
   closed: 'Resolved, expired and removed hazards.',
 };
 

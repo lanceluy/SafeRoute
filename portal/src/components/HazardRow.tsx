@@ -1,14 +1,13 @@
 import { memo } from 'react';
-import { Check, ChevronRight, MapPin, MoreHorizontal, TriangleAlert, X } from 'lucide-react';
-import type { Department, Hazard } from '../api/types';
+import { ChevronRight, MapPin, MoreHorizontal, TriangleAlert } from 'lucide-react';
+import type { Hazard } from '../api/types';
 import { ago, plural, shortDate } from '../lib/format';
 import type { Barangay } from '../lib/geo';
-import { PRIORITY_LABEL, TYPE_LABEL, isActive, shortId } from '../lib/hazards';
+import { TYPE_LABEL, isActive, shortId } from '../lib/hazards';
 import { STALE_DAYS, ageDays, isStale, needsAction, queueReason, shortAge } from '../lib/queue';
-import { departmentName } from '../state/departments';
 import { usePlace } from '../state/places';
 import { useToast } from '../state/toast';
-import { ConfidenceBadge, SeverityDot, StatusBadge, TypeIcon } from './Badges';
+import { SeverityDot, StatusBadge, TypeIcon } from './Badges';
 import { Menu } from './Menu';
 
 /**
@@ -21,9 +20,9 @@ import { Menu } from './Menu';
  * place, department and age. A row needing action gets a red left bar and nothing else red.
  */
 export const HazardRow = memo(function HazardRow({
-  hazard, selected, isNew, barangays, departments, onSelect, checkable, checked, onCheck, tabKey, chipKeys, now, onResolve, onShowOnMap,
+  hazard, selected, isNew, barangays, onSelect, checkable, checked, onCheck, tabKey, chipKeys, now, onResolve, onShowOnMap,
 }: {
-  hazard: Hazard; selected: boolean; isNew?: boolean; barangays: Barangay[]; departments: Department[];
+  hazard: Hazard; selected: boolean; isNew?: boolean; barangays: Barangay[];
   onSelect: (h: Hazard) => void;
   /** Select mode: a checkbox for bulk actions. */
   checkable?: boolean; checked?: boolean; onCheck?: (h: Hazard) => void;
@@ -35,7 +34,6 @@ export const HazardRow = memo(function HazardRow({
 }) {
   const toast = useToast();
   const place = usePlace(hazard.latitude, hazard.longitude, barangays);
-  const department = departmentName(departments, hazard.assignedDepartment);
   const active = isActive(hazard.status);
   const reason = queueReason(tabKey, chipKeys, hazard, now);
   const action = needsAction(hazard, now);
@@ -47,25 +45,23 @@ export const HazardRow = memo(function HazardRow({
   const community = `${plural(hazard.confirmationCount, 'confirmation')}, ${plural(hazard.disputeCount, 'dispute')}`;
   const street = place.street || place.label || 'Locating street…';
 
-  // Urgent (set by the city) already says "act now"; Needs action only when it adds something.
+  // Only the exceptional gets a pill: urgent (set by the city), or why it needs action.
   const flag = urgent
     ? <span className="pill pill-urgent" title={action ?? 'The city marked it urgent'}>Urgent</span>
-    : action ? <span className="pill pill-action" title={action}>Needs action</span> : null;
-  const signals = (
-    <span className="signals" title={community}>
-      <span className="signal-yes"><Check size={13} strokeWidth={2.5} aria-hidden="true" />{hazard.confirmationCount}</span>
-      <span className="signal-no"><X size={13} strokeWidth={2.5} aria-hidden="true" />{hazard.disputeCount}</span>
-      <span className="sr-only">{community}</span>
-    </span>
-  );
+    : action
+      ? <span className="pill pill-action" title={action}>{hazard.assignedDepartment ? 'Needs action' : 'Needs assignment'}</span>
+      : null;
+  // A heavily disputed report is worth a word; ordinary counts live in the drawer.
+  const disputed = hazard.disputeCount >= 5 && hazard.disputeCount >= hazard.confirmationCount
+    ? <span className="cell-note warn" title={community}>{plural(hazard.disputeCount, 'dispute')}</span> : null;
   const age = (
     <span className={`age${stale ? ' stale' : ''}`} title={`${ageText} · reported ${shortDate(hazard.createdAt)}${stale ? ` (over ${STALE_DAYS} days)` : ''}`}>
       {stale && <TriangleAlert size={13} aria-hidden="true" />}{shortAge(hazard, now)}
     </span>
   );
-  const assignment = active
-    ? <span className={department ? 'assign' : 'assign none'}>{department ?? 'Unassigned'}</span>
-    : <span className="muted">—</span>;
+  // Archived reports have their own tab; the label only helps where open and archived mix.
+  const showArchived = !!hazard.archivedAt && active && tabKey === 'open';
+  const showReason = tabKey === 'attention' && reason;
 
   const copyRef = () => {
     navigator.clipboard?.writeText(shortId(hazard.id))
@@ -82,16 +78,14 @@ export const HazardRow = memo(function HazardRow({
       <button type="button" id={`row-${hazard.id}`}
         className={`hazard-row${selected ? ' selected' : ''}${action || urgent ? ' needs-action' : ''}${isNew ? ' is-new' : ''}`}
         aria-current={selected ? 'true' : undefined} onClick={() => onSelect(hazard)}>
-        <span className={`row-icon sev-tint-${hazard.severity.toLowerCase()}`}><TypeIcon type={hazard.type} size={17} /></span>
+        <span className="row-icon type-tile"><TypeIcon type={hazard.type} size={17} /></span>
 
-        {/* Primary: what and where. */}
+        {/* What and where. */}
         <span className="row-body">
           <span className="row-title">
             <span className="row-title-text">{title}</span>
             {isNew && <span className="pill pill-new">New</span>}
-            <span className="stacked-only">{flag}</span>
-            {hazard.status === 'DISPUTED' && <span className="pill pill-contested stacked-only">Contested</span>}
-            {hazard.archivedAt && active && <span className="pill pill-muted" title="No staff review within 7 days. Still on the commuter map.">Archived</span>}
+            {showArchived && <span className="pill pill-muted" title="No staff review within 7 days. Still on the commuter map.">Archived</span>}
             {hazard.mergedReportCount > 0 && (
               <span className="pill pill-muted" title={`${plural(hazard.mergedReportCount, 'matching report')} from other people combined into this one`}>
                 {hazard.mergedReportCount + 1} reports
@@ -102,31 +96,25 @@ export const HazardRow = memo(function HazardRow({
             {street}
             {place.street && place.barangay && <span className="stacked-only"> · {place.barangay}</span>}
           </span>
-          {reason && <span className="row-reason">{reason}</span>}
-          {/* Secondary, stacked only: the facts the table spreads over columns. */}
+          {showReason && <span className="row-reason">{reason}</span>}
+          {/* Narrow queues: severity, status and age on one quiet line. */}
           <span className="row-meta stacked-only">
             <SeverityDot severity={hazard.severity} />
-            {hazard.status !== 'DISPUTED' && <StatusBadge status={hazard.status} plain />}
-            {signals}
-            {active && <span className={department ? 'assign' : 'assign none'}>{department ?? 'Unassigned'}</span>}
+            <StatusBadge status={hazard.status} plain />
+            {flag}
             {age}
           </span>
         </span>
 
         {/* Table columns (wide queues only) */}
+        <span className="cell cell-area table-only">{place.barangay ?? '—'}</span>
         <span className="cell cell-stack table-only">
           <SeverityDot severity={hazard.severity} />
           {flag}
         </span>
         <span className="cell cell-stack table-only">
           <StatusBadge status={hazard.status} plain />
-          {hazard.status !== 'DISPUTED' && <ConfidenceBadge confidence={hazard.confidence} plain />}
-        </span>
-        <span className="cell cell-area table-only">{place.barangay ?? '—'}</span>
-        <span className="cell cell-num table-only">{signals}</span>
-        <span className="cell cell-stack table-only">
-          {assignment}
-          {hazard.municipalPriority && !urgent && <span className="prio-text">{PRIORITY_LABEL[hazard.municipalPriority]} priority</span>}
+          {disputed}
         </span>
         <span className="cell cell-num table-only">{age}</span>
         <ChevronRight className="row-chevron" size={16} aria-hidden="true" />

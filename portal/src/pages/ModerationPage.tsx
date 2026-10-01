@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { ArrowRight, Clock, Keyboard, ScanSearch, TriangleAlert, UserX, X } from 'lucide-react';
-import { UNASSIGNED, type Hazard } from '../api/types';
+import { ArrowRight, Keyboard, TriangleAlert, X } from 'lucide-react';
+import type { Hazard } from '../api/types';
 import { NO_FILTERS, type Filters } from '../components/FilterBar';
 import { HazardDrawer } from '../components/HazardDrawer';
 import { QueuePanel, useQueueControls, useSearchLink, type QueueControls } from '../components/QueuePanel';
@@ -13,7 +13,7 @@ import { useBarangays } from '../state/places';
 import { useQueue } from '../state/useQueue';
 import { useStats } from '../state/useStats';
 
-const ACTIVE = { view: 'active' as const };
+const OPEN = { view: 'active' as const };
 const BANNER_KEY = 'saferoute.moderation.overdueBanner';
 
 /**
@@ -29,6 +29,7 @@ export function ModerationPage() {
   const { stats } = useStats();
   const selectedId = params.get('hazard');
   const searchRef = useRef<HTMLInputElement>(null);
+  const overdue = useOverdue();
 
   const select = useCallback((h: Hazard | null) => {
     setParams((p) => {
@@ -47,10 +48,13 @@ export function ModerationPage() {
   return (
     <div className={`moderation-page${selectedId ? ' has-drawer' : ''}`}>
       <PageHeader title="Moderation" subtitle="Review and manage reported hazards."
-        actions={<Link to="/help" className="icon-btn ghost-icon" title="Keyboard shortcuts" aria-label="Keyboard shortcuts and help">
-          <Keyboard size={18} aria-hidden="true" />
-        </Link>} />
-      <ModerationSummary c={c} needsReview={stats?.totals.needsReview} />
+        actions={<>
+          <QuickFilters c={c} needsReview={stats?.totals.needsReview} high={stats?.queueCounts.high} overdue={overdue} />
+          <Link to="/help" className="icon-btn ghost-icon" title="Keyboard shortcuts" aria-label="Keyboard shortcuts and help">
+            <Keyboard size={18} aria-hidden="true" />
+          </Link>
+        </>} />
+      <OverdueBanner c={c} count={overdue?.high ?? 0} />
       <div className="moderation-body">
         <section className="card moderation-queue">
           <QueuePanel c={c} tabs={MODERATION_TABS} stats={stats} barangays={barangays} selectedId={selectedId}
@@ -70,71 +74,62 @@ function bannerDismissed() {
   try { return sessionStorage.getItem(BANNER_KEY) === '1'; } catch { return false; }
 }
 
-/** Four numbers that answer "what needs me?", each one a shortcut to that slice of the queue. */
-function ModerationSummary({ c, needsReview }: { c: QueueControls; needsReview?: number }) {
-  const active = useQueue(ACTIVE);
+/** Open reports older than 7 days (archived or not), and how many of them are high severity. */
+function useOverdue() {
+  const open = useQueue(OPEN);
   const [now] = useState(() => Date.now());
-  const [dismissed, setDismissed] = useState(bannerDismissed);
-  // Counted from the same All active list each tile opens, so the number always matches the rows.
-  // (The stats endpoint's high/unassigned counts leave archived hazards out; All active doesn't.)
-  const counts = useMemo(() => {
-    const overdue = active.hazards.filter((h) => isStale(h, now));
-    return {
-      high: active.hazards.filter((h) => h.severity === 'HIGH').length,
-      unassigned: active.hazards.filter((h) => !h.assignedDepartment).length,
-      overdue: overdue.length,
-      overdueHigh: overdue.filter((h) => h.severity === 'HIGH').length,
-    };
-  }, [active.hazards, now]);
-  const overdueHigh = counts.overdueHigh;
-  const loading = active.loading && !active.hazards.length;
-  const n = (v: number) => (loading ? undefined : v);
+  return useMemo(() => {
+    if (open.loading && !open.hazards.length) return undefined;
+    const stale = open.hazards.filter((h) => isStale(h, now));
+    return { all: stale.length, high: stale.filter((h) => h.severity === 'HIGH').length };
+  }, [open.hazards, open.loading, now]);
+}
 
-  const show = (tab: string, filters: Partial<Filters> = {}) => {
-    c.apply({ tab, chips: [], filters: { ...NO_FILTERS, ...filters }, sort: c.sort, search: '' });
-  };
+function show(c: QueueControls, tab: string, filters: Partial<Filters> = {}, sort = c.sort) {
+  c.apply({ tab, chips: [], filters: { ...NO_FILTERS, ...filters }, sort, search: '' });
+}
+
+/** Three small shortcuts to the slices that need attention; the queue stays the main thing. */
+function QuickFilters({ c, needsReview, high, overdue }: {
+  c: QueueControls; needsReview?: number; high?: number; overdue?: { all: number };
+}) {
+  const quick = [
+    { key: 'review', label: 'Needs review', value: needsReview, tone: 'review', title: 'Contested, unverified high severity, or waiting over a day',
+      go: () => show(c, 'attention') },
+    { key: 'high', label: 'High severity', value: high, tone: 'high', title: 'High-severity reports in the working queue',
+      go: () => show(c, 'active', { severities: ['HIGH'] }) },
+    // Overdue spans the working queue and Archived, so it opens All open.
+    { key: 'overdue', label: 'Overdue', value: overdue?.all, tone: 'overdue', title: `Open more than ${STALE_DAYS} days, archived or not`,
+      go: () => show(c, 'open', { date: 'older7' }, 'oldest') },
+  ];
+  return (
+    <div className="quick-filters" role="group" aria-label="Quick filters">
+      {quick.map((q) => (
+        <button key={q.key} type="button" className={`quick-filter${q.value ? ` tone-${q.tone}` : ''}`} onClick={q.go} title={q.title}>
+          {q.label}<strong>{q.value ?? '–'}</strong>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Shown only when high-severity reports are overdue; dismissable for the session. */
+function OverdueBanner({ c, count }: { c: QueueControls; count: number }) {
+  const [dismissed, setDismissed] = useState(bannerDismissed);
+  if (!count || dismissed) return null;
   const dismiss = () => {
     setDismissed(true);
     try { sessionStorage.setItem(BANNER_KEY, '1'); } catch { /* shows again next time */ }
   };
-
-  const tiles = [
-    { key: 'review', label: 'Needs review', value: needsReview, icon: <ScanSearch aria-hidden="true" />, tone: needsReview ? 'review' : '',
-      hint: 'Contested, unverified high severity, or waiting over a day', go: () => show('attention') },
-    { key: 'high', label: 'High severity', value: n(counts.high), icon: <TriangleAlert aria-hidden="true" />, tone: counts.high ? 'high' : '',
-      hint: 'Active high-severity hazards', go: () => show('active', { severities: ['HIGH'] }) },
-    { key: 'unassigned', label: 'Unassigned', value: n(counts.unassigned), icon: <UserX aria-hidden="true" />, tone: '',
-      hint: 'Active hazards no department is handling', go: () => show('active', { departments: [UNASSIGNED] }) },
-    { key: 'overdue', label: 'Overdue', value: n(counts.overdue), icon: <Clock aria-hidden="true" />, tone: '',
-      hint: `Active and reported more than ${STALE_DAYS} days ago`, go: () => show('active', { date: 'older7' }) },
-  ];
-
   return (
-    <>
-      <div className="summary-tiles">
-        {tiles.map((t) => (
-          <button key={t.key} type="button" className={`summary-tile${t.tone ? ` tone-${t.tone}` : ''}`} onClick={t.go} title={t.hint}>
-            <span className="summary-label"><span className="summary-icon">{t.icon}</span>{t.label}</span>
-            <span className="summary-value">
-              {t.value === undefined ? <span className="skeleton" style={{ width: 36, height: 24, display: 'inline-block' }} /> : t.value.toLocaleString()}
-            </span>
-          </button>
-        ))}
-      </div>
-      {overdueHigh > 0 && !dismissed && (
-        <div className="alert-banner" role="status">
-          <TriangleAlert size={18} aria-hidden="true" />
-          <span>
-            <strong>{plural(overdueHigh, 'high-severity hazard')} {overdueHigh === 1 ? 'has' : 'have'} been open longer than {STALE_DAYS} days.</strong>
-            {' '}Oldest first, so the longest waits get seen.
-          </span>
-          <button type="button" className="btn btn-sm btn-secondary"
-            onClick={() => c.apply({ tab: 'active', chips: [], filters: { ...NO_FILTERS, severities: ['HIGH'], date: 'older7' }, sort: 'oldest', search: '' })}>
-            Review<ArrowRight size={15} aria-hidden="true" />
-          </button>
-          <button type="button" className="icon-btn" onClick={dismiss} aria-label="Dismiss for this session"><X size={16} aria-hidden="true" /></button>
-        </div>
-      )}
-    </>
+    <div className="alert-banner" role="status">
+      <TriangleAlert size={17} aria-hidden="true" />
+      <span><strong>{plural(count, 'high-severity report')} {count === 1 ? 'is' : 'are'} overdue.</strong></span>
+      <button type="button" className="btn btn-sm btn-ghost alert-action"
+        onClick={() => show(c, 'open', { severities: ['HIGH'], date: 'older7' }, 'oldest')}>
+        Review<ArrowRight size={15} aria-hidden="true" />
+      </button>
+      <button type="button" className="icon-btn" onClick={dismiss} aria-label="Dismiss for this session"><X size={16} aria-hidden="true" /></button>
+    </div>
   );
 }

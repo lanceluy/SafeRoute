@@ -148,7 +148,7 @@ function DrawerBody({ detail, history, barangays, showAllHistory, onShowAllHisto
       <div className="drawer-body" ref={bodyRef}>
         {/* What and where */}
         <div className="drawer-title">
-          <span className={`row-icon sev-tint-${h.severity.toLowerCase()} lg`}><TypeIcon type={h.type} size={22} /></span>
+          <span className="row-icon type-tile lg"><TypeIcon type={h.type} size={22} /></span>
           <div>
             <h2>{TYPE_LABEL[h.type]}</h2>
             <p className="drawer-place">{street}{place.barangay ? ` · ${place.barangay}` : ''}</p>

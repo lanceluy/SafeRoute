@@ -14,6 +14,12 @@ export interface QueueTab {
   archive?: boolean;
   /** Explains the tab when it's empty. */
   empty: { title: string; body: string };
+  /** Listed under "More" instead of as a tab. */
+  more?: boolean;
+  /** Leave out archived hazards (the working queue); they have their own tab. */
+  hideArchived?: boolean;
+  /** The tab's count when it isn't simply its view's count. */
+  count?: (counts: Record<QueueView, number>) => number;
 }
 
 /**
@@ -47,15 +53,23 @@ export const MAP_TABS: QueueTab[] = [
     empty: { title: 'No closed hazards', body: 'Resolved, expired and removed reports appear here.' } },
 ];
 
+/**
+ * Moderation keeps three tabs in view (the working queue, what needs a decision, what slipped);
+ * the rarer destinations sit under More. Active here is the working queue: archived reports
+ * (no staff action in 7 days) leave it for Archived, and All open shows both.
+ */
 export const MODERATION_TABS: QueueTab[] = [
-  NEW_TAB,
+  { ...ACTIVE_TAB, label: 'Active', hideArchived: true, count: (c) => Math.max(0, c.active - c.archived),
+    empty: { title: 'The queue is clear', body: 'Every open report has been handled or archived.' } },
   { key: 'attention', label: 'Needs review', view: 'attention', empty: ATTENTION_EMPTY },
-  ACTIVE_TAB,
-  { key: 'duplicates', label: 'Duplicates', view: 'duplicates', sort: 'updated',
-    empty: { title: 'No collated reports', body: 'When two people report the same hazard, the reports are combined into one and listed here.' } },
   { key: 'archived', label: 'Archived', view: 'archived', sort: 'oldest',
     empty: { title: 'Nothing archived', body: 'Reports nobody on staff acts on within 7 days move here. They stay on the commuter map until resolved or expired.' } },
-  { key: 'removed', label: 'Removed', view: 'removed', archive: true,
+  { ...NEW_TAB, more: true },
+  { key: 'open', label: 'All open', view: 'active', more: true,
+    empty: { title: 'No open reports', body: 'Nothing is reported in the selected area right now.' } },
+  { key: 'duplicates', label: 'Duplicates', view: 'duplicates', sort: 'updated', more: true,
+    empty: { title: 'No collated reports', body: 'When two people report the same hazard, the reports are combined into one and listed here.' } },
+  { key: 'removed', label: 'Removed', view: 'removed', archive: true, more: true,
     empty: { title: 'No removed reports', body: 'Reports removed as false, spam or invalid appear here.' } },
 ];
 
@@ -90,6 +104,13 @@ export const MODERATION_CHIPS: QueueChip[] = [CHIP_CONTESTED, CHIP_UNCONFIRMED, 
  * A tab key from a link or an older saved view. Keys that are now chips (tab=high, tab=contested…)
  * open All active with that chip on, so existing links keep working.
  */
+/** A tab's count from the stats endpoint's queue counts. */
+export function tabCount(t: QueueTab, counts: Record<QueueView, number> | undefined): number | undefined {
+  if (!counts) return undefined;
+  if (t.count) return t.count(counts);
+  return t.view ? counts[t.view] : undefined;
+}
+
 export function resolveTab(tabs: QueueTab[], chips: QueueChip[], key?: string): { tab: string; chips: string[] } {
   if (key && tabs.some((t) => t.key === key)) return { tab: key, chips: [] };
   if (key && chips.some((c) => c.key === key)) return { tab: ACTIVE_TAB.key, chips: [key] };

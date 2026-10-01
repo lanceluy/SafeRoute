@@ -7,8 +7,6 @@ import type { Barangay } from '../lib/geo';
 import { CONFIDENCE_HINT, CONFIDENCE_LABEL, PRIORITY_HINT, PRIORITY_LABEL, SEVERITY_LABEL, TYPE_LABEL } from '../lib/hazards';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { filterChips, type QueueChip } from '../lib/queue';
-import { Chevron } from './Chevron';
-import { Menu, type MenuHeading, type MenuItem } from './Menu';
 
 /** Reported within a period, or `older7`: reported more than a week ago. */
 export type DateRange = 'any' | 'today' | '7d' | '30d' | 'older7';
@@ -72,25 +70,27 @@ function toggle<T>(list: T[], value: T) {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
 
-/** Chips with their own dropdown elsewhere (Severity, Assignment) stay out of the Status menu. */
+/** Chips with their own section in the panel (Severity, Assignment) stay out of Status. */
 const NOT_STATUS = new Set(['high', 'unassigned']);
 
-/** A dropdown filter button: "Severity", or "Severity · 2" while it narrows the list. */
-function Dropdown({ label, count, items, wide }: { label: string; count: number; items: (MenuItem | MenuHeading | null)[]; wide?: boolean }) {
+/** A checkbox chip in the Filters panel. */
+function Toggle({ on, onChange, children, title }: { on: boolean; onChange: () => void; children: React.ReactNode; title?: string }) {
   return (
-    <Menu label={`Filter by ${label.toLowerCase()}`} align="left"
-      trigger={<span className={`filter-drop${count ? ' on' : ''}${wide ? ' wide' : ''}`}>{label}{count ? <span className="filter-drop-count">{count}</span> : null}<Chevron /></span>}
-      items={items} />
+    <label className={`chip${on ? ' on' : ''}`} title={title}>
+      <input type="checkbox" checked={on} onChange={onChange} />
+      {children}
+    </label>
   );
 }
 
 /**
- * Search, then one row of dropdown filters (Severity, Status, Barangay, Assignment, More), then the
- * active filters as removable pills. Status toggles the page's queue chips (client-side); the
- * others set server-side query filters.
+ * One row: search, one Filters button, sort and the ••• menu. Every filter lives in the panel the
+ * button opens; what's applied shows as removable pills only once something is chosen. Status
+ * toggles the page's queue chips (client-side); the rest set server-side query filters.
  */
 export const FilterBar = forwardRef<HTMLInputElement, {
   search: string; onSearch: (s: string) => void;
+  sort: QueueSort; onSort: (s: QueueSort) => void;
   filters: Filters; onFilters: (f: Filters) => void;
   barangays: Barangay[];
   departments: Department[];
@@ -98,57 +98,42 @@ export const FilterBar = forwardRef<HTMLInputElement, {
   /** Hidden for closed tabs, where queue chips don't apply. */
   showStatus: boolean;
   open: boolean; onToggle: () => void;
-  /** The ••• menu, pushed to the right of the filter row. */
+  /** The ••• menu, at the end of the row. */
   extra?: React.ReactNode;
 }>(function FilterBar({
-  search, onSearch, filters, onFilters, barangays, departments, chipDefs, chips: activeChips, onToggleChip, onClearChips, showStatus, open, onToggle, extra,
+  search, onSearch, sort, onSort, filters, onFilters, barangays, departments, chipDefs, chips: activeChips, onToggleChip, onClearChips,
+  showStatus, open, onToggle, extra,
 }, searchRef) {
   const deptName = (code: string) => (code === UNASSIGNED ? 'Unassigned' : departments.find((d) => d.code === code)?.name ?? code);
   const filterPills = filterChips(filters, deptName);
   const statusChips = chipDefs.filter((c) => activeChips.includes(c.key));
-  const more = filters.types.length + filters.confidences.length + filters.priorities.length + (filters.date !== 'any' ? 1 : 0);
   const statusDefs = chipDefs.filter((c) => !NOT_STATUS.has(c.key));
-  const anyActive = filterPills.length + statusChips.length > 0;
+  const count = filterPills.length + statusChips.length;
 
   return (
     <div className="filter-bar">
-      <label className="search">
-        <span className="sr-only">Search hazards</span>
-        <Search aria-hidden="true" className="search-icon" size={16} />
-        <input ref={searchRef} type="search" placeholder="Search hazards, streets, barangays or report IDs…"
-          title="Search by hazard type, description, street, barangay or reference" value={search}
-          onChange={(e) => onSearch(e.target.value)} />
-        <kbd aria-hidden="true">/</kbd>
-      </label>
-
-      <div className="filter-row" role="toolbar" aria-label="Filters">
-        <Dropdown label="Severity" count={filters.severities.length} items={SEVERITIES.map((s) => ({
-          label: SEVERITY_LABEL[s], checked: filters.severities.includes(s),
-          icon: <span className={`sev-dot sev-bg-${s.toLowerCase()}`} aria-hidden="true" />,
-          onSelect: () => onFilters({ ...filters, severities: toggle(filters.severities, s) }),
-        }))} />
-        {showStatus && statusDefs.length > 0 && (
-          <Dropdown label="Status" count={statusChips.filter((c) => !NOT_STATUS.has(c.key)).length} items={statusDefs.map((c) => ({
-            label: c.label, checked: activeChips.includes(c.key), onSelect: () => onToggleChip(c.key),
-          }))} />
-        )}
-        <Dropdown label={filters.area || 'Barangay'} count={filters.area ? 1 : 0} wide items={[
-          { label: 'All of Makati', checked: !filters.area, radio: true, onSelect: () => onFilters({ ...filters, area: '' }) },
-          ...barangays.map((b) => ({ label: b.name, checked: filters.area === b.name, radio: true, onSelect: () => onFilters({ ...filters, area: b.name }) })),
-        ]} />
-        <Dropdown label="Assignment" count={filters.departments.length} items={[
-          ...[{ code: UNASSIGNED, name: 'Unassigned' }, ...departments].map((d) => ({
-            label: d.name, checked: filters.departments.includes(d.code),
-            onSelect: () => onFilters({ ...filters, departments: toggle(filters.departments, d.code) }),
-          })),
-        ]} />
-        <button type="button" className={`filter-drop${more ? ' on' : ''}`} aria-expanded={open} onClick={onToggle}>
-          <SlidersHorizontal size={15} aria-hidden="true" />More filters{more ? <span className="filter-drop-count">{more}</span> : null}
+      <div className="filter-row" role="toolbar" aria-label="Search, filter and sort">
+        <label className="search">
+          <span className="sr-only">Search reports</span>
+          <Search aria-hidden="true" className="search-icon" size={16} />
+          <input ref={searchRef} type="search" placeholder="Search reports…"
+            title="Search by hazard type, description, street, barangay or reference" value={search}
+            onChange={(e) => onSearch(e.target.value)} />
+          <kbd aria-hidden="true">/</kbd>
+        </label>
+        <button type="button" className={`filter-drop${count ? ' on' : ''}`} aria-expanded={open} onClick={onToggle}>
+          <SlidersHorizontal size={15} aria-hidden="true" />Filters{count ? <span className="filter-drop-count">{count}</span> : null}
         </button>
-        {extra && <span className="toolbar-end">{extra}</span>}
+        <label className="sort-control">
+          <span className="sr-only">Sort</span>
+          <select value={sort} onChange={(e) => onSort(e.target.value as QueueSort)} aria-label="Sort">
+            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+        </label>
+        {extra}
       </div>
 
-      {anyActive && (
+      {count > 0 && (
         <div className="filter-chips" aria-label="Active filters">
           {statusChips.map((c) => (
             <button key={c.key} type="button" className="filter-chip" onClick={() => onToggleChip(c.key)} aria-label={`Remove filter: ${c.label}`}>
@@ -167,14 +152,46 @@ export const FilterBar = forwardRef<HTMLInputElement, {
       {open && (
         <div className="filter-panel">
           <fieldset>
+            <legend>Severity</legend>
+            <div className="chips">
+              {SEVERITIES.map((s) => (
+                <Toggle key={s} on={filters.severities.includes(s)} onChange={() => onFilters({ ...filters, severities: toggle(filters.severities, s) })}>
+                  <span className={`sev-dot sev-bg-${s.toLowerCase()}`} aria-hidden="true" />{SEVERITY_LABEL[s]}
+                </Toggle>
+              ))}
+            </div>
+          </fieldset>
+          {showStatus && statusDefs.length > 0 && (
+            <fieldset>
+              <legend>Status</legend>
+              <div className="chips">
+                {statusDefs.map((c) => (
+                  <Toggle key={c.key} on={activeChips.includes(c.key)} onChange={() => onToggleChip(c.key)}>{c.label}</Toggle>
+                ))}
+              </div>
+            </fieldset>
+          )}
+          <fieldset>
+            <legend>Barangay</legend>
+            <select value={filters.area} onChange={(e) => onFilters({ ...filters, area: e.target.value })} aria-label="Barangay">
+              <option value="">All of Makati</option>
+              {barangays.map((b) => <option key={b.name} value={b.name}>{b.name}</option>)}
+            </select>
+          </fieldset>
+          <fieldset>
+            <legend>Assignment</legend>
+            <div className="chips">
+              {[{ code: UNASSIGNED, name: 'Unassigned' }, ...departments].map((d) => (
+                <Toggle key={d.code} on={filters.departments.includes(d.code)}
+                  onChange={() => onFilters({ ...filters, departments: toggle(filters.departments, d.code) })}>{d.name}</Toggle>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset>
             <legend>Type</legend>
             <div className="chips">
               {HAZARD_TYPES.map((t) => (
-                <label key={t} className={`chip${filters.types.includes(t) ? ' on' : ''}`}>
-                  <input type="checkbox" checked={filters.types.includes(t)}
-                    onChange={() => onFilters({ ...filters, types: toggle(filters.types, t) })} />
-                  {TYPE_LABEL[t]}
-                </label>
+                <Toggle key={t} on={filters.types.includes(t)} onChange={() => onFilters({ ...filters, types: toggle(filters.types, t) })}>{TYPE_LABEL[t]}</Toggle>
               ))}
             </div>
           </fieldset>
@@ -182,11 +199,8 @@ export const FilterBar = forwardRef<HTMLInputElement, {
             <legend>Confidence</legend>
             <div className="chips">
               {CONFIDENCES.map((c) => (
-                <label key={c} className={`chip${filters.confidences.includes(c) ? ' on' : ''}`} title={CONFIDENCE_HINT[c]}>
-                  <input type="checkbox" checked={filters.confidences.includes(c)}
-                    onChange={() => onFilters({ ...filters, confidences: toggle(filters.confidences, c) })} />
-                  {CONFIDENCE_LABEL[c]}
-                </label>
+                <Toggle key={c} on={filters.confidences.includes(c)} title={CONFIDENCE_HINT[c]}
+                  onChange={() => onFilters({ ...filters, confidences: toggle(filters.confidences, c) })}>{CONFIDENCE_LABEL[c]}</Toggle>
               ))}
             </div>
           </fieldset>
@@ -194,11 +208,8 @@ export const FilterBar = forwardRef<HTMLInputElement, {
             <legend title={PRIORITY_HINT}>City priority</legend>
             <div className="chips">
               {PRIORITIES.map((p) => (
-                <label key={p} className={`chip${filters.priorities.includes(p) ? ' on' : ''}`}>
-                  <input type="checkbox" checked={filters.priorities.includes(p)}
-                    onChange={() => onFilters({ ...filters, priorities: toggle(filters.priorities, p) })} />
-                  {PRIORITY_LABEL[p]}
-                </label>
+                <Toggle key={p} on={filters.priorities.includes(p)}
+                  onChange={() => onFilters({ ...filters, priorities: toggle(filters.priorities, p) })}>{PRIORITY_LABEL[p]}</Toggle>
               ))}
             </div>
           </fieldset>
@@ -214,6 +225,10 @@ export const FilterBar = forwardRef<HTMLInputElement, {
               ))}
             </div>
           </fieldset>
+          <div className="filter-panel-foot">
+            <button type="button" className="btn-link" disabled={!count} onClick={() => { onFilters(NO_FILTERS); onClearChips(); }}>Clear all</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onToggle}>Done</button>
+          </div>
         </div>
       )}
     </div>

@@ -3,15 +3,17 @@ import { useSearchParams } from 'react-router';
 import { UNASSIGNED, type Hazard, type HazardType, type QueueSort, type Stats } from '../api/types';
 import { plural } from '../lib/format';
 import type { Barangay } from '../lib/geo';
-import { buildQuery, filterChips, refine, resolveTab, type QueueChip, type QueueTab } from '../lib/queue';
+import { buildQuery, filterChips, refine, resolveTab, tabCount, type QueueChip, type QueueTab } from '../lib/queue';
 import { useShortcuts } from '../lib/shortcuts';
 import { ActionDialog } from './ActionDialog';
 import type { ViewConfig } from '../lib/views';
 import { useDepartments } from '../state/departments';
 import { useQueue } from '../state/useQueue';
 import { BulkBar } from './BulkBar';
-import { FilterBar, NO_FILTERS, SORTS, activeFilterCount, type Filters } from './FilterBar';
+import { FilterBar, NO_FILTERS, activeFilterCount, type Filters } from './FilterBar';
 import { HazardRow } from './HazardRow';
+import { Chevron } from './Chevron';
+import { Menu } from './Menu';
 import { EmptyState, ErrorState, SkeletonRows } from './States';
 import { QueueMoreMenu } from './QueueMoreMenu';
 
@@ -59,7 +61,8 @@ export function useQueueControls(tabs: QueueTab[], chipDefs: QueueChip[], barang
   }, []);
   const tab = tabs.find((t) => t.key === tabKey) ?? tabs[0];
   const query = useMemo(() => buildQuery(tab, filters, sort, barangays), [tab, filters, sort, barangays]);
-  const queue = useQueue(query);
+  const raw = useQueue(query);
+  const queue = useMemo(() => (tab.hideArchived ? { ...raw, hazards: raw.hazards.filter((h) => !h.archivedAt) } : raw), [raw, tab.hideArchived]);
   const base = useMemo(() => refine(queue.hazards, search, filters, barangays), [queue.hazards, search, filters, barangays]);
   const active = useMemo(() => chipDefs.filter((c) => chips.includes(c.key)), [chipDefs, chips]);
   const shown = useMemo(() => (active.length ? base.filter((h) => active.every((c) => c.match(h, now))) : base), [base, active, now]);
@@ -165,7 +168,10 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
   useShortcuts({ arrowdown: () => step(1), arrowup: () => step(-1), j: () => step(1), k: () => step(-1) });
 
   // An empty tab points at another one that still has work, inbox first.
-  const counts = (t: QueueTab) => (t.view ? stats?.queueCounts[t.view] ?? 0 : 0);
+  const counts = (t: QueueTab) => tabCount(t, stats?.queueCounts) ?? 0;
+  const primaryTabs = tabs.filter((t) => !t.more);
+  const noun = page === 'moderation' ? 'report' : 'hazard';
+  const moreTabs = tabs.filter((t) => t.more);
   const elsewhere = tabs.filter((t) => t.key !== c.tab.key && !t.archive && counts(t) > 0)
     .sort((a, b) => (a.key === 'attention' ? -1 : b.key === 'attention' ? 1 : 0))[0];
   const activeChips = c.chipDefs.filter((ch) => c.chips.includes(ch.key));
@@ -179,10 +185,10 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
   return (
     <div className="queue">
       {title && <h2 className="queue-title">{title}</h2>}
-      {/* 1. Where am I? The primary tabs; only a waiting review count is red. */}
+      {/* 1. Where am I? Primary tabs, with the rarer ones under More. Only a waiting review count is red. */}
       <div className="tabs" role="tablist" aria-label="Queue">
-        {tabs.map((t) => {
-          const count = t.view ? stats?.queueCounts[t.view] : undefined;
+        {primaryTabs.map((t) => {
+          const count = tabCount(t, stats?.queueCounts);
           const urgent = t.key === 'attention' && !!count;
           return (
             <button key={t.key} type="button" role="tab" aria-selected={c.tab.key === t.key}
@@ -192,9 +198,17 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
             </button>
           );
         })}
+        {moreTabs.length > 0 && (
+          <Menu label="More queues" align="left"
+            trigger={<span className={`tab tab-more${c.tab.more ? ' active' : ''}`}>{c.tab.more ? c.tab.label : 'More'}<Chevron /></span>}
+            items={moreTabs.map((t) => ({
+              label: t.label, checked: c.tab.key === t.key, radio: true,
+              meta: tabCount(t, stats?.queueCounts), onSelect: () => c.setTab(t.key),
+            }))} />
+        )}
       </div>
       {/* 2. Search, then the filters as dropdowns; active ones show as removable pills. */}
-      <FilterBar ref={searchRef} search={c.search} onSearch={c.setSearch}
+      <FilterBar ref={searchRef} search={c.search} onSearch={c.setSearch} sort={c.sort} onSort={c.setSort}
         filters={c.filters} onFilters={c.setFilters} barangays={barangays} departments={departments}
         chipDefs={c.chipDefs} chips={c.chips} onToggleChip={c.toggleChip} onClearChips={c.clearChips} showStatus={!c.tab.archive}
         open={c.filtersOpen} onToggle={c.toggleFilters} extra={
@@ -210,28 +224,19 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
           departments={departments} barangays={barangays} stats={stats} exportable={page === 'moderation'}
           onCancel={endSelect} onDone={() => { setChecked(new Set()); window.setTimeout(queue.reload, 900); }} />
       )}
-      {/* 3. How many, and in what order. */}
-      <div className="list-head">
-        <p className="queue-summary" aria-live="polite">
-          {!queue.loading && !queue.error && (
-            <>
-              <strong>{plural(shown.length, 'hazard')}</strong>
-              {shown.length !== queue.hazards.length || c.search ? <span> of {queue.hazards.length}</span> : null}
-              {queue.truncated && <span> (first {queue.hazards.length} of {queue.total})</span>}
-            </>
-          )}
-        </p>
-        <label className="sort-control">
-          <span>Sort</span>
-          <select value={c.sort} onChange={(e) => c.setSort(e.target.value as QueueSort)} aria-label="Sort">
-            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-        </label>
-      </div>
+      {/* 3. How many. */}
+      <p className="queue-summary" aria-live="polite">
+        {!queue.loading && !queue.error && (
+          <>
+            <strong>{plural(shown.length, noun)}</strong>
+            {shown.length !== queue.hazards.length || c.search ? <span> of {queue.hazards.length}</span> : null}
+            {queue.truncated && <span> (first {queue.hazards.length} of {queue.total})</span>}
+          </>
+        )}
+      </p>
       {!queue.loading && !queue.error && shown.length > 0 && !selectMode && (
         <div className="queue-head table-only" aria-hidden="true">
-          <span>Hazard</span><span>Priority</span><span>Verification</span><span>Location</span>
-          <span className="num">Community</span><span>Assignment</span><span className="num">Age</span><span />
+          <span>Hazard</span><span>Location</span><span>Priority</span><span>Status</span><span className="num">Age</span><span />
         </div>
       )}
       <div className="queue-scroll" ref={listRef} onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 80)}>
@@ -260,7 +265,7 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
           <ul className="hazard-list">
             {ordered.map((h) => (
               <HazardRow key={h.id} hazard={h} selected={h.id === selectedId} isNew={queue.newIds.has(h.id)}
-                barangays={barangays} departments={departments} onSelect={onSelect}
+                barangays={barangays} onSelect={onSelect}
                 checkable={selectMode} checked={checked.has(h.id)} onCheck={toggleChecked}
                 tabKey={c.tab.key} chipKeys={c.chips} now={now} onResolve={setResolving} onShowOnMap={onShowOnMap} />
             ))}

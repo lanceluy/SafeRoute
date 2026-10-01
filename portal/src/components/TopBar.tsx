@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { Bell, BellOff, FileSearch, LogOut, MapPin, Menu as MenuIcon, Search, Settings } from 'lucide-react';
 import { logout } from '../api/client';
 import type { Session } from '../api/types';
@@ -14,12 +14,15 @@ const ROLE_LABEL = { MUNICIPAL_OFFICIAL: 'Municipal Official', MODERATOR: 'Moder
 
 /** The utility bar over every page: search, notifications, municipality and account. */
 export function TopBar({ session, onMenu }: { session: Session; onMenu: () => void }) {
+  // Map and Moderation have their own queue search, so the global one shrinks to a compact ⌘K control there.
+  const { pathname } = useLocation();
+  const compact = pathname.startsWith('/moderation') || pathname.startsWith('/map');
   return (
     <header className="topbar">
       <button type="button" className="icon-btn menu-btn" onClick={onMenu} aria-label="Open navigation">
         <MenuIcon aria-hidden="true" size={20} />
       </button>
-      <GlobalSearch />
+      <GlobalSearch compact={compact} />
       <div className="topbar-right">
         <span className="city-chip" title="Your municipality"><MapPin aria-hidden="true" />Makati City</span>
         <NotificationBell />
@@ -47,7 +50,7 @@ interface Option { key: string; icon: ReactNode; label: string; hint: string; to
  * One box for places and reports. A barangay opens the map on that area; anything else searches
  * the active reports on Moderation (type, street, barangay, description or reference).
  */
-function GlobalSearch() {
+function GlobalSearch({ compact }: { compact: boolean }) {
   const navigate = useNavigate();
   const barangays = useBarangays();
   const [q, setQ] = useState('');
@@ -85,7 +88,7 @@ function GlobalSearch() {
       ...places,
       {
         key: 'reports', icon: <FileSearch aria-hidden="true" />, label: `Search reports for “${term}”`, hint: 'Moderation',
-        to: `/moderation?tab=active&q=${encodeURIComponent(term)}`,
+        to: `/moderation?tab=open&q=${encodeURIComponent(term)}`,
       },
     ];
   }, [term, barangays]);
@@ -101,9 +104,9 @@ function GlobalSearch() {
 
   const showList = open && options.length > 0;
   return (
-    <div className="global-search" ref={ref} role="search">
+    <div className={`global-search${compact ? ' compact' : ''}`} ref={ref} role="search">
       <Search aria-hidden="true" />
-      <input ref={input} type="search" value={q} placeholder="Search hazards, places or reports…" aria-label="Search hazards, places or reports"
+      <input ref={input} type="search" value={q} placeholder={compact ? 'Search…' : 'Search hazards, places or reports…'} aria-label="Search hazards, places or reports"
         role="combobox" aria-expanded={showList} aria-controls="global-search-list" aria-autocomplete="list"
         aria-activedescendant={showList ? `gs-${options[active]?.key}` : undefined}
         onChange={(e) => { setQ(e.target.value); setActive(0); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={onKeyDown} />
