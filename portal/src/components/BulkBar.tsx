@@ -26,9 +26,11 @@ async function runAll<T>(items: T[], fn: (item: T) => Promise<unknown>, concurre
  * Actions on the selected hazards. Deliberately no bulk Remove: removing is a judgement about
  * one report and penalises its reporter, so it stays one at a time.
  */
-export function BulkBar({ selected, total, allChecked, onToggleAll, departments, barangays, stats, onCancel, onDone }: {
+export function BulkBar({ selected, total, allChecked, onToggleAll, departments, barangays, stats, exportable, onCancel, onDone }: {
   selected: Hazard[]; total: number; allChecked: boolean; onToggleAll: () => void;
   departments: Department[]; barangays: Barangay[]; stats: Stats | null;
+  /** Export lives on the Moderation page only. */
+  exportable: boolean;
   /** Leaves select mode. */
   onCancel: () => void; onDone: () => void;
 }) {
@@ -48,7 +50,7 @@ export function BulkBar({ selected, total, allChecked, onToggleAll, departments,
       <button type="button" className="btn btn-secondary btn-sm" disabled={!selected.length} onClick={() => setDialog('response')}>
         Assign / priority
       </button>
-      <ExportMenu hazards={selected} title="Selected hazards" barangays={barangays} departments={departments} stats={stats} />
+      {exportable && <ExportMenu hazards={selected} title="Selected hazards" barangays={barangays} departments={departments} stats={stats} />}
       <button type="button" className="btn-link" onClick={onCancel}>Cancel</button>
       {dialog === 'resolve' && (
         <BulkResolve hazards={activeOnes} skipped={selected.length - activeOnes.length}

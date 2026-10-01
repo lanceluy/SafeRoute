@@ -167,6 +167,39 @@ export function ColumnChart({ rows, height = 220, label, unit }: {
   );
 }
 
+/**
+ * How often hazards were reported per day or week, for one barangay and type (the Analytics
+ * selector). One series, one hue, no per-bar labels: the tooltip carries the numbers.
+ */
+export function FrequencyChart({ rows, height = 240, label }: {
+  rows: { key: string; label: string; range: string; hazards: number; reports: number }[]; height?: number; label: string;
+}) {
+  const { reported: fill, grid, axis } = useChartColors();
+  return (
+    <figure className="chart" aria-label={label}>
+      <ResponsiveContainer width="100%" height={height}>
+        <BarChart data={rows} margin={{ top: 16, right: 16, bottom: 0, left: -12 }} barCategoryGap={2}>
+          <CartesianGrid stroke={grid} vertical={false} />
+          <XAxis dataKey="label" {...axis} minTickGap={16} />
+          <YAxis allowDecimals={false} {...axis} width={40} />
+          <Tooltip cursor={{ fill: grid }} content={({ active, payload }) => {
+            if (!active || !payload?.length) return null;
+            const r = payload[0].payload as (typeof rows)[number];
+            return (
+              <div className="chart-tip">
+                <strong>{r.range}</strong>
+                <span>{r.hazards} hazard{r.hazards === 1 ? '' : 's'}</span>
+                {r.reports > r.hazards && <span className="muted">{r.reports} reports, duplicates included</span>}
+              </div>
+            );
+          }} />
+          <Bar dataKey="hazards" fill={fill} radius={[4, 4, 0, 0]} maxBarSize={36} />
+        </BarChart>
+      </ResponsiveContainer>
+    </figure>
+  );
+}
+
 function DayTooltip({ active, payload, only }: {
   active?: boolean; payload?: { payload: Stats['daily'][number] & { label: string } }[]; only?: 'backlog';
 }) {

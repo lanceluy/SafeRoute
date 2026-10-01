@@ -37,7 +37,11 @@ public class ModerationQueryService {
         /** Active and not yet assigned to a department. */
         UNASSIGNED,
         /** Active and reported in the last day, so a new report is visible straight away. */
-        RECENT
+        RECENT,
+        /** Active, but a week passed without staff review. Only here and in ACTIVE; still on the commuter map. */
+        ARCHIVED,
+        /** Active hazards that other people's matching reports were collated into. */
+        DUPLICATES
     }
 
     public enum Sort { REVIEW, NEWEST, OLDEST, SEVERITY, CONFIDENCE, DISPUTED, CONFIRMED, EXPIRING, PRIORITY, UPDATED }
@@ -55,6 +59,8 @@ public class ModerationQueryService {
     static final int MAX_QUERY_LENGTH = 100;
 
     private static final String ACTIVE = "h.status IN ('REPORTED', 'VERIFIED', 'DISPUTED')";
+    /** Working queues leave out archived hazards: they have their own tab. */
+    private static final String WORKING = "(" + ACTIVE + " AND h.archived_at IS NULL)";
 
     /** Must match {@link HazardLifecycle#confidence}; ModerationQueryIntegrationTest checks they agree. */
     static final String CONFIDENCE = """
@@ -67,11 +73,11 @@ public class ModerationQueryService {
                    AND h.confirmation_count >= 0.6 * (h.confirmation_count + h.dispute_count) THEN 'MEDIUM'
               ELSE 'LOW' END)""";
 
-    private static final String UNCONFIRMED = "(" + ACTIVE + " AND h.confirmation_count = 0 AND h.dispute_count = 0)";
+    private static final String UNCONFIRMED = "(" + WORKING + " AND h.confirmation_count = 0 AND h.dispute_count = 0)";
 
-    private static final String ATTENTION = "(h.status = 'DISPUTED'"
+    private static final String ATTENTION = "(h.archived_at IS NULL AND (h.status = 'DISPUTED'"
             + " OR (h.status = 'REPORTED' AND h.severity = 'HIGH')"
-            + " OR (" + UNCONFIRMED + " AND h.created_at < CAST(:now AS timestamptz) - interval '24 hours'))";
+            + " OR (" + UNCONFIRMED + " AND h.created_at < CAST(:now AS timestamptz) - interval '24 hours')))";
 
     private final NamedParameterJdbcTemplate jdbc;
     private final HazardRepository hazardRepository;
@@ -177,14 +183,16 @@ public class ModerationQueryService {
     private String viewCondition(View view) {
         return switch (view) {
             case ATTENTION -> ATTENTION;
-            case HIGH -> "(" + ACTIVE + " AND h.severity = 'HIGH')";
-            case CONTESTED -> "h.status = 'DISPUTED'";
+            case HIGH -> "(" + WORKING + " AND h.severity = 'HIGH')";
+            case CONTESTED -> "(h.status = 'DISPUTED' AND h.archived_at IS NULL)";
             case EXPIRING -> expiringCondition();
             case UNCONFIRMED -> UNCONFIRMED;
             case ACTIVE -> ACTIVE;
             case REMOVED -> "h.status = 'REMOVED'";
-            case UNASSIGNED -> "(" + ACTIVE + " AND h.assigned_department IS NULL)";
-            case RECENT -> "(" + ACTIVE + " AND h.created_at >= CAST(:now AS timestamptz) - interval '24 hours')";
+            case UNASSIGNED -> "(" + WORKING + " AND h.assigned_department IS NULL)";
+            case RECENT -> "(" + WORKING + " AND h.created_at >= CAST(:now AS timestamptz) - interval '24 hours')";
+            case ARCHIVED -> "(" + ACTIVE + " AND h.archived_at IS NOT NULL)";
+            case DUPLICATES -> "(" + ACTIVE + " AND h.merged_report_count > 0)";
         };
     }
 
@@ -193,7 +201,7 @@ public class ModerationQueryService {
         String windows = Arrays.stream(HazardType.values())
                 .map(t -> "WHEN '" + t.name() + "' THEN " + expiryPolicy.ttlFor(t).dividedBy(5).toSeconds())
                 .collect(Collectors.joining(" "));
-        return "(" + ACTIVE + " AND h.expires_at >= CAST(:now AS timestamptz)"
+        return "(" + WORKING + " AND h.expires_at >= CAST(:now AS timestamptz)"
                 + " AND h.expires_at <= CAST(:now AS timestamptz) + (CASE h.type " + windows + " ELSE "
                 + Duration.ofDays(3).dividedBy(5).toSeconds() + " END) * interval '1 second')";
     }

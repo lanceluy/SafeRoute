@@ -538,6 +538,7 @@ final class HazardPinView: MKAnnotationView {
         guard let hazard = (annotation as? HazardAnnotation)?.hazard else { return }
         clusteringIdentifier = "hazards"
         disc.backgroundColor = hazard.status.isActive ? Self.color(for: hazard.severity) : .systemGray
+        glyph.tintColor = hazard.status.isActive ? hazard.severity.markerGlyphColor : .white
         glyph.image = UIImage(systemName: hazard.type.symbolName)
         alpha = hazard.status.isActive ? 1 : 0.6
         displayPriority = hazard.severity == .high ? .required : .defaultHigh

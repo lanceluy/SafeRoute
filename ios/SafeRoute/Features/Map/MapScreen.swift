@@ -192,7 +192,9 @@ struct MapScreen: View {
     @ViewBuilder
     private var statusBanners: some View {
         if !connectivity.isOnline {
-            StateBanner(text: "No internet — showing saved map data", systemImage: "wifi.slash", tint: SR.Palette.critical)
+            StateBanner(text: model.showingSavedSince.map { "No internet — showing hazards saved \($0.formatted(.relative(presentation: .named)))" }
+                            ?? "No internet — showing saved map data",
+                        systemImage: "wifi.slash", tint: SR.Palette.critical)
         } else if socket.state == .reconnecting {
             StateBanner(text: "Reconnecting to live alerts…", systemImage: "antenna.radiowaves.left.and.right.slash", tint: SR.Palette.warning)
         }

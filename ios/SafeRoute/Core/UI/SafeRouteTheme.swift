@@ -31,7 +31,8 @@ enum SR {
         // Semantic — meaning, not brand.
         static let critical = Color(uiColor: .systemRed)
         static let warning = Color(uiColor: .systemOrange)
-        static let caution = dynamic(light: 0xC99700, dark: 0xF5C542)
+        /// Low severity: yellow. Slightly deeper on light backgrounds so text in it stays readable.
+        static let caution = dynamic(light: 0xCA9A04, dark: 0xFACC15)
         static let safe = Color(uiColor: .systemGreen)
 
         static var navyUI: UIColor { UIColor(navy) }

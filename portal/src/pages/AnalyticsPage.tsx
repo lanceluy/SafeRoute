@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { Confidence, HazardType, QueueQuery, Severity, Stats } from '../api/types';
+import { AreaFrequencyCard } from '../components/AreaFrequency';
 import { AreaMap } from '../components/AreaMap';
 import {
   BacklogChart, BarList, ColumnChart, DivergingBars, IntakeChart, ReportTimesHeatmap, SeverityStackBars, SeverityTrendChart, TrendChart,
@@ -227,6 +228,7 @@ export function AnalyticsPage() {
       </Card>
 
       {/* 5. Geography */}
+      <AreaFrequencyCard barangays={barangays} from={from} to={to} />
       <div className="grid-2">
         <Card title="Severity by barangay" sub="Active hazards; click one to see it on the map">
           <SeverityStackBars

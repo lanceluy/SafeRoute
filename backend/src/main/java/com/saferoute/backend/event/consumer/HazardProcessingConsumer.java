@@ -173,6 +173,7 @@ public class HazardProcessingConsumer {
         if (existing.getPhotoUrl() == null && event.photoUrl() != null) {
             existing.setPhotoUrl(event.photoUrl());
         }
+        existing.setMergedReportCount(existing.getMergedReportCount() + 1);
         hazardRepository.save(existing);
         audit.record(existing.getId(), reporter, HazardAuditLog.Action.DUPLICATE_MERGED, "Submission " + submission.getId());
         completeSubmission(submission, SubmissionStatus.MERGED, existing.getId());

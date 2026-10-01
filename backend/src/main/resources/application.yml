@@ -110,6 +110,9 @@ saferoute:
     dispute-threshold: 2
     resolution-threshold: 2
     expiry-check-interval: PT1M
+    # A report no staff member acts on within this long moves to the portal's Archived tab.
+    archive-after: P7D
+    archive-check-interval: PT10M
   coverage:
     enabled: ${SAFEROUTE_COVERAGE_ENABLED:true}
     name: Metro Manila pilot area

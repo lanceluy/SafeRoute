@@ -99,6 +99,20 @@ function DrawerBody({ detail, history, barangays, showAllHistory, onShowAllHisto
     }
   };
 
+  const [reviewing, setReviewing] = useState(false);
+  const review = async () => {
+    setReviewing(true);
+    try {
+      await api.review(h.id);
+      toast({ kind: 'success', message: h.archivedAt ? 'Back in the queue' : 'Marked reviewed' });
+      onChanged();
+    } catch (err) {
+      toast({ kind: 'error', message: err instanceof ApiError ? err.message : 'Couldn’t mark it reviewed. Try again.' });
+    } finally {
+      setReviewing(false);
+    }
+  };
+
   return (
     <div className="drawer-body">
       <div className="drawer-title">
@@ -122,6 +136,13 @@ function DrawerBody({ detail, history, barangays, showAllHistory, onShowAllHisto
       <p className="explain">
         Severity is how dangerous the hazard is. Confidence is how much the community backs the report.
       </p>
+
+      {h.archivedAt && active && (
+        <div className="notice notice-warning">
+          <p>Archived {ago(h.archivedAt)}: nobody on staff acted on it within 7 days. Commuters still see it on the map.</p>
+          <button type="button" className="btn btn-secondary btn-sm" disabled={reviewing} onClick={review}>Restore to queue</button>
+        </div>
+      )}
 
       {detail.expiringSoon && (
         <p className="notice notice-warning">Expiring soon: nobody has confirmed it lately, so it will drop off the map unless someone does.</p>
@@ -165,6 +186,11 @@ function DrawerBody({ detail, history, barangays, showAllHistory, onShowAllHisto
             <span>say it’s gone</span>
           </div>
         </div>
+        {h.mergedReportCount > 0 && (
+          <p className="muted">
+            {h.mergedReportCount + 1} people reported this. Matching reports within 30 m are combined into this one.
+          </p>
+        )}
         <p className="muted">
           Reporter: {TRUST_LABEL[detail.reporterTrustLevel]}
           {h.lastConfirmedAt && <> · Last confirmed {ago(h.lastConfirmedAt)}</>}
@@ -198,9 +224,17 @@ function DrawerBody({ detail, history, barangays, showAllHistory, onShowAllHisto
             h.status !== 'REMOVED'
               ? { label: 'Remove report', hint: 'False, spam or invalid', danger: true, onSelect: () => onAction('remove') }
               : null,
+            active ? { label: h.archivedAt ? 'Restore to queue' : 'Mark reviewed', hint: 'Stops the 7-day archive clock', onSelect: review } : null,
             { label: 'View full history', hint: `${events.length} events`, onSelect: onShowAllHistory },
           ]} />
         </div>
+        {active && !h.reviewedAt && !h.archivedAt && (
+          <p className="muted">
+            Not reviewed yet. Unreviewed reports move to Archived 7 days after they’re reported.{' '}
+            <button type="button" className="btn-link" disabled={reviewing} onClick={review}>Mark reviewed</button>
+          </p>
+        )}
+        {active && h.reviewedAt && <p className="muted">Reviewed by staff {ago(h.reviewedAt)}.</p>}
         {active && <p className="muted">Resolve when the hazard is fixed or gone. Remove is only for reports that were never valid.</p>}
         {!active && h.resolvedAt && <p className="muted">{STATUS_LABEL[h.status]} {ago(h.resolvedAt)} · {fullDate(h.resolvedAt)}</p>}
       </section>

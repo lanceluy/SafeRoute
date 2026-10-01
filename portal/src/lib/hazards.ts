@@ -30,7 +30,7 @@ export function typeIcon(type: HazardType, size = 18) {
 export const SEVERITY_LABEL: Record<Severity, string> = { HIGH: 'High', MEDIUM: 'Medium', LOW: 'Low' };
 export const SEVERITY_RANK: Record<Severity, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 /** Marker fill per severity; the same values as --sev-* in styles.css. */
-export const SEVERITY_COLOR: Record<Severity, string> = { HIGH: '#D92D20', MEDIUM: '#E07B0B', LOW: '#B58A1B' };
+export const SEVERITY_COLOR: Record<Severity, string> = { HIGH: '#D92D20', MEDIUM: '#E07B0B', LOW: '#EAB308' };
 
 export const STATUS_LABEL: Record<HazardStatus, string> = {
   REPORTED: 'Reported',
@@ -96,13 +96,15 @@ export const ACTION_LABEL: Record<AuditAction, string> = {
   MODERATOR_REMOVED: 'Report removed',
   MUNICIPAL_ASSIGNED: 'Department assigned',
   MUNICIPAL_PRIORITY: 'City priority set',
+  STAFF_REVIEWED: 'Marked reviewed',
+  ARCHIVED: 'Archived (no review in 7 days)',
 };
 
 export const PRIORITY_LABEL: Record<MunicipalPriority, string> = { URGENT: 'Urgent', HIGH: 'High', NORMAL: 'Normal', LOW: 'Low' };
 export const PRIORITY_HINT = 'How urgently the city means to deal with it. Separate from severity, which is how dangerous commuters say it is.';
 
 /** Notes the backend fills in by itself; they add nothing for staff. */
-export const DEFAULT_NOTES = new Set(['Resolved by moderator']);
+export const DEFAULT_NOTES = new Set(['Resolved by moderator', 'Restored from Archived', 'No staff review within 7 days']);
 
 /** Fields whose edits are bookkeeping, not something staff need to see. */
 export const HIDDEN_FIELDS = new Set(['contentRevision', 'expiresAt']);

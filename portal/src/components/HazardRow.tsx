@@ -55,6 +55,12 @@ export const HazardRow = memo(function HazardRow({
             {TYPE_LABEL[hazard.type]}
             {isNew && <span className="new-pill">New</span>}
             {action && <span className="action-pill" title={action}>Needs action</span>}
+            {hazard.archivedAt && active && <span className="info-pill" title="No staff review within 7 days. Still on the commuter map.">Archived</span>}
+            {hazard.mergedReportCount > 0 && (
+              <span className="info-pill" title={`${plural(hazard.mergedReportCount, 'matching report')} from other people combined into this one`}>
+                {hazard.mergedReportCount + 1} reports
+              </span>
+            )}
           </span>
           <span className="row-badges stacked-only">
             <SeverityBadge severity={hazard.severity} />

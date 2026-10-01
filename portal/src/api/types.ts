@@ -51,6 +51,12 @@ export interface Hazard {
   assignedDepartment: string | null;
   municipalPriority: MunicipalPriority | null;
   assignedAt: string | null;
+  /** Last staff action; null = the city hasn't looked at it yet. */
+  reviewedAt: string | null;
+  /** Set when a week passed without staff review. Still active and on the commuter map. */
+  archivedAt: string | null;
+  /** Other people's matching reports collated into this one. */
+  mergedReportCount: number;
 }
 
 export interface HazardDetail {
@@ -70,7 +76,7 @@ export interface HazardDetail {
 export type AuditAction =
   | 'CREATED' | 'DUPLICATE_MERGED' | 'CONFIRMATION_CHANGED' | 'RESOLUTION_VOTE' | 'STATUS_CHANGED'
   | 'FIELD_EDITED' | 'MODERATOR_RESOLVED' | 'MODERATOR_REOPENED' | 'MODERATOR_REMOVED'
-  | 'MUNICIPAL_ASSIGNED' | 'MUNICIPAL_PRIORITY';
+  | 'MUNICIPAL_ASSIGNED' | 'MUNICIPAL_PRIORITY' | 'STAFF_REVIEWED' | 'ARCHIVED';
 
 export interface TimelineEntry {
   id: string;
@@ -92,7 +98,8 @@ export interface Page<T> {
   hasMore: boolean;
 }
 
-export type QueueView = 'recent' | 'attention' | 'high' | 'contested' | 'expiring' | 'unconfirmed' | 'active' | 'removed' | 'unassigned';
+export type QueueView = 'recent' | 'attention' | 'high' | 'contested' | 'expiring' | 'unconfirmed' | 'active' | 'removed' | 'unassigned'
+  | 'archived' | 'duplicates';
 export type QueueSort = 'review' | 'newest' | 'oldest' | 'severity' | 'confidence' | 'disputed' | 'confirmed' | 'expiring' | 'priority' | 'updated';
 
 export interface QueueQuery {
@@ -162,6 +169,18 @@ export interface ActivityEntry {
   note: string | null;
   actor: { kind: 'STAFF' | 'REPORTER' | 'COMMUNITY' | 'SYSTEM'; name: string | null; email: string | null; role: Role | null };
   at: string;
+}
+
+/** A portal account (moderator or municipal official). */
+export interface StaffMember {
+  id: string;
+  email: string;
+  displayName: string;
+  role: Role;
+  createdAt: string;
+  /** Who gave them access in the portal; null for accounts set up by an operator. */
+  addedBy: string | null;
+  addedAt: string | null;
 }
 
 /** A hazard_* frame from /ws/notifications. */

@@ -38,7 +38,7 @@ const ACTIVE_TAB: QueueTab = {
 };
 const ATTENTION_EMPTY = { title: 'Nothing needs attention', body: 'No contested reports, unverified high-severity hazards, or reports waiting over a day.' };
 
-/** Primary tabs: where am I? Four per page. */
+/** Primary tabs: where am I? Moderation adds Duplicates and Archived (Task 2 revisions). */
 export const MAP_TABS: QueueTab[] = [
   NEW_TAB,
   { key: 'attention', label: 'Needs attention', view: 'attention', empty: ATTENTION_EMPTY },
@@ -51,6 +51,10 @@ export const MODERATION_TABS: QueueTab[] = [
   NEW_TAB,
   { key: 'attention', label: 'Needs review', view: 'attention', empty: ATTENTION_EMPTY },
   ACTIVE_TAB,
+  { key: 'duplicates', label: 'Duplicates', view: 'duplicates', sort: 'updated',
+    empty: { title: 'No collated reports', body: 'When two people report the same hazard, the reports are combined into one and listed here.' } },
+  { key: 'archived', label: 'Archived', view: 'archived', sort: 'oldest',
+    empty: { title: 'Nothing archived', body: 'Reports nobody on staff acts on within 7 days move here. They stay on the commuter map until resolved or expired.' } },
   { key: 'removed', label: 'Removed', view: 'removed', archive: true,
     empty: { title: 'No removed reports', body: 'Reports removed as false, spam or invalid appear here.' } },
 ];
@@ -194,6 +198,10 @@ export function queueReason(tabKey: string, chipKeys: string[], h: Hazard, now =
       return h.expiresAt ? inHours(h.expiresAt, now) : null;
     case 'unassigned':
       return h.municipalPriority ? `No department yet · ${h.municipalPriority.toLowerCase()} city priority` : 'No department assigned yet';
+    case 'duplicates':
+      return `${h.mergedReportCount + 1} people reported this · combined into one report`;
+    case 'archived':
+      return h.archivedAt ? `No staff review in ${Math.floor(days)} days · archived ${new Date(h.archivedAt).toLocaleDateString()}` : null;
     default:
       return null;
   }

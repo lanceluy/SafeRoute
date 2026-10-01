@@ -13,5 +13,9 @@ public enum HazardChange {
     EDITED,
     /** A department was assigned or the municipal priority changed. */
     MUNICIPAL_RESPONSE,
-    DUPLICATE_MERGED
+    DUPLICATE_MERGED,
+    /** A staff member marked it reviewed (stopping the archive clock, or bringing it back from Archived). */
+    REVIEWED,
+    /** A week passed without staff review; out of the portal's working queues, still on the map. */
+    ARCHIVED
 }

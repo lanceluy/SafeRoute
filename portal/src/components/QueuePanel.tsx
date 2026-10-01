@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import type { Hazard, HazardType, QueueSort, Stats } from '../api/types';
+import { UNASSIGNED, type Hazard, type HazardType, type QueueSort, type Stats } from '../api/types';
 import { plural } from '../lib/format';
 import type { Barangay } from '../lib/geo';
-import { buildQuery, isStale, refine, resolveTab, STALE_DAYS, type QueueChip, type QueueTab } from '../lib/queue';
+import { buildQuery, filterChips, isStale, refine, resolveTab, STALE_DAYS, type QueueChip, type QueueTab } from '../lib/queue';
 import { useShortcuts } from '../lib/shortcuts';
 import { ActionDialog } from './ActionDialog';
 import type { ViewConfig } from '../lib/views';
@@ -153,11 +153,16 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
     .sort((a, b) => (a.key === 'attention' ? -1 : b.key === 'attention' ? 1 : 0))[0];
   const activeChips = c.chipDefs.filter((ch) => c.chips.includes(ch.key));
   const listTitle = [c.tab.label, ...activeChips.map((ch) => ch.label)].join(' · ');
+  // Printed under "Scope" on exports.
+  const exportFilters = [
+    ...filterChips(c.filters, (code) => (code === UNASSIGNED ? 'Unassigned' : departments.find((d) => d.code === code)?.name ?? code)).map((f) => f.label),
+    ...(c.search ? [`Search “${c.search}”`] : []),
+  ];
 
   return (
     <div className="queue">
       {title && <h2 className="queue-title">{title}</h2>}
-      {/* 1. Where am I? Four primary tabs. Only the urgent count stands out. */}
+      {/* 1. Where am I? The primary tabs. Only the urgent count stands out. */}
       <div className="tabs" role="tablist" aria-label="Queue">
         {tabs.map((t) => {
           const count = t.view ? stats?.queueCounts[t.view] : undefined;
@@ -194,13 +199,13 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
           // 3. What can I do here? Views, export and select share one menu.
           <QueueMoreMenu page={page} onApply={c.apply}
             current={() => ({ page, tab: c.tab.key, chips: c.chips, filters: c.filters, sort: c.sort, search: c.search })}
-            hazards={shown} title={listTitle} barangays={barangays} departments={departments} stats={stats}
+            hazards={shown} title={listTitle} filters={exportFilters} barangays={barangays} departments={departments} stats={stats}
             onSelectMode={() => setSelectMode(true)} />
         } />
       {selectMode && (
         <BulkBar selected={selectedHazards} total={shown.length} allChecked={allChecked}
           onToggleAll={() => setChecked(allChecked ? new Set() : new Set(shown.map((h) => h.id)))}
-          departments={departments} barangays={barangays} stats={stats}
+          departments={departments} barangays={barangays} stats={stats} exportable={page === 'moderation'}
           onCancel={endSelect} onDone={() => { setChecked(new Set()); window.setTimeout(queue.reload, 900); }} />
       )}
       <p className="queue-summary" aria-live="polite">

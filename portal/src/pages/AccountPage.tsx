@@ -2,6 +2,7 @@ import { logout } from '../api/client';
 import { useThemeChoice, setThemeChoice, type ThemeChoice } from '../lib/theme';
 import { setHighSeverityNotices, useHighSeverityNotices } from '../lib/prefs';
 import { useSession } from '../state/session';
+import { TeamSection } from '../components/TeamSection';
 
 const ROLE_LABEL = { MUNICIPAL_OFFICIAL: 'Municipal official', MODERATOR: 'Moderator', USER: 'Commuter' } as const;
 const THEMES: { value: ThemeChoice; label: string }[] = [
@@ -21,7 +22,7 @@ export function AccountPage() {
 
   return (
     <div className="page account-page">
-      <div className="page-head"><div><h1>Account</h1><p className="muted">Your details and how the portal behaves in this browser.</p></div></div>
+      <div className="page-head"><div><h1>Account</h1><p className="muted">Your details, your team, and how the portal behaves in this browser.</p></div></div>
 
       <section className="card account-card">
         <span className="avatar lg" aria-hidden="true">{initials}</span>
@@ -55,6 +56,8 @@ export function AccountPage() {
           </label>
         </section>
       </div>
+
+      <TeamSection />
 
       <section className="card">
         <div className="card-head"><h2>Keyboard shortcuts</h2><span className="muted">Anywhere except while typing</span></div>
