@@ -1,6 +1,5 @@
-import { useId } from 'react';
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import type { Stats } from '../api/types';
 import { dayLabel } from '../lib/format';
@@ -256,76 +255,6 @@ export function DivergingBars({ rows, leftLabel, rightLabel, empty = 'No data ye
           </li>
         ))}
       </ul>
-    </div>
-  );
-}
-
-/**
- * Reported and resolved per day as one waveform: reported grows up from a centre line, resolved
- * grows down (drawn negative, always shown positive), over a faint grey envelope of nearby peaks.
- * Blue/green validated in both themes (CVD ΔE ≥ 23); the tooltip adds the day's net backlog.
- */
-export function ActivityWave({ daily, height = 200 }: { daily: Stats['daily']; height?: number }) {
-  const id = useId().replace(/:/g, '');
-  const { axis } = useChartColors();
-  // The grey envelope is each side's local peak (two days either way): depth around real activity,
-  // and nothing below the line on days near no resolutions.
-  const near = (i: number, key: 'reported' | 'resolved') =>
-    Math.max(...daily.slice(Math.max(0, i - 2), i + 3).map((d) => d[key]));
-  const data = daily.map((d, i) => ({
-    ...d, label: dayLabel(d.date), up: d.reported, down: -d.resolved,
-    envUp: near(i, 'reported'), envDown: -near(i, 'resolved'),
-  }));
-  const m = Math.max(1, ...data.map((d) => d.envUp)) * 1.08;
-  const bar = { radius: 3, maxBarSize: 9, isAnimationActive: false } as const;
-  return (
-    <figure className="chart wave" aria-label="Hazards reported (up) and resolved (down) per day">
-      <span className="wave-tag up" aria-hidden="true">Reported ↑</span>
-      <span className="wave-tag down" aria-hidden="true">Resolved ↓</span>
-      <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={data} margin={{ top: 6, right: 4, bottom: 0, left: 4 }} stackOffset="sign" barCategoryGap="22%">
-          <defs>
-            <linearGradient id={`up-${id}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" style={{ stopColor: 'var(--wave-up-top)' }} />
-              <stop offset="1" style={{ stopColor: 'var(--wave-up)' }} />
-            </linearGradient>
-            <linearGradient id={`down-${id}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" style={{ stopColor: 'var(--wave-down)' }} />
-              <stop offset="1" style={{ stopColor: 'var(--wave-down-bottom)' }} />
-            </linearGradient>
-          </defs>
-          <XAxis xAxisId="env" dataKey="label" hide />
-          <XAxis dataKey="label" stroke={axis.stroke} fontSize={12} tickLine={false} axisLine={false}
-            interval="preserveStartEnd" minTickGap={36} />
-          <YAxis hide domain={[-m, m]} />
-          {/* Two faint guides behind the bars, and a firmer zero line; no other grid. */}
-          <CartesianGrid vertical={false} stroke="var(--wave-grid)"
-            horizontalCoordinatesGenerator={({ height: h, offset }) => {
-              const top = offset.top ?? 0, plot = h - top - (offset.bottom ?? 0);
-              return [top + plot * 0.25, top + plot * 0.75];
-            }} />
-          <Tooltip content={<WaveTooltip />} cursor={{ fill: 'var(--wave-cursor)' }} />
-          <Bar xAxisId="env" dataKey="envUp" stackId="env" fill="var(--wave-env)" {...bar} />
-          <Bar xAxisId="env" dataKey="envDown" stackId="env" fill="var(--wave-env)" {...bar} />
-          <Bar dataKey="up" stackId="flow" fill={`url(#up-${id})`} {...bar} />
-          <Bar dataKey="down" stackId="flow" fill={`url(#down-${id})`} fillOpacity={0.8} {...bar} />
-          <ReferenceLine y={0} stroke="var(--wave-zero)" strokeWidth={1.5} />
-        </BarChart>
-      </ResponsiveContainer>
-    </figure>
-  );
-}
-
-function WaveTooltip({ active, payload }: { active?: boolean; payload?: { payload: Stats['daily'][number] }[] }) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  const net = d.reported - d.resolved;
-  return (
-    <div className="chart-tip wave-tip">
-      <strong>{new Date(`${d.date}T00:00:00`).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' })}</strong>
-      <span><i style={{ background: 'var(--wave-up)' }} />Reported<b>{d.reported}</b></span>
-      <span><i style={{ background: 'var(--wave-down)' }} />Resolved<b>{d.resolved}</b></span>
-      <span className={`wave-net${net < 0 ? ' good' : net > 0 ? ' up' : ''}`}>Net backlog<b>{net > 0 ? '+' : net < 0 ? '−' : ''}{Math.abs(net)}</b></span>
     </div>
   );
 }
