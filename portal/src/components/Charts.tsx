@@ -170,7 +170,7 @@ export function RainChart({ hourly, height = 200 }: { hourly: Weather['hourly'];
           <CartesianGrid stroke={grid} vertical={false} />
           <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={24} />
           {/* A dry day still gets a readable 0–2 mm scale instead of a flat, unlabeled axis. */}
-          <YAxis {...axis} width={40} unit=" mm" domain={[0, (max: number) => Math.max(2, Math.ceil(max))]} allowDecimals={false} />
+          <YAxis {...axis} width={56} unit=" mm" domain={[0, (max: number) => Math.max(2, Math.ceil(max))]} allowDecimals={false} />
           <Tooltip content={<RainTooltip />} cursor={{ fill: grid }} />
           <Bar dataKey="precipitation" name="Rain" fill={fill} radius={[4, 4, 0, 0]} minPointSize={0} />
         </BarChart>

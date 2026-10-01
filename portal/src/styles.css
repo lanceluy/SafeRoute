@@ -72,6 +72,11 @@
   --sidebar-bg: #FFFFFF;
   --type-tile-bg: #EEF2F7;
   --type-tile-fg: #475467;
+  --sky-from: #EAF5FF;
+  --sky-to: #F7FBFF;
+  --sky-glow: rgba(96, 165, 250, 0.28);
+  --glass-bg: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.65);
   /* Ordinal blue (validated --ordinal): funnel band and confidence steps. */
   --funnel-from: #cde2fb;
   --funnel-to: #2a78d6;
@@ -156,6 +161,11 @@
     --sidebar-bg: #131B29;
     --type-tile-bg: #222D40;
     --type-tile-fg: #B0BACB;
+    --sky-from: #13213A;
+    --sky-to: #111A2A;
+    --sky-glow: rgba(59, 130, 246, 0.22);
+    --glass-bg: rgba(22, 31, 46, 0.86);
+    --glass-border: rgba(255, 255, 255, 0.08);
     --funnel-from: #184f95;
     --funnel-to: #5598e7;
     --conf-high: #9ec5f4;
@@ -223,6 +233,11 @@
   --sidebar-bg: #131B29;
   --type-tile-bg: #222D40;
   --type-tile-fg: #B0BACB;
+  --sky-from: #13213A;
+  --sky-to: #111A2A;
+  --sky-glow: rgba(59, 130, 246, 0.22);
+  --glass-bg: rgba(22, 31, 46, 0.86);
+  --glass-border: rgba(255, 255, 255, 0.08);
   --funnel-from: #184f95;
   --funnel-to: #5598e7;
   --conf-high: #9ec5f4;
@@ -1236,43 +1251,126 @@ input[type="date"] { padding-right: 6px; }
 
 /* ---------- Weather ---------- */
 .weather-stale { color: var(--sev-medium-text); font-weight: 600; }
-.weather-now { display: grid; grid-template-columns: auto 1fr; gap: var(--s3) var(--s5); align-items: center; }
-.weather-now-icon { color: var(--accent); display: flex; }
-.weather-now-temp { font-size: 44px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; font-variant-numeric: tabular-nums; }
-.weather-now-label { font-size: 17px; font-weight: 600; }
-.weather-facts { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s3); margin: 0; padding-top: var(--s4); border-top: 1px solid var(--border); }
-.weather-facts dt { color: var(--text-2); font-size: 12px; font-weight: 600; }
-.weather-facts dd { margin: 2px 0 0; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
-/* The tiles fill the full height of the current-conditions card beside them. */
-.advisories { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); grid-auto-rows: 1fr; gap: var(--s4); align-content: stretch; }
-.advisories .kpi { height: 100%; }
-.advisory-band { font-weight: 700; font-size: 14px; }
-/* The note sits at the bottom, so tall tiles don't leave a gap under the headline. */
-.advisory-note { font-size: 12px; margin-top: auto; }
 .weather-icon { display: inline-flex; color: var(--text-2); }
-.hour-strip { list-style: none; margin: var(--s4) 0 0; padding: var(--s3) 0 var(--s1); display: grid; grid-auto-flow: column; grid-auto-columns: minmax(52px, 1fr); gap: var(--s1); overflow-x: auto; border-top: 1px solid var(--border); }
-.hour-strip li { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; font-variant-numeric: tabular-nums; }
-.hour-strip strong { font-size: 14px; }
-.day-list { list-style: none; margin: 0; padding: 0; }
-.day-row { display: grid; grid-template-columns: 96px 28px minmax(0, 1fr) 90px 72px 48px; align-items: center; gap: var(--s3); padding: var(--s2) 0; border-top: 1px solid var(--border); font-variant-numeric: tabular-nums; }
-.day-row:first-child { border-top: 0; }
-.day-name { font-weight: 600; }
-.day-temps, .day-rain, .day-chance { text-align: right; }
-.rain-summary { margin: var(--s1) 0 0; font-size: 13px; }
 .area-map { height: 420px; border-radius: var(--r-control); border: 1px solid var(--border); overflow: hidden; }
 .rain-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); margin-top: var(--s3); font-size: 12px; }
 .rain-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -2px; }
 .rain-ramp { flex: 1; min-width: 120px; max-width: 320px; height: 10px; border-radius: 5px; }
-.rain-note { font-size: 12px; margin-top: var(--s2); }
-.rain-list-title { font-size: 14px; margin: 0 0 var(--s3); }
-.rain-list-title .muted { font-weight: 400; }
 .leaflet-tooltip.area-tip { font-family: var(--font); font-size: 13px; }
+
+/* Live update strip: blue for information, amber only when action is warranted. */
+.weather-update {
+  display: flex; align-items: center; gap: var(--s3); padding: 10px 14px; border-radius: 12px; font-size: 13.5px;
+  background: var(--accent-tint); color: var(--text); border: 1px solid var(--accent-tint-2);
+}
+.weather-update-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); flex-shrink: 0; }
+.weather-update-text { flex: 1; min-width: 0; }
+.weather-update.watch { background: var(--sev-medium-bg); border-color: color-mix(in srgb, var(--sev-medium) 25%, transparent); }
+.weather-update.watch .weather-update-tag { color: var(--sev-medium-text); }
+
+/* Hero: the rain map and current conditions over a soft sky. */
+.weather-hero {
+  position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--s4);
+  padding: var(--s4); border-radius: var(--r-hero); overflow: hidden;
+  background: linear-gradient(160deg, var(--sky-from) 0%, var(--sky-to) 70%);
+  border: 1px solid var(--card-border);
+}
+.weather-hero::before {
+  content: ""; position: absolute; z-index: -1; width: 520px; height: 520px; right: -120px; top: -220px; border-radius: 50%;
+  background: radial-gradient(circle, var(--sky-glow), transparent 65%);
+}
+.glass {
+  background: var(--glass-bg); backdrop-filter: blur(12px) saturate(1.2); -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  border: 1px solid var(--glass-border); box-shadow: var(--shadow-2);
+}
+.rain-map { position: relative; min-height: 480px; border-radius: 16px; overflow: hidden; }
+.rain-map .area-map { position: absolute; inset: 0; height: auto; border: 0; border-radius: 16px; }
+.rain-map-modes { position: absolute; top: 12px; left: 12px; z-index: 600; display: flex; gap: 2px; padding: 3px; border-radius: 12px; }
+.rain-map-modes button {
+  height: 30px; padding: 0 11px; border: 0; border-radius: 9px; background: none; font-size: 12.5px; font-weight: 500; color: var(--text-2); cursor: pointer;
+}
+.rain-map-modes button:hover { color: var(--text); }
+.rain-map-modes button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.weather-alert {
+  position: absolute; top: 12px; right: 12px; z-index: 600; display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px;
+  border-radius: 12px; font-size: 13px; max-width: 240px; color: var(--good);
+}
+.weather-alert strong { color: var(--text); font-weight: 600; }
+.weather-alert.on { color: var(--sev-medium-text); }
+.weather-alert span { display: flex; flex-direction: column; gap: 1px; }
+.weather-alert small { font-size: 12px; color: var(--text-2); }
+.weather-alert svg { flex-shrink: 0; margin-top: 2px; }
+.rain-map-legend {
+  position: absolute; left: 12px; bottom: 12px; z-index: 600; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  padding: 7px 12px; border-radius: 999px; font-size: 12px; max-width: calc(100% - 24px);
+}
+.rain-map-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.rain-map-legend .rain-ramp { min-width: 90px; max-width: 160px; height: 8px; }
+
+.conditions { display: flex; flex-direction: column; gap: var(--s4); padding: var(--s5); border-radius: 16px; background: var(--glass-bg);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid var(--glass-border); box-shadow: var(--shadow-card); }
+.conditions-kicker { font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+.conditions-now { display: flex; align-items: center; gap: var(--s4); }
+.conditions-icon { color: var(--accent); display: flex; }
+.conditions-temp { font-size: 48px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.conditions-label { font-size: 16px; font-weight: 600; margin-top: 4px; }
+.conditions-facts { margin: 0; display: flex; flex-direction: column; }
+.conditions-facts > div { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+.conditions-facts dt { color: var(--text-2); }
+.conditions-facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.conditions-flood { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 14px; margin-top: auto; }
+.weather-skeleton { height: 100%; min-height: 420px; border-radius: 16px; }
+
+/* Risk levels always carry their word; the tint only reinforces it. */
+.risk-level { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+.risk-low { background: var(--good-bg); color: var(--good); }
+.risk-moderate { background: var(--sev-medium-bg); color: var(--sev-medium-text); }
+.risk-high { background: var(--sev-high-bg); color: var(--sev-high-text); }
+.risk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.risk-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); padding: 12px 0; border-bottom: 1px solid var(--border); }
+.risk-list li:last-child { border-bottom: 0; }
+.risk-name { display: flex; flex-direction: column; gap: 2px; font-weight: 600; font-size: 14px; }
+.risk-name small { font-weight: 400; font-size: 12.5px; color: var(--text-2); }
+
+/* Hourly cards, scrolled sideways. */
+.hour-cards { list-style: none; margin: var(--s4) 0 0; padding: 2px 0 6px; display: grid; grid-auto-flow: column; grid-auto-columns: 64px; gap: 8px; overflow-x: auto; scrollbar-width: thin; }
+.hour-cards li {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px; border-radius: 12px; background: var(--fill);
+  font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.hour-cards li.now { background: var(--accent-tint); }
+.hour-cards li.now .hour-time { color: var(--accent); font-weight: 700; }
+.hour-cards strong { font-size: 15px; }
+.hour-time { color: var(--text-2); font-weight: 500; white-space: nowrap; }
+.hour-chance { color: var(--text-3); font-size: 12px; }
+.hour-chance.wet { color: var(--accent); font-weight: 600; }
+
+/* 7-day forecast as cells. */
+.day-cells { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.day-cells li {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 6px; border-radius: 14px; background: var(--fill);
+  font-variant-numeric: tabular-nums; text-align: center;
+}
+.day-cells li.today { background: var(--accent-tint); }
+.day-cells .day-name { font-weight: 600; font-size: 13px; }
+.day-cells .weather-icon { color: var(--accent); }
+.day-temps { display: flex; gap: 8px; align-items: baseline; }
+.day-temps strong { font-size: 17px; }
+.day-temps span { color: var(--text-3); font-size: 14px; }
+.day-rain { font-size: 12px; color: var(--text-2); }
+.rain-columns .bar-list { columns: 2; column-gap: var(--s6); display: block; }
+.rain-columns .bar-row { break-inside: avoid; }
+
+@media (max-width: 1100px) {
+  .weather-hero { grid-template-columns: 1fr; }
+  .rain-map { min-height: 400px; }
+}
 @media (max-width: 767px) {
   .area-map { height: 300px; }
-  .weather-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .day-row { grid-template-columns: 80px 24px minmax(0, 1fr) 72px; }
-  .day-condition { display: none; }
-  .day-chance { display: none; }
+  .day-cells { grid-template-columns: repeat(7, 84px); overflow-x: auto; }
+  .rain-columns .bar-list { columns: 1; }
+  .weather-alert { top: auto; bottom: 56px; right: 12px; }
+  .weather-update { flex-wrap: wrap; }
 }
 .bar-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .bar-row {
@@ -1765,3 +1863,4 @@ a.menu-item { text-decoration: none; color: var(--text); font-weight: 600; }
 .preview-main { min-width: 140px; }
 .preview-main strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .brand-logo { border-radius: 9px; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12); }
+.rain-map .leaflet-top.leaflet-left { top: 52px; }
