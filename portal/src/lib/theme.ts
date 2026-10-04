@@ -19,8 +19,15 @@ export function applyTheme(choice: ThemeChoice = themeChoice()) {
   if (choice === 'system') delete root.dataset.theme; else root.dataset.theme = choice;
 }
 
+let themeFade = 0;
+
 export function setThemeChoice(choice: ThemeChoice) {
   try { localStorage.setItem(KEY, choice); } catch { /* not remembered */ }
+  // Colours crossfade for a moment when the theme changes (see html.theme-changing in CSS).
+  const root = document.documentElement;
+  root.classList.add('theme-changing');
+  window.clearTimeout(themeFade);
+  themeFade = window.setTimeout(() => root.classList.remove('theme-changing'), 260);
   applyTheme(choice);
   listeners.forEach((l) => l());
 }

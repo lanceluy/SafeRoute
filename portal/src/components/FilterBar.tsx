@@ -1,4 +1,5 @@
 import { forwardRef } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   CONFIDENCES, HAZARD_TYPES, PRIORITIES, SEVERITIES, UNASSIGNED, type Confidence, type Department, type HazardType,
   type MunicipalPriority, type QueueSort, type Severity,
@@ -88,6 +89,9 @@ function Toggle({ on, onChange, children, title }: { on: boolean; onChange: () =
  * button opens; what's applied shows as removable pills only once something is chosen. Status
  * toggles the page's queue chips (client-side); the rest set server-side query filters.
  */
+const chipExit = { opacity: 0, scale: 0.9, transition: { duration: 0.12 } };
+const chipMove = { duration: 0.16 };
+
 export const FilterBar = forwardRef<HTMLInputElement, {
   search: string; onSearch: (s: string) => void;
   sort: QueueSort; onSort: (s: QueueSort) => void;
@@ -134,23 +138,37 @@ export const FilterBar = forwardRef<HTMLInputElement, {
         {extra}
       </div>
 
+      {/* A removed chip shrinks and fades; "Clear all" takes the whole row out at once. */}
+      <AnimatePresence initial={false}>
       {count > 0 && (
-        <div className="filter-chips" aria-label="Active filters">
+        <motion.div key="chips" className="filter-chips" aria-label="Active filters"
+          exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.12 } }}>
+          <AnimatePresence initial={false} mode="popLayout">
           {statusChips.map((c) => (
-            <button key={c.key} type="button" className="filter-chip" onClick={() => onToggleChip(c.key)} aria-label={`Remove filter: ${c.label}`}>
+            <motion.button key={c.key} type="button" className="filter-chip" onClick={() => onToggleChip(c.key)} aria-label={`Remove filter: ${c.label}`}
+              layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={chipExit} transition={chipMove}>
               {c.label}<X size={13} aria-hidden="true" />
-            </button>
+            </motion.button>
           ))}
           {filterPills.map((c) => (
-            <button key={c.key} type="button" className="filter-chip" onClick={() => onFilters(c.remove(filters))} aria-label={`Remove filter: ${c.label}`}>
+            <motion.button key={c.key} type="button" className="filter-chip" onClick={() => onFilters(c.remove(filters))} aria-label={`Remove filter: ${c.label}`}
+              layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={chipExit} transition={chipMove}>
               {c.label}<X size={13} aria-hidden="true" />
-            </button>
+            </motion.button>
           ))}
-          <button type="button" className="btn-link" onClick={() => { onFilters(NO_FILTERS); onClearChips(); }}>Clear all</button>
-        </div>
+          <motion.button layout="position" key="clear" type="button" className="btn-link" transition={chipMove}
+            onClick={() => { onFilters(NO_FILTERS); onClearChips(); }}>Clear all</motion.button>
+          </AnimatePresence>
+        </motion.div>
       )}
+      </AnimatePresence>
 
+      {/* The panel opens by height; its groups fade in 25 ms apart (CSS). */}
+      <AnimatePresence initial={false}>
       {open && (
+        <motion.div key="panel" className="filter-panel-wrap"
+          initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0, transition: { duration: 0.16 } }} transition={{ duration: 0.22 }}>
         <div className="filter-panel">
           <fieldset>
             <legend>Severity</legend>
@@ -231,7 +249,9 @@ export const FilterBar = forwardRef<HTMLInputElement, {
             <button type="button" className="btn btn-secondary btn-sm" onClick={onToggle}>Done</button>
           </div>
         </div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   );
 });

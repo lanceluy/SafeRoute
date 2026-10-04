@@ -3,14 +3,13 @@ import { useSearchParams } from 'react-router';
 import { ArrowRight, BoxSelect, ChevronDown, ChevronUp, List, Map as MapIcon, PanelRight, X } from 'lucide-react';
 import { api } from '../api/client';
 import type { Hazard, HazardType } from '../api/types';
-import { SeverityDot, StatusBadge, TypeIcon } from '../components/Badges';
+import { TypeIcon } from '../components/Badges';
 import { HazardDrawer } from '../components/HazardDrawer';
 import { LayersButton, MapLegend } from '../components/MapControls';
 import { MapView, type MapLayer } from '../components/MapView';
 import { QueuePanel, useQueueControls, useSearchLink } from '../components/QueuePanel';
-import { ago } from '../lib/format';
 import type { Barangay } from '../lib/geo';
-import { TYPE_LABEL } from '../lib/hazards';
+import { TYPE_LABEL, SEVERITY_LABEL } from '../lib/hazards';
 import { MAP_CHIPS, MAP_TABS } from '../lib/queue';
 import { useShortcuts } from '../lib/shortcuts';
 import { useBarangays, usePlace } from '../state/places';
@@ -18,6 +17,9 @@ import { useStats } from '../state/useStats';
 import { useToast } from '../state/toast';
 import { useRadar } from '../state/useWeather';
 import { RADAR_MAX_ZOOM, RADAR_SOURCE_URL } from '../lib/weather';
+import { Segmented } from '../components/Segmented';
+import { useHoldForExit } from '../lib/motion';
+import { AnimatePresence, motion } from 'motion/react';
 
 type Mode = 'split' | 'map' | 'list';
 const MODE_KEY = 'saferoute.map.mode';
@@ -98,7 +100,8 @@ export function MapPage() {
     return () => controller.abort();
   }, [needsExtra, selectedId]);
   const mapHazards = needsExtra && extra?.id === selectedId ? [...c.shown, extra] : c.shown;
-  const preview = previewId ? mapHazards.find((h) => h.id === previewId) : undefined;
+  const preview = previewId && !selectedId ? mapHazards.find((h) => h.id === previewId) : undefined;
+  const { shown: shownPreview, leaving: previewLeaving } = useHoldForExit(preview);
   useEffect(() => {
     if (!previewId) return;
     const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') setPreviewId(null); };
@@ -118,14 +121,17 @@ export function MapPage() {
     m: () => { mapRef.current?.querySelector<HTMLElement>('.leaflet-container')?.focus(); },
   });
 
+  const [resizing, setResizing] = useState(false);
   const startResize = (e: PointerEvent) => {
     e.preventDefault();
+    setResizing(true);
     const startX = e.clientX, startW = width;
     const move = (ev: globalThis.PointerEvent) => setWidth(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startW + startX - ev.clientX)));
     const up = () => {
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', up);
       setWidth((w) => { remember(WIDTH_KEY, String(w)); return w; });
+      setResizing(false);
     };
     document.addEventListener('pointermove', move);
     document.addEventListener('pointerup', up);
@@ -137,7 +143,7 @@ export function MapPage() {
 
   const panelOpen = mode !== 'map';
   return (
-    <div className={`map-page mode-${mode}`} style={{ '--queue-width': `${width}px` } as CSSProperties}>
+    <div className={`map-page mode-${mode}${resizing ? ' resizing' : ''}`} style={{ '--queue-width': `${width}px` } as CSSProperties}>
       <section className="map-area" ref={mapRef}>
         <MapView hazards={mapHazards} selectedId={selectedId} highlightId={previewId} layer={layer}
           onSelect={(id) => { if (id !== selectedId) setPreviewId(id); }}
@@ -153,11 +159,11 @@ export function MapPage() {
             <LayersButton layer={layer} onChange={setLayer} rain={rain} onRain={setRain} />
           </>} />
 
-        <div className="view-switch" role="group" aria-label="View">
-          <button type="button" aria-pressed={mode === 'split'} onClick={() => setMode('split')} title="Map and list"><PanelRight size={16} aria-hidden="true" /><span>Map + list</span></button>
-          <button type="button" aria-pressed={mode === 'map'} onClick={() => setMode('map')} title="Map only"><MapIcon size={16} aria-hidden="true" /><span>Map</span></button>
-          <button type="button" aria-pressed={mode === 'list'} onClick={() => setMode('list')} title="List only"><List size={16} aria-hidden="true" /><span>List</span></button>
-        </div>
+        <Segmented className="view-switch" label="View" value={mode} onChange={setMode} options={[
+          { value: 'split', title: 'Map and list', label: <><PanelRight size={16} aria-hidden="true" /><span>Map + list</span></> },
+          { value: 'map', title: 'Map only', label: <><MapIcon size={16} aria-hidden="true" /><span>Map</span></> },
+          { value: 'list', title: 'List only', label: <><List size={16} aria-hidden="true" /><span>List</span></> },
+        ]} />
 
         {(drawing || c.filters.region) && (
           <div className="map-hint" role="status">
@@ -175,45 +181,58 @@ export function MapPage() {
             onViewList={() => { if (mode === 'map') setMode('split'); window.setTimeout(() => searchRef.current?.focus(), 0); }} />
         )}
 
-        {preview && !selectedId && (
-          <PreviewCard hazard={preview} barangays={barangays} onOpen={() => open(preview.id)} onClose={() => setPreviewId(null)} />
+        {/* The card fades down on close (a CSS exit; Motion's transforms would fight its centring). */}
+        {shownPreview && (
+          <PreviewCard hazard={shownPreview} leaving={previewLeaving} barangays={barangays}
+            onOpen={() => open(shownPreview.id)} onClose={() => setPreviewId(null)} />
         )}
       </section>
 
+      {/* The panel slides 12 px and fades as it opens or closes; between Map + list and List it
+          glides to its new edge (CSS). The list and a report's details crossfade inside it. */}
+      <AnimatePresence initial={false}>
       {panelOpen && (
-        <aside className="queue-panel floating" aria-label={selectedId ? 'Hazard details' : 'Hazard list'}>
+        <motion.aside key="panel" className="queue-panel floating" aria-label={selectedId ? 'Hazard details' : 'Hazard list'}
+          initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0, transition: { duration: 0.24 } }}
+          exit={{ opacity: 0, x: 12, transition: { duration: 0.18 } }}>
           {mode === 'split' && (
             <div className="panel-resize" role="separator" aria-orientation="vertical" aria-label="Resize the panel"
               aria-valuenow={width} aria-valuemin={MIN_WIDTH} aria-valuemax={MAX_WIDTH} tabIndex={0}
               onPointerDown={startResize} onKeyDown={resizeByKey} />
           )}
-          {selectedId
-            ? <HazardDrawer key={selectedId} variant="panel" hazardId={selectedId} barangays={barangays}
-                onClose={() => select(null)} onChanged={c.queue.reload} />
-            : <QueuePanel c={c} tabs={MAP_TABS} stats={stats} barangays={barangays} selectedId={selectedId}
-                onSelect={(h) => select(h.id)} searchRef={searchRef} page="map" />}
-        </aside>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div key={selectedId ?? 'list'} className="panel-swap"
+              initial={{ opacity: 0, x: selectedId ? 16 : -8 }} animate={{ opacity: 1, x: 0, transition: { duration: 0.22 } }}
+              exit={{ opacity: 0, x: selectedId ? 16 : -8, transition: { duration: 0.12 } }}>
+              {selectedId
+                ? <HazardDrawer variant="panel" hazardId={selectedId} barangays={barangays}
+                    onClose={() => select(null)} onChanged={c.queue.reload} />
+                : <QueuePanel c={c} tabs={MAP_TABS} stats={stats} barangays={barangays} selectedId={selectedId}
+                    onSelect={(h) => select(h.id)} searchRef={searchRef} page="map" />}
+            </motion.div>
+          </AnimatePresence>
+        </motion.aside>
       )}
+      </AnimatePresence>
     </div>
   );
 }
 
 /** A marker's first click: what, where, how bad, and a way into the full report. */
-function PreviewCard({ hazard: h, barangays, onOpen, onClose }: {
-  hazard: Hazard; barangays: Barangay[]; onOpen: () => void; onClose: () => void;
+function PreviewCard({ hazard: h, barangays, onOpen, onClose, leaving = false }: {
+  hazard: Hazard; barangays: Barangay[]; onOpen: () => void; onClose: () => void; leaving?: boolean;
 }) {
   const place = usePlace(h.latitude, h.longitude, barangays);
   return (
-    <div className="preview-card" role="dialog" aria-label={`${TYPE_LABEL[h.type]} preview`}>
-      <span className="row-icon type-tile"><TypeIcon type={h.type} size={18} /></span>
+    <div className={`preview-card${leaving ? ' leaving' : ''}`} inert={leaving} role="dialog" aria-label={`${TYPE_LABEL[h.type]} preview`}>
+      {/* Severity is the icon's colour, as in the hazard list. */}
+      <span className={`row-icon sev-fill-${h.severity.toLowerCase()}`} title={`${SEVERITY_LABEL[h.severity]} severity`}>
+        <TypeIcon type={h.type} size={18} />
+        <span className="sr-only">{SEVERITY_LABEL[h.severity]} severity</span>
+      </span>
       <div className="preview-main">
         <strong>{TYPE_LABEL[h.type]}</strong>
         <span className="muted">{place.label || 'Locating street…'}</span>
-      </div>
-      <div className="preview-facts">
-        <SeverityDot severity={h.severity} />
-        {h.status === 'DISPUTED' ? <span className="pill pill-contested">Contested</span> : <StatusBadge status={h.status} plain />}
-        <span className="muted">{ago(h.createdAt)}</span>
       </div>
       <button type="button" className="btn btn-primary btn-sm" onClick={onOpen} autoFocus>Open report<ArrowRight size={15} aria-hidden="true" /></button>
       <button type="button" className="icon-btn" onClick={onClose} aria-label="Close preview"><X size={16} aria-hidden="true" /></button>

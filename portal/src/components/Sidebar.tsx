@@ -1,8 +1,10 @@
 import { NavLink } from 'react-router';
+import { motion } from 'motion/react';
 import {
   ChartNoAxesCombined, CircleHelp, CloudSun, History, LayoutDashboard, Map, PanelLeftClose, PanelLeftOpen, Settings, ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
+import { SLIDE } from '../lib/motion';
 import { LiveStatus } from './LiveStatus';
 
 interface NavItem { to: string; label: string; icon: LucideIcon; end?: boolean; count?: number }
@@ -27,9 +29,15 @@ export function Sidebar({ rail, canToggle, onToggle, onNavigate, needsReview }: 
   const link = (n: NavItem) => (
     <NavLink key={n.to} to={n.to} end={n.end} onClick={onNavigate} title={rail ? n.label : undefined}
       className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
-      <n.icon aria-hidden="true" />
-      <span className="nav-label">{n.label}</span>
-      {!!n.count && <span className="nav-count" aria-label={`${n.count} need review`}>{n.count > 99 ? '99+' : n.count}</span>}
+      {({ isActive }) => (
+        <>
+          {/* One shared highlight that slides to the new item instead of each item switching on and off. */}
+          {isActive && <motion.span layoutId="nav-active" className="nav-active" transition={SLIDE} aria-hidden="true" />}
+          <n.icon aria-hidden="true" />
+          <span className="nav-label">{n.label}</span>
+          {!!n.count && <span className="nav-count" aria-label={`${n.count} need review`}>{n.count > 99 ? '99+' : n.count}</span>}
+        </>
+      )}
     </NavLink>
   );
 

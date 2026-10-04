@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
   Archive, ArrowLeft, Check, CheckCircle2, Clock, Copy, ExternalLink, Hourglass, ImageOff, Map as MapIcon, MapPin, MoreHorizontal, RotateCcw,
   UserPlus, X,
@@ -8,7 +8,7 @@ import type { Department, HazardDetail, TimelineEntry } from '../api/types';
 import { ago, coords, fullDate, googleMapsUrl, shortDate } from '../lib/format';
 import type { Barangay } from '../lib/geo';
 import {
-  ACTION_LABEL, CONFIDENCE_HINT, DEFAULT_NOTES, HIDDEN_FIELDS, STATUS_LABEL, TRUST_LABEL, TYPE_LABEL,
+  ACTION_LABEL, CONFIDENCE_HINT, DEFAULT_NOTES, HIDDEN_FIELDS, SEVERITY_LABEL, STATUS_LABEL, TRUST_LABEL, TYPE_LABEL,
   fieldLabel, isActive, shortId, valueLabel,
 } from '../lib/hazards';
 import { useHazardFrames } from '../state/live';
@@ -19,6 +19,7 @@ import { ActionDialog, type HazardAction } from './ActionDialog';
 import { CityResponse } from './CityResponse';
 import { ConfidenceBadge, InfoTip, SeverityDot, StatusBadge, TypeIcon } from './Badges';
 import { Menu } from './Menu';
+import { TabIndicator } from './Segmented';
 import { ErrorState } from './States';
 
 type Tab = 'overview' | 'timeline' | 'community';
@@ -106,6 +107,7 @@ function DrawerBody({ detail, history, barangays, onAction, onShowOnMap, onChang
   const departments = useDepartments();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>('overview');
+  const tabsId = useId();
   const h = detail.hazard;
   const place = usePlace(h.latitude, h.longitude, barangays);
   const active = isActive(h.status);
@@ -163,7 +165,11 @@ function DrawerBody({ detail, history, barangays, onAction, onShowOnMap, onChang
       <div className="drawer-body" ref={bodyRef}>
         {/* What, where, how bad: always visible. */}
         <div className="drawer-title">
-          <span className="row-icon type-tile lg"><TypeIcon type={h.type} size={22} /></span>
+          {/* The same severity colour as the hazard's pin on the map. */}
+          <span className={`row-icon lg sev-fill-${h.severity.toLowerCase()}`} title={`${SEVERITY_LABEL[h.severity]} severity`}>
+            <TypeIcon type={h.type} size={22} />
+            <span className="sr-only">{SEVERITY_LABEL[h.severity]} severity</span>
+          </span>
           <div>
             <h2>{TYPE_LABEL[h.type]}</h2>
             <p className="drawer-place">{street}{place.barangay ? ` · ${place.barangay}` : ''}</p>
@@ -196,6 +202,7 @@ function DrawerBody({ detail, history, barangays, onAction, onShowOnMap, onChang
           {TABS.map(([key, label, count]) => (
             <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? 'active' : undefined} onClick={() => setTab(key)}>
               {label}{count ? <span className="tab-count">{count}</span> : null}
+              {tab === key && <TabIndicator id={tabsId} />}
             </button>
           ))}
         </div>

@@ -2,12 +2,13 @@
 // funnel, the severity gauge, segmented and progress bars, dot-matrix columns and severity multiples.
 // Severity hues are status colours, not a categorical palette (they fail the CVD checks as a set),
 // so every severity mark here carries its label and number beside it.
-import { useId, useState } from 'react';
+import { useId, useState, type CSSProperties } from 'react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { Severity, Stats } from '../api/types';
 import { dayLabel } from '../lib/format';
 import { SEVERITY_COLOR, SEVERITY_LABEL } from '../lib/hazards';
 import { useThemeColors } from '../lib/theme';
+import { useChartReveal } from '../lib/motion';
 
 function pct(n: number, of: number) {
   return of ? Math.round((n / of) * 100) : 0;
@@ -23,6 +24,7 @@ function pct(n: number, of: number) {
 export function Funnel({ stages, label }: { stages: { key: string; label: string; value: number; hint?: string }[]; label: string }) {
   const id = useId().replace(/:/g, '');
   const [hover, setHover] = useState<number | null>(null);
+  const { ref, reveal } = useChartReveal();
   const W = 1000, H = 200, mid = H / 2, maxH = 86;
   const max = Math.max(1, ...stages.map((s) => s.value));
   const n = stages.length;
@@ -40,10 +42,10 @@ export function Funnel({ stages, label }: { stages: { key: string; label: string
   const d = `${edge(-1, pts)} ${edge(1, [...pts].reverse())} Z`;
 
   return (
-    <figure className="funnel" aria-label={`${label}: ${stages.map((s) => `${s.label} ${s.value}`).join(', ')}`}>
+    <figure ref={ref} className={`funnel${reveal ? ' reveal' : ''}`} aria-label={`${label}: ${stages.map((s) => `${s.label} ${s.value}`).join(', ')}`}>
       <div className="funnel-cols" style={{ gridTemplateColumns: `repeat(${n}, 1fr)` }}>
         {stages.map((s, i) => (
-          <div key={s.key} className={`funnel-col${hover === i ? ' hover' : ''}`} title={s.hint}
+          <div key={s.key} className={`funnel-col${hover === i ? ' hover' : ''}`} title={s.hint} style={{ '--i': i } as CSSProperties}
             onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
             <span className="funnel-label">{s.label}</span>
             <strong className="funnel-value">{s.value.toLocaleString()}</strong>
@@ -65,7 +67,8 @@ export function Funnel({ stages, label }: { stages: { key: string; label: string
           const prev = stages[i].value;
           const change = prev ? Math.round(((s.value - prev) / prev) * 100) : 0;
           return (
-            <span key={s.key} className="funnel-chip" style={{ left: `${((i + 1) * 100) / n}%` }}>
+            // The hovered stage's connector to the next stage stands out.
+            <span key={s.key} className={`funnel-chip${hover === i ? ' hover' : ''}`} style={{ left: `${((i + 1) * 100) / n}%`, '--i': i + 1 } as CSSProperties}>
               {change > 0 ? '+' : change < 0 ? '−' : ''}{Math.abs(change)}% →
             </span>
           );
@@ -84,6 +87,7 @@ export function SeverityGauge({ counts, label = 'active' }: { counts: Record<Sev
   // Degrees between segments: the round caps reach ~5.5° past each end, so the gap must clear both.
   const R = 84, cx = 100, cy = 100, gap = 14;
   const shown = order.filter((k) => counts[k] > 0);
+  const { ref, reveal } = useChartReveal();
   const span = 180 - gap * Math.max(0, shown.length - 1);
   let at = 180;
   const arc = (from: number, to: number) => {
@@ -92,7 +96,7 @@ export function SeverityGauge({ counts, label = 'active' }: { counts: Record<Sev
     return `M${x1},${y1} A${R},${R} 0 0 1 ${x2},${y2}`;
   };
   return (
-    <div className="gauge">
+    <div ref={ref} className={`gauge${reveal ? ' reveal' : ''}`}>
       <figure className="gauge-figure" aria-label={`${total} ${label}: ${order.map((k) => `${counts[k]} ${SEVERITY_LABEL[k].toLowerCase()}`).join(', ')}`}>
         <svg viewBox="0 0 200 112" aria-hidden="true">
           <path d={arc(180, 0)} className="gauge-track" />
@@ -100,7 +104,9 @@ export function SeverityGauge({ counts, label = 'active' }: { counts: Record<Sev
             const sweep = (counts[k] / total) * span;
             const from = at, to = at - sweep;
             at = to - gap;
-            return <path key={k} d={arc(from, Math.min(from - 0.5, to))} stroke={SEVERITY_COLOR[k]} className="gauge-seg" />;
+            const d = arc(from, Math.min(from - 0.5, to));
+            // `d` in style as well, so new counts ease the segments (Chrome) instead of jumping.
+            return <path key={k} d={d} style={{ d: `path('${d}')` } as CSSProperties} pathLength={1} stroke={SEVERITY_COLOR[k]} className="gauge-seg" />;
           })}
         </svg>
         <figcaption className="gauge-center">
@@ -129,13 +135,14 @@ export function SeverityGauge({ counts, label = 'active' }: { counts: Record<Sev
 export function SegmentBar({ parts, empty = 'No data yet' }: {
   parts: { key: string; label: string; value: number; color: string; hint?: string }[]; empty?: string;
 }) {
+  const { ref, reveal } = useChartReveal();
   const total = parts.reduce((s, p) => s + p.value, 0);
   if (!total) return <p className="muted chart-empty">{empty}</p>;
   return (
-    <div className="segment">
+    <div ref={ref} className={`segment${reveal ? ' reveal' : ''}`}>
       <div className="segment-bar" role="img" aria-label={parts.map((p) => `${p.label} ${p.value}`).join(', ')}>
         {parts.filter((p) => p.value > 0).map((p) => (
-          <span key={p.key} style={{ flexGrow: p.value, background: p.color }} title={`${p.label}: ${p.value} (${pct(p.value, total)}%)`} />
+          <span key={p.key} style={{ flexGrow: p.value, background: p.color }} className="segment-part" title={`${p.label}: ${p.value} (${pct(p.value, total)}%)`} />
         ))}
       </div>
       <ul className="legend-rows">
@@ -159,10 +166,11 @@ export function SegmentBar({ parts, empty = 'No data yet' }: {
 export function ProgressRows({ rows, format = (n) => n.toLocaleString(), empty = 'No data yet' }: {
   rows: { key: string; label: string; value: number; hint?: string; note?: string }[]; format?: (n: number) => string; empty?: string;
 }) {
+  const { ref, reveal } = useChartReveal();
   const max = Math.max(0, ...rows.map((r) => r.value));
   if (!max) return <p className="muted chart-empty">{empty}</p>;
   return (
-    <ul className="progress-rows">
+    <ul ref={ref} className={`progress-rows${reveal ? ' reveal' : ''}`}>
       {rows.map((r) => (
         <li key={r.key} title={r.hint}>
           <span className="progress-head">
@@ -186,24 +194,25 @@ export function DotColumns({ buckets, rows = 8, unit = 'reports', label }: {
   buckets: { key: string; label: string; short?: string; value: number }[]; rows?: number; unit?: string; label: string;
 }) {
   const [hover, setHover] = useState<string | null>(null);
+  const { ref, reveal } = useChartReveal();
   const max = Math.max(0, ...buckets.map((b) => b.value));
   if (!max) return <p className="muted chart-empty">No reports in this range</p>;
   const peak = buckets.reduce((a, b) => (b.value > a.value ? b : a));
   const shown = hover ? buckets.find((b) => b.key === hover)! : peak;
   return (
-    <figure className="dots" aria-label={`${label}. Busiest: ${peak.label}, ${peak.value} ${unit}. ${buckets.map((b) => `${b.label} ${b.value}`).join(', ')}`}>
+    <figure ref={ref} className={`dots${reveal ? ' reveal' : ''}`} aria-label={`${label}. Busiest: ${peak.label}, ${peak.value} ${unit}. ${buckets.map((b) => `${b.label} ${b.value}`).join(', ')}`}>
       <div className="dots-readout" aria-hidden="true">
         <span className="dots-tag">{hover ? shown.label : `Peak: ${peak.label}`}</span>
-        <strong>{shown.value.toLocaleString()}</strong> <span className="muted">{unit}</span>
+        <strong key={shown.key} className="dots-value">{shown.value.toLocaleString()}</strong> <span className="muted">{unit}</span>
       </div>
       <div className="dots-grid" style={{ gridTemplateColumns: `repeat(${buckets.length}, minmax(0, 1fr))` }}>
-        {buckets.map((b) => {
+        {buckets.map((b, c) => {
           const on = b.value ? Math.max(1, Math.round((b.value / max) * rows)) : 0;
           const isPeak = b.key === peak.key;
           return (
             <div key={b.key} className={`dots-col${isPeak ? ' peak' : ''}${hover === b.key ? ' hover' : ''}`}
-              title={`${b.label}: ${b.value} ${unit}`} onMouseEnter={() => setHover(b.key)} onMouseLeave={() => setHover(null)}>
-              {Array.from({ length: rows }, (_, i) => <i key={i} className={rows - i <= on ? 'on' : undefined} />)}
+              title={`${b.label}: ${b.value} ${unit}`} style={{ '--c': Math.min(c, 24) } as CSSProperties} onMouseEnter={() => setHover(b.key)} onMouseLeave={() => setHover(null)}>
+              {Array.from({ length: rows }, (_, i) => <i key={i} className={rows - i <= on ? 'on' : undefined} style={{ '--r': rows - 1 - i } as CSSProperties} />)}
               <span className="dots-label">{b.short ?? b.label}</span>
             </div>
           );
@@ -218,13 +227,14 @@ export function DotColumns({ buckets, rows = 8, unit = 'reports', label }: {
 /** One small area chart per severity, each labelled with its total: no telling series apart by hue. */
 export function SeverityMultiples({ daily }: { daily: Stats['daily'] }) {
   const { grid, surface } = useThemeColors();
+  const { ref, seen, reveal } = useChartReveal();
   const rows: { key: Severity; field: 'reportedHigh' | 'reportedMedium' | 'reportedLow' }[] = [
     { key: 'HIGH', field: 'reportedHigh' }, { key: 'MEDIUM', field: 'reportedMedium' }, { key: 'LOW', field: 'reportedLow' },
   ];
   const data = daily.map((d) => ({ ...d, label: dayLabel(d.date) }));
   const max = Math.max(1, ...daily.flatMap((d) => [d.reportedHigh, d.reportedMedium, d.reportedLow]));
   return (
-    <div className="multiples">
+    <div ref={ref} className="multiples">
       {rows.map((r) => {
         const total = daily.reduce((s, d) => s + d[r.field], 0);
         return (
@@ -235,7 +245,7 @@ export function SeverityMultiples({ daily }: { daily: Stats['daily'] }) {
               <strong>{total}</strong>
             </div>
             <ResponsiveContainer width="100%" height={56}>
-              <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
+              <AreaChart key={seen ? 'seen' : 'unseen'} data={data} margin={{ top: 4, right: 4, bottom: 0, left: 4 }}>
                 <CartesianGrid stroke={grid} vertical={false} horizontal={false} />
                 <YAxis hide domain={[0, max]} />
                 <XAxis dataKey="label" hide />
@@ -244,7 +254,7 @@ export function SeverityMultiples({ daily }: { daily: Stats['daily'] }) {
                     <span>{payload[0].value} {SEVERITY_LABEL[r.key].toLowerCase()} severity</span></div>
                   : null)} />
                 <Area type="monotone" dataKey={r.field} stroke={SEVERITY_COLOR[r.key]} strokeWidth={2} fill={SEVERITY_COLOR[r.key]}
-                  fillOpacity={0.1} dot={false} activeDot={{ r: 4, stroke: surface, strokeWidth: 2 }} isAnimationActive={false} />
+                  fillOpacity={0.1} dot={false} activeDot={{ r: 4, stroke: surface, strokeWidth: 2 }} isAnimationActive={reveal} animationDuration={600} animationEasing="ease-out" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -260,11 +270,12 @@ export function SeverityMultiples({ daily }: { daily: Stats['daily'] }) {
 /** Unresolved hazards at each day's end as steps: the backlog only moves when something changes. */
 export function BacklogSteps({ daily, height = 200 }: { daily: Stats['daily']; height?: number }) {
   const { series1, grid, surface, axis } = useThemeColors();
+  const { ref, seen, reveal } = useChartReveal();
   const data = daily.map((d) => ({ ...d, label: dayLabel(d.date) }));
   return (
-    <figure className="chart" aria-label="Unresolved backlog at the end of each day">
+    <figure ref={ref} className="chart" aria-label="Unresolved backlog at the end of each day">
       <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
+        <AreaChart key={seen ? 'seen' : 'unseen'} data={data} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
           <CartesianGrid stroke={grid} vertical={false} />
           <XAxis dataKey="label" stroke={axis} fontSize={12} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={16} />
           <YAxis allowDecimals={false} stroke={axis} fontSize={12} tickLine={false} axisLine={false} width={40} />
@@ -272,7 +283,7 @@ export function BacklogSteps({ daily, height = 200 }: { daily: Stats['daily']; h
             ? <div className="chart-tip"><strong>{payload[0].payload.label}</strong><span>{payload[0].payload.backlog} unresolved at day’s end</span></div>
             : null)} />
           <Area type="stepAfter" dataKey="backlog" stroke={series1} strokeWidth={2} fill={series1} fillOpacity={0.1}
-            dot={false} activeDot={{ r: 4, stroke: surface, strokeWidth: 2 }} isAnimationActive={false} />
+            dot={false} activeDot={{ r: 4, stroke: surface, strokeWidth: 2 }} isAnimationActive={reveal} animationDuration={600} animationEasing="ease-out" />
         </AreaChart>
       </ResponsiveContainer>
     </figure>

@@ -1,5 +1,6 @@
 import { Check, CircleAlert, Info, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 
 export interface Toast {
   id: number;
@@ -34,8 +35,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       <div className="toasts" role="status" aria-live="polite">
+        {/* Newer toasts push older ones up (layout); a closing toast fades and drops 4 px. */}
+        <AnimatePresence initial={false}>
         {toasts.map((t) => (
-          <div key={t.id} className={`toast toast-${t.kind}`}>
+          <motion.div key={t.id} className={`toast toast-${t.kind}`} layout transition={{ layout: { duration: 0.16 } }}
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { duration: 0.2 } }}
+            exit={{ opacity: 0, y: 4, transition: { duration: 0.14 } }}>
             <span className="toast-icon" aria-hidden="true">
               {t.kind === 'success' ? <Check size={13} strokeWidth={3} /> : t.kind === 'error' ? <CircleAlert size={14} /> : <Info size={14} />}
             </span>
@@ -46,8 +51,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               </button>
             )}
             <button type="button" className="icon-btn toast-close" aria-label="Dismiss" onClick={() => dismiss(t.id)}><X size={16} aria-hidden="true" /></button>
-          </div>
+          </motion.div>
         ))}
+        </AnimatePresence>
       </div>
     </ToastContext.Provider>
   );

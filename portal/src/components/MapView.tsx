@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { LocateFixed, Minus, Plus } from 'lucide-react';
-import L, { baseTiles } from '../lib/leaflet';
+import L, { baseTiles, radarTiles } from '../lib/leaflet';
 import { useThemeColors } from '../lib/theme';
 import 'leaflet.markercluster';
 import 'leaflet.heat';
@@ -136,15 +136,14 @@ export function MapView({ hazards, selectedId, highlightId, onSelect, layer, bar
   }, [colors.dark, barangays]);
 
   // Live rain radar, when asked for.
-  const radar = useRef<L.TileLayer | null>(null);
+  const radar = useRef<L.GridLayer | null>(null);
   useEffect(() => {
     const m = map.current;
     radar.current?.remove();
     radar.current = null;
     if (!m || !weatherOverlay) return;
-    radar.current = L.tileLayer(weatherOverlay.url, {
-      pane: 'weather', opacity: 0.6, tileSize: 512, zoomOffset: -1, maxNativeZoom: weatherOverlay.maxNativeZoom,
-      attribution: weatherOverlay.attribution,
+    radar.current = radarTiles(weatherOverlay.url, {
+      pane: 'weather', opacity: 0.6, maxUrlZoom: weatherOverlay.maxNativeZoom - 1, attribution: weatherOverlay.attribution,
     }).addTo(m);
   }, [weatherOverlay?.url, weatherOverlay?.maxNativeZoom, weatherOverlay?.attribution]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useExitGhost } from '../lib/motion';
 
 /** Modal dialog: focus stays inside, Esc closes, focus returns to where it was. */
 export function Dialog({ title, onClose, children, footer, tone = 'default', icon }: {
@@ -7,7 +8,10 @@ export function Dialog({ title, onClose, children, footer, tone = 'default', ico
   icon?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const backdrop = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  // Closing reverses the entrance (CSS .is-leaving); focus returns straight away, not after it.
+  useExitGhost(backdrop);
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; });
 
@@ -34,7 +38,7 @@ export function Dialog({ title, onClose, children, footer, tone = 'default', ico
   }, []);
 
   return (
-    <div className="dialog-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="dialog-backdrop" ref={backdrop} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className={`dialog dialog-${tone}`} role="dialog" aria-modal="true" aria-labelledby={titleId} ref={ref}>
         <div className="dialog-head">
           {icon && <span className="dialog-icon" aria-hidden="true">{icon}</span>}

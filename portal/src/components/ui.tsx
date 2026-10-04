@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
+import { useChartReveal } from '../lib/motion';
 
 /** Page title, one line of context under it, and the page's own actions on the right. */
 export function PageHeader({ eyebrow, title, subtitle, actions }: {
@@ -88,11 +89,12 @@ export function Sparkline({ values, width = 96, height = 34 }: { values: number[
   const points = values.map((v, i) => `${(i * step).toFixed(1)},${y(v).toFixed(1)}`);
   const line = `M${points.join(' L')}`;
   const last = values.length - 1;
+  const { ref, reveal } = useChartReveal();
   return (
-    <svg className="sparkline" width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
-      <path d={`${line} L${width},${height} L0,${height} Z`} fill="currentColor" opacity="0.08" />
-      <path d={line} fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={last * step} cy={y(values[last])} r="2.75" fill="currentColor" />
+    <svg ref={ref} className={`sparkline${reveal ? ' reveal' : ''}`} width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
+      <path d={`${line} L${width},${height} L0,${height} Z`} className="spark-fill" fill="currentColor" opacity="0.08" />
+      <path d={line} pathLength={1} className="spark-line" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={last * step} cy={y(values[last])} r="2.75" className="spark-dot" fill="currentColor" />
     </svg>
   );
 }

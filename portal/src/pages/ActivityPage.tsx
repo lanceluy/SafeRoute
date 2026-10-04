@@ -8,6 +8,8 @@ import { EmptyState, ErrorState, SkeletonRows } from '../components/States';
 import { ago, coords, dayLabel, fullDate, timeOfDay } from '../lib/format';
 import { DEFAULT_NOTES, HIDDEN_FIELDS, TYPE_LABEL, fieldLabel, shortId, valueLabel } from '../lib/hazards';
 import { useLiveTick } from '../state/useQueue';
+import { Segmented } from '../components/Segmented';
+import { AnimatePresence, motion } from 'motion/react';
 
 type Scope = 'staff' | 'status' | 'all';
 const SCOPES: { value: Scope; label: string; hint: string }[] = [
@@ -70,6 +72,9 @@ export function ActivityPage() {
   // Which page to fetch next; a new object on every request so asking again refetches.
   const [request, setRequest] = useState({ page: 0 });
   const lastTick = useRef(tick);
+  const [arrival, setArrival] = useState(() => new Map<string, 'live' | 'older'>());
+  const itemsNow = useRef(items);
+  useEffect(() => { itemsNow.current = items; }, [items]);
   const load = useCallback((p: number) => { setLoading(true); setRequest({ page: p }); }, []);
 
   useEffect(() => {
@@ -84,6 +89,13 @@ export function ActivityPage() {
       actions: scope === 'staff' ? STAFF_ACTIONS : scope === 'status' ? ['STATUS_CHANGED'] : undefined,
     }, controller.signal)
       .then((res) => {
+        // New live entries slide in and highlight; an older page fades in as one group.
+        const prev = itemsNow.current;
+        if (p > 0) setArrival((a) => new Map([...a, ...res.items.map((e) => [e.id, 'older'] as const)]));
+        else if (live && prev.length) {
+          const had = new Set(prev.map((e) => e.id));
+          setArrival((a) => new Map([...a, ...res.items.filter((e) => !had.has(e.id)).map((e) => [e.id, 'live'] as const)]));
+        }
         setItems((prev) => (p === 0 ? res.items : [...prev, ...res.items]));
         setHasMore(res.hasMore);
         setPage(p);
@@ -116,14 +128,11 @@ export function ActivityPage() {
           <h1>Activity</h1>
           <p className="muted">Municipal actions, status changes and the audit trail. Newest first.</p>
         </div>
-        <div className="segmented" role="group" aria-label="Show">
-          {SCOPES.map((s) => (
-            <button key={s.value} type="button" title={s.hint} aria-pressed={scope === s.value} onClick={() => {
-              if (s.value === scope) return;
-              setScope(s.value); setSelected(null); setItems([]); load(0);
-            }}>{s.label}</button>
-          ))}
-        </div>
+        <Segmented label="Show" value={scope} options={SCOPES.map((s) => ({ value: s.value, label: s.label, title: s.hint }))}
+          onChange={(v) => {
+            if (v === scope) return;
+            setScope(v); setSelected(null); setItems([]); load(0);
+          }} />
       </div>
 
       <div className={`activity-layout${selected ? ' has-detail' : ''}`}>
@@ -135,12 +144,14 @@ export function ActivityPage() {
               {scope === 'staff' ? 'When staff resolve, reopen or remove hazards, it shows up here.' : 'Nothing has happened in this view yet.'}
             </EmptyState>
           )}
+          {/* A different scope crossfades the whole feed rather than animating each row. */}
+          <div key={scope} className="activity-feed-body">
           {groups.map(([day, entries]) => (
             <div key={day} className="activity-day">
               <h2 className="activity-day-label">{new Date(day).toDateString() === new Date().toDateString() ? 'Today' : dayLabel(new Date(day))}</h2>
               <ul className="activity-list">
                 {entries.map((e) => (
-                  <li key={e.id}>
+                  <li key={e.id} className={arrival.has(e.id) ? `arrive-${arrival.get(e.id)}` : undefined}>
                     <button type="button" className={`activity-item a-${e.action.toLowerCase()}${selected?.id === e.id ? ' selected' : ''}`}
                       onClick={() => setSelected(e)} aria-current={selected?.id === e.id ? 'true' : undefined}>
                       <span className="activity-time" title={fullDate(e.at)}>{timeOfDay(e.at)}</span>
@@ -156,6 +167,7 @@ export function ActivityPage() {
               </ul>
             </div>
           ))}
+          </div>
           {hasMore && (
             <button type="button" className="btn btn-secondary load-more" disabled={loading} onClick={() => load(page + 1)}>
               {loading ? 'Loading…' : 'Load older activity'}
@@ -163,7 +175,10 @@ export function ActivityPage() {
           )}
         </section>
 
-        {selected && <AuditDetail entry={selected} onClose={() => setSelected(null)} />}
+        {/* The feed narrows and the entry slides in from the right; closing reverses both. */}
+        <AnimatePresence>
+          {selected && <AuditDetail key="detail" entry={selected} onClose={() => setSelected(null)} />}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -180,7 +195,9 @@ function AuditDetail({ entry: e, onClose }: { entry: ActivityEntry; onClose: () 
     || e.action === 'MUNICIPAL_ASSIGNED' || e.action === 'MUNICIPAL_PRIORITY';
   const show = (v: string | null) => (e.action === 'MUNICIPAL_ASSIGNED' ? departmentName(departments, v) ?? 'Unassigned' : valueLabel(v) || '—');
   return (
-    <aside className="card audit-detail" aria-label="Audit entry">
+    <motion.aside className="card audit-detail" aria-label="Audit entry"
+      initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12, transition: { duration: 0.16 } }}
+      transition={{ duration: 0.22 }}>
       <div className="drawer-header">
         <h2>Audit entry</h2>
         <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">×</button>
@@ -202,6 +219,6 @@ function AuditDetail({ entry: e, onClose }: { entry: ActivityEntry; onClose: () 
         <dd>{TYPE_LABEL[e.hazardType]} {shortId(e.hazardId)}<br /><span className="muted">{coords(e.latitude, e.longitude)}</span></dd>
       </dl>
       <Link className="btn btn-secondary" to={`/map?hazard=${e.hazardId}`}>Open hazard</Link>
-    </aside>
+    </motion.aside>
   );
 }

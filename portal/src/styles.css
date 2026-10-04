@@ -97,9 +97,16 @@
   --shadow-2: 0 8px 24px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.04);
   --shadow-3: 0 20px 48px rgba(15, 23, 42, 0.16);
   --focus: 0 0 0 3px rgba(37, 99, 235, 0.32);
+  /* Motion: instant for hover/press, fast for tabs and small popovers, standard for pages and
+     drawers, emphasized for layout changes and live updates, reveal for a chart's first draw.
+     Mirrored in lib/motion.ts. */
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --t-instant: 110ms;
   --t-fast: 160ms;
-  --t-med: 200ms;
+  --t-std: 230ms;
+  --t-med: var(--t-std);
+  --t-emph: 360ms;
+  --t-reveal: 600ms;
 
   --topbar-h: 64px;
   --sidebar-w: 248px;
@@ -348,11 +355,23 @@ svg.lucide { flex-shrink: 0; }
   transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
 }
 .nav-link:hover { background: var(--fill); color: var(--text); }
-.nav-link.active { background: var(--accent-tint); color: var(--accent); font-weight: 600; }
-.nav-link.active::before {
+.nav-link.active { color: var(--accent); font-weight: 600; }
+.nav-link.active:hover { background: none; }
+/* The active highlight and its left bar are one element that slides between items (Sidebar.tsx). */
+.nav-active { position: absolute; inset: 0; border-radius: inherit; background: var(--accent-tint); }
+.nav-active::before {
   content: ""; position: absolute; left: -12px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent);
 }
-.nav-link svg { width: 19px; height: 19px; stroke-width: 1.75; }
+.nav-link > :not(.nav-active) { position: relative; }
+.nav-link svg { width: 19px; height: 19px; stroke-width: 1.75; transition: transform var(--t-fast) var(--ease); }
+.nav-link.active svg { transform: scale(1.04); }
+.nav-label { transition: opacity var(--t-instant) var(--ease); }
+/* Collapsing: labels fade before the column narrows. Expanding: they fade in once it has widened. */
+.app.rail-closing .nav-label, .app.rail-closing .nav-group-label span, .app.rail-closing .sidebar-brand div,
+.app.rail-closing .sidebar-toggle span, .app.rail-closing .live-text { opacity: 0; }
+.app.rail-opening .nav-label, .app.rail-opening .nav-group-label span, .app.rail-opening .sidebar-brand div,
+.app.rail-opening .sidebar-toggle span, .app.rail-opening .live-text { animation: fade var(--t-fast) var(--ease) var(--t-std) backwards; }
+.sidebar-brand div, .nav-group-label span, .sidebar-toggle span, .live-text { transition: opacity var(--t-instant) var(--ease); }
 .nav-count {
   margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 700;
   display: inline-flex; align-items: center; justify-content: center; background: var(--sev-high-bg); color: var(--sev-high-text);
@@ -373,14 +392,14 @@ svg.lucide { flex-shrink: 0; }
 .app.rail .nav-group-label { height: 1px; padding: 0; margin: var(--s3) 10px; background: var(--border); }
 .app.rail .nav-group-label:first-child { display: none; }
 .app.rail .nav-link, .app.rail .sidebar-toggle { justify-content: center; padding: 0; }
-.app.rail .nav-link.active::before { left: -8px; }
+.app.rail .nav-active::before { left: -8px; }
 .app.rail .nav-count { position: absolute; top: 2px; right: 6px; min-width: 16px; height: 16px; font-size: 10px; padding: 0 4px; }
 .app.rail .sidebar-status { justify-content: center; padding: 6px 0; }
 .sidebar-scrim { display: none; }
 
 .topbar {
   position: relative; z-index: 1000; flex-shrink: 0; height: var(--topbar-h); display: flex; align-items: center; gap: var(--s3);
-  padding: 0 var(--s5); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(10px);
+  padding: 0 var(--s5); background: color-mix(in srgb, var(--bg) 94%, transparent);
   border-bottom: 1px solid var(--border);
 }
 .menu-btn { display: none; }
@@ -401,7 +420,7 @@ svg.lucide { flex-shrink: 0; }
 .global-search.compact input:focus { background: var(--surface); }
 .search-suggest {
   position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r-card); box-shadow: var(--shadow-2); padding: var(--s1); z-index: 1100; animation: pop var(--t-fast) var(--ease);
+  border-radius: var(--r-card); box-shadow: var(--shadow-2); padding: var(--s1); z-index: 1100;
 }
 .search-option {
   width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 0; background: none; border-radius: var(--r-sm);
@@ -426,8 +445,12 @@ svg.lucide { flex-shrink: 0; }
 .popover {
   position: absolute; right: 0; top: calc(100% + 8px); width: 340px; max-width: calc(100vw - 24px); background: var(--surface);
   border: 1px solid var(--border); border-radius: var(--r-card); box-shadow: var(--shadow-2); z-index: 1100; overflow: hidden;
-  animation: pop var(--t-fast) var(--ease);
 }
+/* A new high-severity report: the badge pops (70% → 110% → 100%) and the bell rings once. */
+.bell-dot[data-pop] { animation: badge-pop 360ms var(--ease); }
+@keyframes badge-pop { 0% { transform: scale(0.7); } 60% { transform: scale(1.1); } 100% { transform: scale(1); } }
+.bell-ring { animation: bell-ring 360ms var(--ease); transform-origin: 50% 10%; }
+@keyframes bell-ring { 25% { transform: rotate(4deg); } 60% { transform: rotate(-4deg); } 100% { transform: none; } }
 @keyframes pop { from { opacity: 0; transform: translateY(-4px); } }
 .popover-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); }
 .popover-head strong { font-size: 14px; }
@@ -475,6 +498,14 @@ svg.lucide { flex-shrink: 0; }
 
 /* ---------- Pages ---------- */
 .page-loading { margin: var(--s7) auto; display: flex; gap: var(--s2); align-items: center; color: var(--text-2); font-weight: 600; }
+/* Appears only if a page takes more than 120 ms to load, so fast loads don't flash a spinner. */
+.page-loading { animation: fade var(--t-fast) var(--ease) 120ms backwards; }
+/* Page entrance: the header rises first, the rest 40 ms later. The map page only fades (moving a map blurs it). */
+.route { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.route > .page > *, .route > .moderation-page > * { animation: page-in var(--t-std) var(--ease) backwards; }
+.route > .page > :not(:first-child), .route > .moderation-page > :not(:first-child) { animation-delay: 40ms; }
+.route > .map-page { animation: fade var(--t-std) var(--ease) backwards; }
+@keyframes page-in { from { opacity: 0; transform: translateY(6px); } }
 .app-main { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
 .page { width: 100%; max-width: 1360px; margin: 0 auto; padding: var(--s6) var(--s6) var(--s7); display: flex; flex-direction: column; gap: var(--s5); }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; }
@@ -570,7 +601,7 @@ a.kpi:hover { box-shadow: var(--shadow-2); }
 .hero-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s3); }
 .hero-tile {
   display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 14px; text-decoration: none;
-  background: var(--hero-tile); border: 1px solid var(--hero-tile-border); backdrop-filter: blur(6px);
+  background: var(--hero-tile); border: 1px solid var(--hero-tile-border);
   transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
 }
 .hero-tile:hover { background: var(--hero-tile-hover); }
@@ -709,26 +740,34 @@ a.kpi:hover { box-shadow: var(--shadow-2); }
 /* Marker preview: the first click, before the full report. */
 .preview-card {
   position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 750; width: min(620px, calc(100% - 32px));
-  display: flex; align-items: center; gap: 12px; padding: 12px 10px 12px 14px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 48px 12px 14px;
   background: var(--surface); border: 1px solid var(--card-border); border-radius: 16px; box-shadow: var(--shadow-3);
   animation: preview-in var(--t-med) var(--ease);
 }
 @keyframes preview-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+.preview-card.leaving { animation: preview-out 180ms var(--ease) forwards; pointer-events: none; }
+@keyframes preview-out { to { opacity: 0; transform: translate(-50%, 8px); } }
 .mode-split .preview-card { left: calc((100% - var(--queue-width) - 24px) / 2); width: min(560px, calc(100% - var(--queue-width) - 56px)); }
 .preview-card .row-icon { width: 38px; height: 38px; border-radius: 10px; }
 .preview-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .preview-main strong { font-size: 14.5px; }
-.preview-main .muted { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.preview-facts { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-shrink: 0; }
-.preview-card .btn { flex-shrink: 0; }
+/* The street can run to two lines instead of being cut off after a few words. */
+.preview-main .muted { font-size: 12.5px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.35; }
+.preview-card .btn { flex-shrink: 0; margin-left: auto; }
+/* The close button stays inside the card's top-right corner however narrow the card gets. */
+.preview-card > .icon-btn { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); }
 
 /* The report panel floats over the map, with the map visible around it. */
 .queue-panel.floating {
-  position: absolute; top: 12px; right: 12px; bottom: 12px; width: var(--queue-width, 400px); z-index: 800;
+  position: absolute; top: 12px; right: 12px; bottom: 12px; left: calc(100% - 12px - var(--queue-width, 400px)); z-index: 800;
   background: var(--surface); border: 1px solid var(--card-border); border-radius: 18px; box-shadow: 0 12px 36px rgba(15, 23, 42, 0.14);
-  display: flex; flex-direction: column; min-height: 0; overflow: hidden; animation: pop var(--t-med) var(--ease);
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  /* Map + list ↔ List: the panel's edges glide (never scaled, so text stays sharp). */
+  transition: left var(--t-std) var(--ease), top var(--t-std) var(--ease);
 }
-.mode-list .queue-panel.floating { left: 12px; top: 60px; width: auto; }
+.map-page.resizing .queue-panel.floating { transition: none; }
+.panel-swap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.mode-list .queue-panel.floating { left: 12px; top: 60px; }
 .panel-resize { position: absolute; left: 0; top: 18px; bottom: 18px; width: 8px; cursor: col-resize; z-index: 5; touch-action: none; }
 .panel-resize::after { content: ""; position: absolute; left: 2px; top: 50%; width: 3px; height: 36px; margin-top: -18px; border-radius: 2px; background: transparent; transition: background var(--t-fast); }
 .panel-resize:hover::after, .panel-resize:focus-visible::after { background: var(--accent-tint-2); }
@@ -736,9 +775,9 @@ a.kpi:hover { box-shadow: var(--shadow-2); }
 .mode-list .map-legend, .mode-list .map-toolbar, .mode-list .preview-card { display: none; }
 
 /* Queue inside the floating panel: tabs as a filled segment. */
-.queue-panel.floating .tabs { border-bottom: 0; padding: 14px 14px 0; gap: 4px; flex-wrap: wrap; }
+.queue-panel.floating .tabs { border-bottom: 0; padding: 14px 8px 0; gap: 2px; flex-wrap: nowrap; }
 .queue-panel.floating .tab {
-  padding: 6px 10px; border-bottom: 0; border-radius: 9px; margin: 0; font-size: 13px;
+  padding: 6px 6px; border-bottom: 0; border-radius: 9px; margin: 0; font-size: 13px; gap: 5px;
 }
 .queue-panel.floating .tab:hover { background: var(--fill); }
 .queue-panel.floating .tab.active { background: var(--accent-tint); color: var(--accent); }
@@ -765,12 +804,15 @@ a.kpi:hover { box-shadow: var(--shadow-2); }
   overflow-x: auto; scrollbar-width: none;
 }
 .tab {
-  display: inline-flex; align-items: center; gap: 7px; padding: 12px 2px 11px; background: none; border: 0; border-bottom: 2px solid transparent;
+  position: relative; display: inline-flex; align-items: center; gap: 7px; padding: 12px 2px 11px; background: none; border: 0; border-bottom: 2px solid transparent;
   font-weight: 500; font-size: 13.5px; color: var(--text-2); cursor: pointer; white-space: nowrap; margin-bottom: -1px;
   transition: color var(--t-fast), border-color var(--t-fast);
 }
 .tab:hover { color: var(--text); }
-.tab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+.tab.active { color: var(--text); font-weight: 600; }
+/* One underline per tab strip that slides between tabs (TabIndicator). */
+.tab-indicator { position: absolute; left: 0; right: 0; bottom: -2px; height: 2px; border-radius: 2px 2px 0 0; background: var(--accent); }
+.tab-count { animation: fade var(--t-fast) var(--ease); }
 /* Counts stay grey; only a waiting review count is red. */
 .tab-count { color: var(--text-3); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .tab.active .tab-count { color: var(--accent); font-weight: 600; }
@@ -882,6 +924,10 @@ input[type="date"] { padding-right: 6px; }
 .hazard-row:hover .row-chevron, .hazard-row.selected .row-chevron { color: var(--text-2); }
 .hazard-row.is-new { animation: arrive 2.4s ease-out 1; }
 @keyframes arrive { 0% { background: var(--new-flash); } 100% { background: transparent; } }
+/* After a review action: one flash on the changed row, and badges ease to their new colour. */
+.hazard-row.just-changed { animation: arrive 1.1s ease-out 1; }
+.hazard-row .pill, .hazard-row .plain-badge, .hazard-row .row-icon { transition: background-color var(--t-std) var(--ease), color var(--t-std) var(--ease); }
+.queue-phase { min-height: 100%; }
 .row-icon {
   width: 32px; height: 32px; border-radius: 50%; color: #fff; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
@@ -892,6 +938,8 @@ input[type="date"] { padding-right: 6px; }
 .sev-fill-high { background: var(--sev-high); color: #fff; }
 .sev-fill-medium { background: var(--sev-medium); color: #fff; }
 .sev-fill-low { background: var(--sev-low); color: #422006; }
+/* Map pins use the same glyph colour, so a hazard's icon matches everywhere (pin, list, preview, details). */
+.pin.sev-bg-low { color: #422006; }
 .type-tile { background: var(--type-tile-bg); color: var(--type-tile-fg); }
 .cell-note { font-size: 12px; color: var(--text-3); }
 .cell-note.warn { color: var(--sev-high-text); }
@@ -899,7 +947,15 @@ input[type="date"] { padding-right: 6px; }
 .tab-more { display: inline-flex; align-items: center; gap: 4px; }
 .tab-more .chev { margin-left: 0; }
 .menu-trigger:has(.tab-more) { border-radius: 0; }
-.filter-panel { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--s4) var(--s5); padding: var(--s4); animation: pop var(--t-fast) var(--ease); }
+.filter-panel-wrap { overflow: hidden; }
+.filter-panel { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--s4) var(--s5); padding: var(--s4); }
+.filter-panel > * { animation: pop var(--t-fast) var(--ease) backwards; }
+.filter-panel > :nth-child(2) { animation-delay: 25ms; }
+.filter-panel > :nth-child(3) { animation-delay: 50ms; }
+.filter-panel > :nth-child(4) { animation-delay: 75ms; }
+.filter-panel > :nth-child(5) { animation-delay: 100ms; }
+.filter-panel > :nth-child(6) { animation-delay: 125ms; }
+.filter-panel > :nth-child(n+7) { animation-delay: 150ms; }
 .filter-panel legend { font-size: 12px; font-weight: 600; color: var(--text-2); margin-bottom: 8px; text-transform: none; letter-spacing: 0; }
 .filter-panel select { width: 100%; height: 34px; }
 .filter-panel-foot { grid-column: 1 / -1; display: flex; justify-content: flex-end; align-items: center; gap: var(--s3); padding-top: var(--s3); border-top: 1px solid var(--border); }
@@ -1070,11 +1126,11 @@ input[type="date"] { padding-right: 6px; }
 /* Tabs: Overview, Timeline, Community. */
 .inspector-tabs { display: flex; gap: var(--s4); border-bottom: 1px solid var(--border); margin-bottom: calc(var(--s2) * -1); }
 .inspector-tabs button {
-  display: inline-flex; align-items: center; gap: 6px; padding: 8px 2px 10px; border: 0; background: none; border-bottom: 2px solid transparent;
+  position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 8px 2px 10px; border: 0; background: none; border-bottom: 2px solid transparent;
   margin-bottom: -1px; font-size: 13.5px; font-weight: 500; color: var(--text-2); cursor: pointer;
 }
 .inspector-tabs button:hover { color: var(--text); }
-.inspector-tabs button.active { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+.inspector-tabs button.active { color: var(--text); font-weight: 600; }
 .inspector-pane { display: flex; flex-direction: column; gap: var(--s5); animation: fade var(--t-fast) ease-out; }
 /* Sections separated by space and a hairline, not boxes. */
 .inspector-section { display: flex; flex-direction: column; gap: 10px; padding-top: var(--s5); border-top: 1px solid var(--border); }
@@ -1129,7 +1185,7 @@ input[type="date"] { padding-right: 6px; }
 
 /* ---------- Dialog ---------- */
 .dialog-backdrop {
-  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.42); backdrop-filter: blur(2px); z-index: 2000; display: flex;
+  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.42); z-index: 2000; display: flex;
   align-items: center; justify-content: center; padding: var(--s4); animation: fade var(--t-fast) ease-out;
 }
 @keyframes fade { from { opacity: 0; } }
@@ -1139,6 +1195,11 @@ input[type="date"] { padding-right: 6px; }
   animation: dialog-in var(--t-med) var(--ease);
 }
 @keyframes dialog-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+/* Closing: the same motion in reverse (no shake for destructive dialogs). */
+.dialog-backdrop.is-leaving { animation: fade-out var(--t-fast) var(--ease) forwards; pointer-events: none; }
+.dialog-backdrop.is-leaving .dialog { animation: dialog-out var(--t-fast) var(--ease) forwards; }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes dialog-out { to { opacity: 0; transform: translateY(8px) scale(0.98); } }
 .dialog-head { display: flex; align-items: center; gap: 12px; }
 .dialog-icon {
   width: 38px; height: 38px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
@@ -1172,7 +1233,7 @@ input[type="date"] { padding-right: 6px; }
 .toasts { position: fixed; bottom: var(--s5); left: 50%; transform: translateX(-50%); z-index: 3000; display: flex; flex-direction: column; gap: var(--s2); align-items: center; pointer-events: none; }
 .toast {
   pointer-events: auto; display: flex; align-items: center; gap: var(--s3); background: var(--tip-bg); color: var(--tip-text); border-radius: 14px;
-  padding: 8px 6px 8px 12px; font-size: 13.5px; box-shadow: var(--shadow-3); min-width: 280px; max-width: min(520px, calc(100vw - 32px)); animation: toast-in 0.2s ease-out;
+  padding: 8px 6px 8px 12px; font-size: 13.5px; box-shadow: var(--shadow-3); min-width: 280px; max-width: min(520px, calc(100vw - 32px));
 }
 @keyframes toast-in { from { transform: translateY(8px); opacity: 0; } }
 .toast-icon { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; background: rgba(255, 255, 255, 0.18); color: #fff; }
@@ -1219,9 +1280,12 @@ input[type="date"] { padding-right: 6px; }
 .pin-selected { border-width: 3px; box-shadow: 0 4px 14px rgba(15, 23, 42, 0.35); }
 .pin-selected::before {
   content: ""; position: absolute; inset: -11px; border-radius: 50%; background: inherit; opacity: 0.22; z-index: -1;
-  animation: halo 1.8s ease-out infinite alternate;
+  animation: halo 400ms var(--ease) 1;
 }
-@keyframes halo { from { transform: scale(0.85); } to { transform: scale(1.05); } }
+/* One focus-ring expansion when a marker is selected, then it holds still. */
+@keyframes halo { from { transform: scale(0.6); opacity: 0.5; } }
+/* Markers fade in as clusters split apart after a zoom (no continuous pin motion). */
+.pin-wrap:not(:has(.pin-selected)) { animation: fade var(--t-std) var(--ease); }
 .pin-pulse::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 3px solid currentColor; animation: pulse 1.6s ease-out 2; color: var(--sev-medium); }
 @keyframes pulse { from { transform: scale(0.8); opacity: 1; } to { transform: scale(2); opacity: 0; } }
 .map-shell.has-focus .pin:not(.pin-selected), .map-shell.has-focus .cluster { opacity: 0.3; }
@@ -1243,11 +1307,14 @@ input[type="date"] { padding-right: 6px; }
 
 /* ---------- Moderation ---------- */
 .moderation-page { padding: var(--s6) var(--s6) var(--s5); max-width: 1360px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: var(--s4); height: 100%; min-height: 0; }
-.moderation-body { position: relative; flex: 1; min-height: 480px; display: flex; gap: var(--s4); }
+.moderation-body { position: relative; flex: 1; min-height: 480px; display: flex; }
 .moderation-queue { flex: 1; padding: 0; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .moderation-queue .tabs { padding-right: var(--s4); }
 .moderation-queue .queue-scroll { padding: 0 var(--s3) var(--s3); }
-.moderation-body .drawer { position: relative; inset: auto; width: 440px; flex-shrink: 0; box-shadow: var(--shadow-card); border: 1px solid var(--card-border); }
+.moderation-body .drawer { position: relative; inset: auto; width: 440px; flex-shrink: 0; box-shadow: var(--shadow-card); border: 1px solid var(--card-border); animation: none; }
+/* The slot opens by width (Motion) and clips the drawer, which keeps its full width as it slides in. */
+.drawer-slot { position: relative; flex-shrink: 0; display: flex; justify-content: flex-end; overflow: hidden; padding-left: var(--s4); min-height: 0; }
+.drawer-motion { display: flex; min-height: 0; }
 
 /* ---------- Charts ---------- */
 .chart { margin: 0; }
@@ -1263,6 +1330,8 @@ input[type="date"] { padding-right: 6px; }
 .rain-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -2px; }
 .rain-ramp { flex: 1; min-width: 120px; max-width: 320px; height: 10px; border-radius: 5px; }
 .area-map path.leaflet-interactive:focus, .area-map path.leaflet-interactive:focus-visible { outline: none; }
+/* New rainfall values ease the barangay fills instead of snapping. */
+.area-map path.leaflet-interactive { transition: fill var(--t-emph) var(--ease), fill-opacity var(--t-emph) var(--ease); }
 .leaflet-tooltip.area-tip { font-family: var(--font); font-size: 13px; }
 
 /* Live update strip: blue for information, amber only when action is warranted. */
@@ -1286,8 +1355,10 @@ input[type="date"] { padding-right: 6px; }
   content: ""; position: absolute; z-index: -1; width: 520px; height: 520px; right: -120px; top: -220px; border-radius: 50%;
   background: radial-gradient(circle, var(--sky-glow), transparent 65%);
 }
+/* "Glass" is a translucent surface with no backdrop-filter: blurring what's behind it forced a re-blur on
+   every frame anything near it (a pan, an animation) moved, which dropped Weather from 120 to ~30 fps. */
 .glass {
-  background: var(--glass-bg); backdrop-filter: blur(12px) saturate(1.2); -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  background: var(--glass-bg);
   border: 1px solid var(--glass-border); box-shadow: var(--shadow-2);
 }
 .rain-map { position: relative; min-height: 480px; border-radius: 16px; overflow: hidden; }
@@ -1315,7 +1386,7 @@ input[type="date"] { padding-right: 6px; }
 .rain-map-legend .rain-ramp { min-width: 90px; max-width: 160px; height: 8px; }
 
 .conditions { display: flex; flex-direction: column; gap: var(--s4); padding: var(--s5); border-radius: 16px; background: var(--glass-bg);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid var(--glass-border); box-shadow: var(--shadow-card); }
+  border: 1px solid var(--glass-border); box-shadow: var(--shadow-card); }
 .conditions-kicker { font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
 .conditions-now { display: flex; align-items: center; gap: var(--s4); }
 .conditions-icon { color: var(--accent); display: flex; }
@@ -1397,7 +1468,16 @@ button.bar-row:hover { background: var(--fill); }
 .segmented button { border: 0; background: none; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 13px; color: var(--text-2); cursor: pointer; }
 .segmented button[aria-pressed="true"] { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-1); }
 .segmented.small button { padding: 4px 10px; font-size: 12px; }
-.custom-range { display: flex; gap: var(--s2); align-items: center; }
+/* Segmented controls (Segmented.tsx): the selected background is one pill that slides between options. */
+.has-pill button { position: relative; }
+.has-pill button[aria-pressed="true"] { background: none; box-shadow: none; }
+.seg-pill { position: absolute; inset: 0; border-radius: inherit; }
+.seg-label { position: relative; display: inline-flex; align-items: center; gap: inherit; }
+.segmented .seg-pill { background: var(--surface); box-shadow: var(--shadow-1); }
+.view-switch .seg-pill { background: var(--accent-tint); }
+.rain-map-modes .seg-pill { background: var(--accent); }
+.has-pill button { transition: color var(--t-fast) var(--ease); }
+.custom-range { display: flex; gap: var(--s2); align-items: center; animation: pop var(--t-fast) var(--ease); }
 .table-wrap { overflow-x: auto; }
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .data-table th, .data-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
@@ -1449,8 +1529,18 @@ button.bar-row:hover { background: var(--fill); }
 .heat-map { position: relative; flex: 1; min-height: 360px; border-radius: var(--r-control); overflow: hidden; margin-bottom: var(--s2); }
 
 /* ---------- Activity ---------- */
-.activity-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); align-items: start; }
-.activity-layout.has-detail { grid-template-columns: minmax(0, 1fr) 380px; }
+.activity-layout {
+  display: grid; grid-template-columns: minmax(0, 1fr) 0px; gap: var(--s4); column-gap: 0; align-items: start; overflow-x: clip;
+  transition: grid-template-columns var(--t-std) var(--ease), column-gap var(--t-std) var(--ease);
+}
+.activity-layout.has-detail { grid-template-columns: minmax(0, 1fr) 380px; column-gap: var(--s4); }
+.audit-detail { min-width: 380px; }
+.activity-feed-body { animation: fade var(--t-std) var(--ease); }
+/* A live entry drops in 4 px and highlights for about a second; an older page fades in as one group. */
+.arrive-live { animation: page-in-down var(--t-std) var(--ease); }
+.arrive-live .activity-item { animation: arrive 1.2s ease-out 1; }
+.arrive-older { animation: fade var(--t-std) var(--ease); }
+@keyframes page-in-down { from { opacity: 0; transform: translateY(-4px); } }
 .activity-feed { padding: var(--s2) var(--s3); }
 .activity-day + .activity-day { margin-top: var(--s3); }
 .activity-day-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-2); padding: var(--s3) var(--s2) var(--s1); }
@@ -1548,8 +1638,8 @@ button.bar-row:hover { background: var(--fill); }
 .bulk-bar {
   margin: var(--s3) var(--s4) 0; padding: 8px 8px 8px 14px; border-radius: 14px; background: var(--accent-tint);
   border: 1px solid var(--accent-tint-2); display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; font-size: 13px;
-  animation: pop var(--t-fast) var(--ease);
 }
+.bulk-count { animation: fade var(--t-fast) var(--ease); }
 .bulk-bar strong { margin-right: auto; color: var(--accent); font-weight: 600; }
 .bulk-cancel { width: 32px; height: 32px; }
 .row-check { margin: 22px 0 0 10px; }
@@ -1634,8 +1724,12 @@ a.menu-item { text-decoration: none; color: var(--text); font-weight: 600; }
 @media (max-width: 1199px) {
   .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid-wide-left, .grid-main-side { grid-template-columns: 1fr; }
-  .moderation-body .drawer { position: absolute; inset: 0 0 0 auto; width: min(440px, 100%); box-shadow: var(--shadow-3); }
-  .activity-layout.has-detail { grid-template-columns: 1fr; }
+  .moderation-body .drawer { width: 100%; box-shadow: var(--shadow-3); }
+  /* Narrow: the drawer overlays the queue instead of splitting it, so only the slide plays. */
+  .drawer-slot { position: absolute; inset: 0 0 0 auto; width: min(440px, 100%) !important; padding-left: 0; overflow: visible; z-index: 800; }
+  .drawer-motion { flex: 1; }
+  .activity-layout, .activity-layout.has-detail { grid-template-columns: minmax(0, 1fr); column-gap: 0; }
+  .audit-detail { min-width: 0; }
   .audit-detail { position: fixed; inset: auto var(--s3) var(--s3) var(--s3); top: auto; max-height: 70vh; overflow-y: auto; z-index: 900; box-shadow: var(--shadow-3); }
   .hero-body { grid-template-columns: 1fr; align-items: start; }
   .area-list { grid-template-columns: 1fr; }
@@ -1752,10 +1846,10 @@ a.menu-item { text-decoration: none; color: var(--text); font-weight: 600; }
   .row-actions { right: 30px; }
 }
 .swatch.line { width: 14px; height: 3px; border-radius: 2px; vertical-align: 3px; }
-/* A narrow queue (the map rail): tabs wrap instead of scrolling under the collapse button. */
+/* A narrow queue (the map rail): the tabs stay on one row, tighter (and scroll sideways if a very narrow rail still can't fit them). */
 @container queue (max-width: 520px) {
-  .tabs { flex-wrap: wrap; gap: 0 var(--s3); }
-  .tab { padding: 10px 2px 9px; }
+  .tabs { flex-wrap: nowrap; gap: 0 14px; padding-right: var(--s3); }
+  .tab { padding: 10px 2px 9px; font-size: 13px; gap: 5px; }
   .filter-drop { padding: 0 8px 0 10px; }
 }
 
@@ -1853,7 +1947,7 @@ a.menu-item { text-decoration: none; color: var(--text); font-weight: 600; }
 
 /* Map page on narrow screens: the panel becomes a bottom sheet, and the view switch keeps its icons only. */
 @media (max-width: 1100px) {
-  .view-switch button span { display: none; }
+  .view-switch .seg-label span { display: none; }
 }
 @media (max-width: 900px) {
   .mode-split .queue-panel.floating { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; height: 52%; }
@@ -1867,15 +1961,14 @@ a.menu-item { text-decoration: none; color: var(--text); font-weight: 600; }
 }
 .queue-panel.floating .filter-row .search { flex-basis: 100%; }
 .queue-panel.floating .filter-row .sort-control { margin-left: auto; }
-.preview-main { min-width: 140px; }
+.preview-main { min-width: 0; flex: 1 1 170px; }
 .preview-main strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .brand-logo { border-radius: 9px; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12); }
 .rain-map .leaflet-top.leaflet-left { top: 52px; }
-/* Makati's coloured street map, softened in dark mode so it doesn't glare against the dark canvas. */
-:root[data-theme="dark"] .makati-detail { filter: brightness(0.8) saturate(0.85); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .makati-detail { filter: brightness(0.8) saturate(0.85); }
-}
+/* Leaflet blends tile images with plus-lighter to hide hairline seams, which makes Chrome re-composite every tile on every pan frame. The base map and radar are canvases now; this covers the fallback gray tiles. */
+.leaflet-container .leaflet-tile { mix-blend-mode: normal; }
+.leaflet-tile.tile-dry { display: none; }
+/* (Makati's street map is dimmed in dark mode when each tile is drawn: see lib/leaflet.ts.) */
 /* Hazard summary floating on the map, beside the toolbar. */
 .hazard-summary, .hazard-summary-pill { position: absolute; left: 64px; top: 62px; z-index: 700; }
 .hazard-summary { width: 220px; padding: 12px 14px; border-radius: 14px; display: flex; flex-direction: column; gap: 8px; }
@@ -1895,3 +1988,138 @@ a.menu-item { text-decoration: none; color: var(--text); font-weight: 600; }
 }
 .hazard-summary-pill span { font-weight: 700; color: var(--accent); }
 @media (max-width: 767px) { .hazard-summary, .hazard-summary-pill { display: none; } }
+
+/* ---------- Chart motion ----------
+   First draw only (.reveal comes from useChartReveal, which is never set again by a live update);
+   later data changes ease from the current value. */
+/* Horizontal bars: they grow from zero when their chart is first seen (.reveal comes from useChartReveal, once
+   the chart scrolls into view), 25 ms apart and capped; later data changes ease from the current width. */
+.bar-fill, .progress-track span, .diverging-fill, .area-bar span { transition: width 300ms var(--ease); }
+.segment-part { transition: flex-grow 300ms var(--ease); }
+.reveal .bar-fill, .reveal .progress-track span, .reveal .diverging-fill, .reveal .area-bar span { animation: grow-w 450ms var(--ease) backwards; }
+.reveal .segment-part { animation: grow-flex 450ms var(--ease) backwards; }
+@keyframes grow-w { from { width: 0; } }
+@keyframes grow-flex { from { flex-grow: 0; } }
+.reveal > li:nth-child(2) :is(.bar-fill, .progress-track span, .diverging-fill, .area-bar span) { animation-delay: 25ms; }
+.reveal > li:nth-child(3) :is(.bar-fill, .progress-track span, .diverging-fill, .area-bar span) { animation-delay: 50ms; }
+.reveal > li:nth-child(4) :is(.bar-fill, .progress-track span, .diverging-fill, .area-bar span) { animation-delay: 75ms; }
+.reveal > li:nth-child(5) :is(.bar-fill, .progress-track span, .diverging-fill, .area-bar span) { animation-delay: 100ms; }
+.reveal > li:nth-child(6) :is(.bar-fill, .progress-track span, .diverging-fill, .area-bar span) { animation-delay: 125ms; }
+.reveal > li:nth-child(n+7) :is(.bar-fill, .progress-track span, .diverging-fill, .area-bar span) { animation-delay: 150ms; }
+
+/* Funnel: the band opens left to right, the stages fade in 50 ms apart. */
+.funnel.reveal .funnel-band { animation: funnel-open 300ms var(--ease) backwards; transform-origin: left center; }
+.funnel.reveal .funnel-col { animation: stage-open 300ms var(--ease) backwards; animation-delay: calc(var(--i) * 50ms); }
+.funnel.reveal .funnel-chip { animation: fade 300ms var(--ease) backwards; animation-delay: calc(var(--i) * 50ms); }
+@keyframes stage-open { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
+@keyframes funnel-open { from { transform: scaleX(0); } }
+.funnel-chip { transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease); }
+.funnel-chip.hover { background: var(--accent); color: var(--on-accent); box-shadow: var(--shadow-2); }
+
+/* Severity gauge: one sweep, then the total fades in; new counts ease the segments. */
+.gauge-seg { transition: d 300ms var(--ease); }
+.gauge.reveal .gauge-seg { stroke-dasharray: 1; animation: gauge-sweep 500ms var(--ease) backwards; }
+@keyframes gauge-sweep { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.gauge.reveal .gauge-center { animation: fade 300ms var(--ease) 150ms backwards; }
+
+/* Dot columns: dots switch on bottom to top, staggered by column; the readout crossfades on hover. */
+.dots.reveal .dots-col i.on { animation: fade 240ms var(--ease) backwards; animation-delay: calc(var(--c) * 20ms + var(--r) * 18ms); }
+.dots-col.hover i { filter: brightness(1.06); }
+.dots-value { animation: fade var(--t-fast) var(--ease); }
+
+/* Recharts bars: they grow from the baseline 20 ms apart on first draw (BarShape wraps each in .bar-grow). */
+.chart.reveal .bar-grow { transform-box: fill-box; transform-origin: bottom; animation: bar-grow var(--t-reveal) var(--ease) backwards; animation-delay: calc(var(--i) * 20ms); }
+@keyframes bar-grow { from { transform: scaleY(0); } }
+/* Hovering a bar lifts and brightens it while the others fade to 70%; tooltips fade and scale up from 98%. */
+.recharts-bar-rectangle { transition: opacity var(--t-instant) var(--ease); }
+.bar-grow path { transition: filter var(--t-instant) var(--ease), transform var(--t-instant) var(--ease); }
+.chart:has(.recharts-bar-rectangle:hover) .recharts-bar-rectangle:not(:hover) { opacity: 0.7; }
+.recharts-bar-rectangle:hover path { filter: brightness(1.08); transform: translateY(-1px); }
+.recharts-tooltip-wrapper > * { animation: tip-in 120ms var(--ease); }
+@keyframes tip-in { from { opacity: 0; transform: scale(0.98); } }
+
+/* ---------- Numbers and the Overview entrance ---------- */
+/* A live update tints only the number that changed, once: blue neutral, green better, red only for severity. */
+.value-flash { border-radius: 6px; animation: value-flash 900ms var(--ease); }
+.flash-neutral { --flash: color-mix(in srgb, var(--accent) 22%, transparent); }
+.flash-good { --flash: color-mix(in srgb, var(--good) 24%, transparent); }
+.flash-bad { --flash: color-mix(in srgb, var(--sev-high) 24%, transparent); }
+@keyframes value-flash { 0%, 30% { background: var(--flash); box-shadow: 0 0 0 4px var(--flash); } 100% { background: transparent; box-shadow: 0 0 0 4px transparent; } }
+
+/* Overview, once per visit: hero, then its heading, the big number, the tiles 40 ms apart, then the stat cards together. */
+.route .overview > .hero { animation: fade 200ms var(--ease) backwards; }
+.route .overview .hero-head { animation: page-in 220ms var(--ease) 60ms backwards; }
+.route .overview .hero-big { animation: page-in 220ms var(--ease) 120ms backwards; }
+.route .overview .hero-tile { animation: page-in 220ms var(--ease) backwards; }
+.route .overview .hero-tile:nth-child(1) { animation-delay: 180ms; }
+.route .overview .hero-tile:nth-child(2) { animation-delay: 220ms; }
+.route .overview .hero-tile:nth-child(3) { animation-delay: 260ms; }
+.route .overview > .stat-row { animation-delay: 300ms; }
+.route .overview > :nth-child(n+3) { animation-delay: 340ms; }
+/* A block that was waiting below the fold plays as soon as it scrolls in, without the on-load sequencing delay. */
+/* Linked cards lift 2 px on hover. */
+a.stat:hover, a.hero-tile:hover { transform: translateY(-2px); }
+.hero-tile { transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease); }
+
+/* Sparklines draw left to right on first view; the fill and end dot follow. */
+.sparkline.reveal .spark-line { stroke-dasharray: 1; animation: spark-draw 450ms var(--ease) backwards; }
+.sparkline.reveal .spark-fill { animation: fade 300ms var(--ease) 150ms backwards; }
+.sparkline.reveal .spark-dot { animation: fade 160ms var(--ease) 420ms backwards; }
+@keyframes spark-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+
+/* ---------- Weather ---------- */
+.count-fade { animation: fade var(--t-std) var(--ease); }
+/* Refresh spins only while a request is in flight. */
+.spinning { animation: spin 0.8s linear infinite; }
+/* The update banner slides down 6 px; becoming a watch tints it once (no pulsing). */
+.weather-update { animation: banner-in var(--t-std) var(--ease); }
+.weather-update.watch { animation: banner-in var(--t-std) var(--ease), watch-once 900ms var(--ease); }
+@keyframes banner-in { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes watch-once { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sev-medium) 45%, transparent); } 100% { box-shadow: 0 0 0 8px transparent; } }
+.rain-map-legend { animation: fade var(--t-emph) var(--ease); }
+/* Forecast cards: hours 25 ms apart, days at most 30 ms apart; "Now" sits 2 px higher; days lift on hover. */
+.hour-cards li { animation: page-in var(--t-std) var(--ease) backwards; animation-delay: calc(var(--i, 0) * 25ms); }
+.hour-cards li.now { transform: translateY(-2px); }
+.day-cells li { animation: page-in var(--t-std) var(--ease) backwards; animation-delay: calc(var(--i, 0) * 30ms); transition: transform var(--t-fast) var(--ease); }
+.day-cells li:hover { transform: translateY(-2px); }
+
+/* ---------- Theme change and login ---------- */
+html.theme-changing *, html.theme-changing *::before, html.theme-changing *::after {
+  transition: background-color 200ms var(--ease), color 200ms var(--ease), border-color 200ms var(--ease), fill 200ms var(--ease), stroke 200ms var(--ease) !important;
+}
+/* Login: the logo first, then the form rises 8 px. */
+.login-brand-top, .login-mobile-brand { animation: fade var(--t-std) var(--ease) backwards; }
+.login-form { animation: rise-8 280ms var(--ease) 80ms backwards; }
+@keyframes rise-8 { from { opacity: 0; transform: translateY(8px); } }
+
+/* ---------- Weather icon and sky (decorative; never changes the data) ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  /* The soft sky glow drifts 8-10 px over 12 s and back (alternate: no reset jump). Transform only.
+     It sits behind the glass conditions card, so if Weather ever feels slow, remove this rule first. */
+  .weather-hero::before { will-change: transform; animation: sky-drift 12s ease-in-out infinite alternate; }
+  @keyframes sky-drift { to { transform: translate3d(-10px, 8px, 0); } }
+  /* Only the current-conditions icon moves: a slow sun, a drifting cloud, falling drops, one flash of lightning. */
+  .wx-animated .wx-rays { transform-box: fill-box; transform-origin: center; animation: wx-spin 20s linear infinite; }
+  .wx-animated .wx-cloud { animation: wx-drift 6s ease-in-out infinite alternate; }
+  .wx-animated .wx-drops { animation: wx-fall 1.4s ease-in infinite; }
+  .wx-animated .wx-bolt { animation: wx-flash 700ms var(--ease) 1; }
+  @keyframes wx-spin { to { transform: rotate(360deg); } }
+  @keyframes wx-drift { to { transform: translateX(1.2px); } }
+  @keyframes wx-fall { 0% { transform: translateY(-1.5px); opacity: 0; } 25% { opacity: 1; } 100% { transform: translateY(2px); opacity: 0; } }
+  @keyframes wx-flash { 0% { opacity: 0.25; } 30% { opacity: 1; stroke-width: 2.4; } 100% { opacity: 1; } }
+}
+
+/* ---------- Small touches ---------- */
+/* A new timeline entry (a live update) fades in; the first load fades together. */
+.timeline-item { animation: fade var(--t-fast) var(--ease); }
+/* Clusters ease in at 90% when created or regrouped after a zoom (Leaflet recreates the icon). */
+.cluster { animation: cluster-in 160ms var(--ease); }
+@keyframes cluster-in { from { opacity: 0; transform: scale(0.9); } }
+
+/* ---------- Scroll gate ----------
+   Page blocks that start below the fold are held in their "before" state until they scroll into view
+   (useScrollGate). Their entrance animations use `backwards` fill, so a paused one shows its "from"
+   keyframe; releasing it plays the animation from the start, including children's stagger delays. */
+[data-reveal-wait], [data-reveal-wait] * { animation-play-state: paused !important; }
+[data-late] { animation-delay: 0s !important; }
+@media print { [data-reveal-wait], [data-reveal-wait] * { animation-play-state: running !important; } }

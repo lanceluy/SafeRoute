@@ -167,27 +167,28 @@ export function conditionLabel(code: number) {
   return CONDITIONS[code]?.[0] ?? 'Unknown';
 }
 
-const SUN = '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>';
+const SUN = '<circle cx="12" cy="12" r="4"/><path class="wx-rays" d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>';
 const MOON = '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>';
 const CLOUD = '<path d="M7 18.5h10a4 4 0 0 0 .6-7.95A5.5 5.5 0 0 0 7 11a3.75 3.75 0 0 0 0 7.5z"/>';
 const SMALL_CLOUD = '<path d="M7.5 15.5h8a3.2 3.2 0 0 0 .5-6.36A4.4 4.4 0 0 0 7.5 9.8a2.85 2.85 0 0 0 0 5.7z"/>';
 const GLYPHS: Record<Glyph, (day: boolean) => string> = {
   clear: (day) => (day ? SUN : MOON),
   partly: (day) => (day
-    ? '<circle cx="8" cy="8" r="3"/><path d="M8 2v1.5M2 8h1.5M3.8 3.8l1 1M12.2 3.8l-1 1"/><path d="M9 19h8.5a3.5 3.5 0 0 0 .5-6.96A4.8 4.8 0 0 0 9 12.5a3.25 3.25 0 0 0 0 6.5z"/>'
+    ? '<circle cx="8" cy="8" r="3"/><path d="M8 2v1.5M2 8h1.5M3.8 3.8l1 1M12.2 3.8l-1 1"/><path class="wx-cloud" d="M9 19h8.5a3.5 3.5 0 0 0 .5-6.96A4.8 4.8 0 0 0 9 12.5a3.25 3.25 0 0 0 0 6.5z"/>'
     : '<path d="M11 7.5A4.5 4.5 0 1 1 5.5 3a3.6 3.6 0 0 0 5.5 4.5z"/><path d="M9 19h8.5a3.5 3.5 0 0 0 .5-6.96A4.8 4.8 0 0 0 9 12.5a3.25 3.25 0 0 0 0 6.5z"/>'),
   cloud: () => CLOUD,
   fog: () => '<path d="M4 9h16M3 13h18M5 17h14"/>',
-  drizzle: () => `${SMALL_CLOUD}<path d="M9 19v1M13 19v1M11 21v1"/>`,
-  rain: () => `${SMALL_CLOUD}<path d="M9 18.5l-1 3M13 18.5l-1 3M17 18.5l-1 3"/>`,
-  storm: () => `${SMALL_CLOUD}<path d="M12.5 16.5l-2 3h3l-2 3"/>`,
+  drizzle: () => `${SMALL_CLOUD}<path class="wx-drops" d="M9 19v1M13 19v1M11 21v1"/>`,
+  rain: () => `${SMALL_CLOUD}<path class="wx-drops" d="M9 18.5l-1 3M13 18.5l-1 3M17 18.5l-1 3"/>`,
+  storm: () => `${SMALL_CLOUD}<path class="wx-bolt" d="M12.5 16.5l-2 3h3l-2 3"/>`,
   snow: () => `${SMALL_CLOUD}<path d="M9 19.5h.01M12 21h.01M15 19.5h.01"/>`,
 };
 
 /** Line icon for a WMO code; `currentColor`, so it follows the text colour in both themes. */
-export function conditionIcon(code: number, isDay = true, size = 24) {
+export function conditionIcon(code: number, isDay = true, size = 24, animated = false) {
   const glyph = CONDITIONS[code]?.[1] ?? 'cloud';
-  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${GLYPHS[glyph](isDay)}</svg>`;
+  // `animated` is only for the current-conditions icon; forecast icons stay still so they never imply live progression.
+  return `<svg${animated ? ' class="wx-animated"' : ''} viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${GLYPHS[glyph](isDay)}</svg>`;
 }
 
 // ------------------------------------------------------------------ advisories

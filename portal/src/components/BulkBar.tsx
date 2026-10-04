@@ -44,7 +44,8 @@ export function BulkBar({ selected, total, allChecked, onToggleAll, departments,
         <input type="checkbox" checked={allChecked} onChange={onToggleAll} disabled={!total}
           aria-label={allChecked ? 'Clear the selection' : `Select all ${total}`} />
       </label>
-      <strong>{selected.length ? plural(selected.length, 'selected', 'selected') : `Select hazards (${total})`}</strong>
+      {/* Keyed on the count, so a new count fades in. */}
+      <strong key={selected.length} className="bulk-count">{selected.length ? plural(selected.length, 'selected', 'selected') : `Select hazards (${total})`}</strong>
       <button type="button" className="btn btn-primary btn-sm" disabled={!activeOnes.length} onClick={() => setDialog('resolve')}>
         <Check size={15} aria-hidden="true" />Resolve
       </button>

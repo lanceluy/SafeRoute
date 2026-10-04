@@ -3,6 +3,7 @@ import { useThemeChoice, setThemeChoice, type ThemeChoice } from '../lib/theme';
 import { setHighSeverityNotices, useHighSeverityNotices } from '../lib/prefs';
 import { useSession } from '../state/session';
 import { TeamSection } from '../components/TeamSection';
+import { Segmented } from '../components/Segmented';
 
 const ROLE_LABEL = { MUNICIPAL_OFFICIAL: 'Municipal official', MODERATOR: 'Moderator', USER: 'Commuter' } as const;
 const THEMES: { value: ThemeChoice; label: string }[] = [
@@ -37,11 +38,7 @@ export function AccountPage() {
       <div className="grid-2">
         <section className="card">
           <div className="card-head"><h2>Appearance</h2></div>
-          <div className="segmented" role="group" aria-label="Theme">
-            {THEMES.map((t) => (
-              <button key={t.value} type="button" aria-pressed={theme === t.value} onClick={() => setThemeChoice(t.value)}>{t.label}</button>
-            ))}
-          </div>
+          <Segmented label="Theme" options={THEMES} value={theme} onChange={setThemeChoice} />
           <p className="muted small account-note">Dark mode also dims the map. Printed reports are always light.</p>
         </section>
 

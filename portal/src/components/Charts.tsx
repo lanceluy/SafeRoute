@@ -1,10 +1,13 @@
+import type { CSSProperties } from 'react';
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Rectangle, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  type BarShapeProps,
 } from 'recharts';
 import type { Stats } from '../api/types';
 import { dayLabel } from '../lib/format';
 import { hourLabel, type Weather } from '../lib/weather';
 import { useThemeColors } from '../lib/theme';
+import { useChartReveal } from '../lib/motion';
 
 /**
  * Categorical slots 1 and 2, from --series-1/--series-2: #2a78d6/#eb6834 on light, #3987e5/#d95926
@@ -18,30 +21,47 @@ function useChartColors() {
   };
 }
 
+/** Line and bar animation for a chart's first draw only (see useChartReveal). */
+const draw = (reveal: boolean) => ({ isAnimationActive: reveal, animationDuration: 600, animationEasing: 'ease-out' as const });
+
 /**
- * Reported (blue) and resolved (green) per day as two quiet lines over a faint fill. Not animated:
- * live updates re-render the chart, and a draw-in animation would restart (and get cut off) each time.
+ * Bars draw upward from the baseline, 20 ms apart, on a chart's first draw only. Recharts can't
+ * stagger bars itself, so each bar is wrapped in a `<g>` that CSS animates (`.chart.reveal .bar-grow`).
+ */
+function BarShape({ index, ...rect }: BarShapeProps & { index?: number }) {
+  return (
+    <g className="bar-grow" style={{ '--i': Math.min(index ?? 0, 24) } as CSSProperties}>
+      <Rectangle {...rect} />
+    </g>
+  );
+}
+const bars = () => ({ isAnimationActive: false, shape: (props: BarShapeProps) => <BarShape {...props} /> });
+
+/**
+ * Reported (blue) and resolved (green) per day as two quiet lines over a faint fill. The lines draw
+ * in once when the page opens; live updates re-render the chart without replaying it.
  */
 export function TrendChart({ daily, height = 240 }: { daily: Stats['daily']; height?: number }) {
   const { reported, fixed, grid, surface, axis } = useChartColors();
+  const { ref, seen, reveal } = useChartReveal();
   const data = daily.map((d) => ({ ...d, label: dayLabel(d.date) }));
   const dot = (fill: string) => (data.length <= 14 ? { r: 3, strokeWidth: 2, stroke: surface, fill } : false);
   return (
-    <figure className="chart" aria-label="Hazards reported and resolved per day">
+    <figure ref={ref} className={`chart${reveal ? ' reveal' : ''}`} aria-label="Hazards reported and resolved per day">
       <div className="diverging-legend chart-legend">
         <span><i className="swatch line" style={{ background: reported }} />Reported</span>
         <span><i className="swatch line" style={{ background: fixed }} />Resolved</span>
       </div>
       <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={data} margin={{ top: 8, right: 20, bottom: 0, left: -12 }}>
+        <AreaChart key={seen ? 'seen' : 'unseen'} data={data} margin={{ top: 8, right: 20, bottom: 0, left: -12 }}>
           <CartesianGrid stroke={grid} vertical={false} />
           <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={16} />
           <YAxis allowDecimals={false} {...axis} width={40} />
           <Tooltip content={<DayTooltip />} cursor={{ stroke: axis.stroke, strokeDasharray: '3 3' }} />
           <Area type="monotone" dataKey="reported" name="Reported" stroke={reported} strokeWidth={2} fill={reported} fillOpacity={0.08}
-            dot={dot(reported)} activeDot={{ r: 5, stroke: surface, strokeWidth: 2 }} isAnimationActive={false} />
+            dot={dot(reported)} activeDot={{ r: 5, stroke: surface, strokeWidth: 2 }} {...draw(reveal)} />
           <Area type="monotone" dataKey="resolved" name="Resolved" stroke={fixed} strokeWidth={2} fill={fixed} fillOpacity={0.08}
-            dot={dot(fixed)} activeDot={{ r: 5, stroke: surface, strokeWidth: 2 }} isAnimationActive={false} />
+            dot={dot(fixed)} activeDot={{ r: 5, stroke: surface, strokeWidth: 2 }} {...draw(reveal)} />
         </AreaChart>
       </ResponsiveContainer>
     </figure>
@@ -51,9 +71,10 @@ export function TrendChart({ daily, height = 240 }: { daily: Stats['daily']; hei
 /** Incoming reports per day: a new hazard, or merged into one already on the map. */
 export function IntakeChart({ daily, height = 220 }: { daily: Stats['daily']; height?: number }) {
   const { reported, resolved: merged, grid, surface, axis } = useChartColors();
+  const { ref, reveal } = useChartReveal();
   const data = daily.map((d) => ({ ...d, label: dayLabel(d.date) }));
   return (
-    <figure className="chart" aria-label="Reports per day that created a new hazard or were merged into an existing one">
+    <figure ref={ref} className={`chart${reveal ? ' reveal' : ''}`} aria-label="Reports per day that created a new hazard or were merged into an existing one">
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: -12 }} barCategoryGap="20%">
           <CartesianGrid stroke={grid} vertical={false} />
@@ -62,8 +83,8 @@ export function IntakeChart({ daily, height = 220 }: { daily: Stats['daily']; he
           <Tooltip content={<IntakeTooltip />} cursor={{ fill: grid }} />
           <Legend verticalAlign="top" align="right" height={28} iconType="square" wrapperStyle={{ fontSize: 13 }} />
           {/* A 2 px surface-coloured edge separates the stacked segments. */}
-          <Bar dataKey="newReports" name="New hazard" stackId="in" fill={reported} stroke={surface} strokeWidth={2} />
-          <Bar dataKey="mergedReports" name="Merged into existing" stackId="in" fill={merged} stroke={surface} strokeWidth={2} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="newReports" name="New hazard" stackId="in" fill={reported} stroke={surface} strokeWidth={2} {...bars()} />
+          <Bar dataKey="mergedReports" name="Merged into existing" stackId="in" fill={merged} stroke={surface} strokeWidth={2} radius={[4, 4, 0, 0]} {...bars()} />
         </BarChart>
       </ResponsiveContainer>
     </figure>
@@ -89,9 +110,10 @@ export function ColumnChart({ rows, height = 220, label, unit }: {
   rows: { key: string; label: string; value: number }[]; height?: number; label: string; unit: string;
 }) {
   const { reported: fill, grid, axis } = useChartColors();
+  const { ref, reveal } = useChartReveal();
   if (rows.every((r) => r.value === 0)) return <p className="muted chart-empty">No data yet</p>;
   return (
-    <figure className="chart" aria-label={label}>
+    <figure ref={ref} className={`chart${reveal ? ' reveal' : ''}`} aria-label={label}>
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={rows} margin={{ top: 16, right: 16, bottom: 0, left: -12 }} barCategoryGap={2}>
           <CartesianGrid stroke={grid} vertical={false} />
@@ -100,7 +122,7 @@ export function ColumnChart({ rows, height = 220, label, unit }: {
           <Tooltip cursor={{ fill: grid }} content={({ active, payload }) => (active && payload?.length
             ? <div className="chart-tip"><strong>{payload[0].payload.label}</strong><span>{payload[0].payload.value} {unit}</span></div>
             : null)} />
-          <Bar dataKey="value" fill={fill} radius={[4, 4, 0, 0]} maxBarSize={44} label={{ position: 'top', fontSize: 12, fill: axis.stroke }} />
+          <Bar dataKey="value" fill={fill} radius={[4, 4, 0, 0]} maxBarSize={44} label={{ position: 'top', fontSize: 12, fill: axis.stroke }} {...bars()} />
         </BarChart>
       </ResponsiveContainer>
     </figure>
@@ -115,8 +137,9 @@ export function FrequencyChart({ rows, height = 240, label }: {
   rows: { key: string; label: string; range: string; hazards: number; reports: number }[]; height?: number; label: string;
 }) {
   const { reported: fill, grid, axis } = useChartColors();
+  const { ref, reveal } = useChartReveal();
   return (
-    <figure className="chart" aria-label={label}>
+    <figure ref={ref} className={`chart${reveal ? ' reveal' : ''}`} aria-label={label}>
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={rows} margin={{ top: 16, right: 16, bottom: 0, left: -12 }} barCategoryGap={2}>
           <CartesianGrid stroke={grid} vertical={false} />
@@ -133,7 +156,7 @@ export function FrequencyChart({ rows, height = 240, label }: {
               </div>
             );
           }} />
-          <Bar dataKey="hazards" fill={fill} radius={[4, 4, 0, 0]} maxBarSize={36} />
+          <Bar dataKey="hazards" fill={fill} radius={[4, 4, 0, 0]} maxBarSize={36} {...bars()} />
         </BarChart>
       </ResponsiveContainer>
     </figure>
@@ -162,9 +185,10 @@ function DayTooltip({ active, payload, only }: {
 /** Rain per hour for the next 24 hours: one measure, one hue; chance of rain rides in the tooltip. */
 export function RainChart({ hourly, height = 200 }: { hourly: Weather['hourly']; height?: number }) {
   const { reported: fill, grid, axis } = useChartColors();
+  const { ref, reveal } = useChartReveal();
   const data = hourly.map((h) => ({ ...h, label: hourLabel(h.time) }));
   return (
-    <figure className="chart" aria-label="Expected rain per hour for the next 24 hours, in millimetres">
+    <figure ref={ref} className={`chart${reveal ? ' reveal' : ''}`} aria-label="Expected rain per hour for the next 24 hours, in millimetres">
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: -12 }} barCategoryGap={2}>
           <CartesianGrid stroke={grid} vertical={false} />
@@ -172,7 +196,7 @@ export function RainChart({ hourly, height = 200 }: { hourly: Weather['hourly'];
           {/* A dry day still gets a readable 0–2 mm scale instead of a flat, unlabeled axis. */}
           <YAxis {...axis} width={56} unit=" mm" domain={[0, (max: number) => Math.max(2, Math.ceil(max))]} allowDecimals={false} />
           <Tooltip content={<RainTooltip />} cursor={{ fill: grid }} />
-          <Bar dataKey="precipitation" name="Rain" fill={fill} radius={[4, 4, 0, 0]} minPointSize={0} />
+          <Bar dataKey="precipitation" name="Rain" fill={fill} radius={[4, 4, 0, 0]} minPointSize={0} {...bars()} />
         </BarChart>
       </ResponsiveContainer>
     </figure>
@@ -201,10 +225,11 @@ export function BarList({ rows, format = (n) => n.toLocaleString(), onSelect, em
   onSelect?: (key: string) => void;
   empty?: string;
 }) {
+  const { ref, reveal } = useChartReveal();
   const max = Math.max(1, ...rows.map((r) => r.value));
   if (!rows.length || rows.every((r) => r.value === 0)) return <p className="muted chart-empty">{empty}</p>;
   return (
-    <ul className="bar-list">
+    <ul ref={ref} className={`bar-list${reveal ? ' reveal' : ''}`}>
       {rows.map((r) => {
         const content = (
           <>
@@ -232,10 +257,11 @@ export function DivergingBars({ rows, leftLabel, rightLabel, empty = 'No data ye
   rows: { key: string; label: string; left: number; right: number }[];
   leftLabel: string; rightLabel: string; empty?: string;
 }) {
+  const { ref, reveal } = useChartReveal();
   const max = Math.max(1, ...rows.flatMap((r) => [r.left, r.right]));
   if (!rows.length || rows.every((r) => r.left === 0 && r.right === 0)) return <p className="muted chart-empty">{empty}</p>;
   return (
-    <div className="diverging">
+    <div ref={ref} className={`diverging${reveal ? ' reveal' : ''}`}>
       <div className="diverging-legend">
         <span><i className="swatch" style={{ background: 'var(--series-2)' }} />{leftLabel}</span>
         <span><i className="swatch" style={{ background: 'var(--series-1)' }} />{rightLabel}</span>

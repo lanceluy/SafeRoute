@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
+import { AnimatePresence, motion } from 'motion/react';
 import { Bell, BellOff, FileSearch, LogOut, MapPin, Menu as MenuIcon, Search, Settings } from 'lucide-react';
 import { logout } from '../api/client';
 import type { Session } from '../api/types';
 import { ago } from '../lib/format';
+import { POPOVER, useChangeFlash } from '../lib/motion';
 import { TYPE_LABEL } from '../lib/hazards';
 import { markNoticesRead, useNotices } from '../state/notices';
 import { useBarangays } from '../state/places';
@@ -111,16 +113,18 @@ function GlobalSearch({ compact }: { compact: boolean }) {
         aria-activedescendant={showList ? `gs-${options[active]?.key}` : undefined}
         onChange={(e) => { setQ(e.target.value); setActive(0); setOpen(true); }} onFocus={() => setOpen(true)} onKeyDown={onKeyDown} />
       {!q && <kbd aria-hidden="true">⌘K</kbd>}
+      <AnimatePresence>
       {showList && (
-        <div className="search-suggest" id="global-search-list" role="listbox" aria-label="Suggestions">
+        <motion.div key="suggest" className="search-suggest" id="global-search-list" role="listbox" aria-label="Suggestions" {...POPOVER}>
           {options.map((o, i) => (
             <button key={o.key} id={`gs-${o.key}`} type="button" role="option" aria-selected={i === active} tabIndex={-1}
               className={`search-option${i === active ? ' active' : ''}`} onMouseEnter={() => setActive(i)} onClick={() => go(o)}>
               {o.icon}<span>{o.label}</span><em>{o.hint}</em>
             </button>
           ))}
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -133,16 +137,20 @@ function NotificationBell() {
   const ref = useRef<HTMLDivElement>(null);
   useDismiss(open, () => setOpen(false), ref);
   const toggle = () => { setOpen((o) => !o); markNoticesRead(); };
+  // A new high-severity report rings the bell once and pops the badge; neither loops.
+  const ring = useChangeFlash(unread, 400);
+  const rang = ring?.dir === 'up';
 
   return (
     <div className="bell" ref={ref}>
       <button type="button" className="icon-btn bell-btn" aria-haspopup="true" aria-expanded={open} onClick={toggle}
         aria-label={unread ? `Notifications, ${unread} new` : 'Notifications'}>
-        <Bell aria-hidden="true" size={18} />
-        {unread > 0 && <span className="bell-dot" aria-hidden="true" />}
+        <Bell aria-hidden="true" size={18} key={rang ? ring.n : 0} className={rang ? 'bell-ring' : undefined} />
+        {unread > 0 && <span className="bell-dot" aria-hidden="true" key={rang ? ring.n : 0} data-pop={rang || undefined} />}
       </button>
+      <AnimatePresence>
       {open && (
-        <div className="popover" role="dialog" aria-label="Notifications">
+        <motion.div key="notices" className="popover" role="dialog" aria-label="Notifications" {...POPOVER}>
           <div className="popover-head">
             <strong>New high-severity reports</strong>
             <Link to="/moderation?tab=new" className="btn-link" onClick={() => setOpen(false)}>View all</Link>
@@ -168,8 +176,9 @@ function NotificationBell() {
               ))}
             </ul>
           )}
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -190,8 +199,9 @@ function AccountMenu({ session }: { session: Session }) {
         </span>
         <span aria-hidden="true" className="caret"><Chevron up={open} /></span>
       </button>
+      <AnimatePresence>
       {open && (
-        <div className="popover account-menu">
+        <motion.div key="account" className="popover account-menu" {...POPOVER}>
           <div className="account-menu-head">
             <strong>{session.displayName}</strong>
             <span>{session.email}</span>
@@ -199,8 +209,9 @@ function AccountMenu({ session }: { session: Session }) {
           </div>
           <Link to="/account" className="menu-item" onClick={() => setOpen(false)}><Settings aria-hidden="true" />Settings</Link>
           <button type="button" className="menu-item" onClick={logout}><LogOut aria-hidden="true" />Sign out</button>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   );
 }

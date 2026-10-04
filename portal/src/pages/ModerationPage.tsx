@@ -12,6 +12,10 @@ import { useShortcuts } from '../lib/shortcuts';
 import { useBarangays } from '../state/places';
 import { useQueue } from '../state/useQueue';
 import { useStats } from '../state/useStats';
+import { AnimatePresence, motion } from 'motion/react';
+
+/** The drawer's 440 px plus the 16 px gap before it. */
+const DRAWER_SLOT = 456;
 
 const OPEN = { view: 'active' as const };
 const BANNER_KEY = 'saferoute.moderation.overdueBanner';
@@ -61,10 +65,23 @@ export function ModerationPage() {
             onSelect={select} searchRef={searchRef} page="moderation"
             onShowOnMap={(h) => navigate(`/map?hazard=${h.id}&tab=active`)} />
         </section>
-        {selectedId && (
-          <HazardDrawer key={selectedId} hazardId={selectedId} barangays={barangays} onClose={() => select(null)} onChanged={c.queue.reload}
-            onShowOnMap={() => navigate(`/map?hazard=${selectedId}&tab=active`)} />
-        )}
+        {/* Opening a report: the queue narrows to split width, and the drawer slides in 40 ms later.
+            Closing reverses it. Switching reports crossfades the drawer in place. */}
+        <AnimatePresence initial={false}>
+          {selectedId && (
+            <motion.div key="drawer" className="drawer-slot" initial={{ width: 0 }} animate={{ width: DRAWER_SLOT }}
+              exit={{ width: 0, transition: { duration: 0.2 } }} transition={{ duration: 0.24 }}>
+              <AnimatePresence initial={false} mode="popLayout">
+                <motion.div key={selectedId} className="drawer-motion"
+                  initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0, transition: { duration: 0.22, delay: 0.04 } }}
+                  exit={{ opacity: 0, x: 16, transition: { duration: 0.14 } }}>
+                  <HazardDrawer hazardId={selectedId} barangays={barangays} onClose={() => select(null)} onChanged={c.queue.reload}
+                    onShowOnMap={() => navigate(`/map?hazard=${selectedId}&tab=active`)} />
+                </motion.div>
+              </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

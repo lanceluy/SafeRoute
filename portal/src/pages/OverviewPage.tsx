@@ -1,12 +1,15 @@
 import { useMemo, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { motion } from 'motion/react';
 import { ArrowRight, CheckCircle2, CircleAlert, FilePlus2, Map as MapIcon, MessageSquareWarning, ScanSearch, Timer, TriangleAlert } from 'lucide-react';
 import { BarList, TrendChart } from '../components/Charts';
+import { CountUp } from '../components/CountUp';
 import { LiveStatus } from '../components/LiveStatus';
 import { ErrorState } from '../components/States';
 import { Card, StatCard, percentChange } from '../components/ui';
 import { areaStats } from '../lib/areas';
 import { duration, greeting, timeOfDay } from '../lib/format';
+import { useChartReveal } from '../lib/motion';
 import { TYPE_LABEL } from '../lib/hazards';
 import { useSession } from '../state/session';
 import { useBarangays } from '../state/places';
@@ -71,13 +74,13 @@ export function OverviewPage() {
         <div className="hero-body">
           <Link to="/map?tab=active" className="hero-big">
             <span className="hero-big-value">
-              {loading ? <span className="skeleton" style={{ width: 96, height: 56, display: 'inline-block' }} /> : n(stats.totals.active)}
+              {loading ? <span className="skeleton" style={{ width: 96, height: 56, display: 'inline-block' }} /> : <CountUp value={stats.totals.active} fromZero ms={400} goodWhen="down" />}
             </span>
             <span className="hero-big-label">Active hazards on the map<ArrowRight size={15} aria-hidden="true" /></span>
           </Link>
           <div className="hero-tiles">
             <HeroTile to="/map?tab=high" tone="high" icon={<TriangleAlert aria-hidden="true" />} label="High severity"
-              value={stats?.totals.highSeverity} loading={loading} foot="Handle first" />
+              value={stats?.totals.highSeverity} loading={loading} foot="Handle first" severity />
             <HeroTile to="/moderation?tab=attention" tone="review" icon={<ScanSearch aria-hidden="true" />} label="Needs review"
               value={stats?.totals.needsReview} loading={loading} foot="Waiting on staff" />
             <HeroTile to="/moderation?tab=contested" tone="contested" icon={<MessageSquareWarning aria-hidden="true" />} label="Contested"
@@ -88,7 +91,7 @@ export function OverviewPage() {
 
       <div className="stat-row">
         <StatCard label="Resolved this week" icon={<CheckCircle2 aria-hidden="true" />} to="/map?tab=closed"
-          value={n(stats?.totals.resolvedInRange)} loading={loading} spark={daily.map((d) => d.resolved)}
+          value={stats ? <CountUp value={stats.totals.resolvedInRange} goodWhen="up" /> : n(undefined)} loading={loading} spark={daily.map((d) => d.resolved)}
           foot={stats ? <>of {n(stats.totals.reportedInRange)} reported</> : null} />
         <StatCard label="Average time to resolve" icon={<Timer aria-hidden="true" />} to="/analytics"
           value={avgValue} unit={avgUnit} loading={loading}
@@ -96,7 +99,7 @@ export function OverviewPage() {
           foot={!stats ? null : avg == null ? 'Nothing resolved this week'
             : stats.resolution.previousAverageHours == null ? 'No earlier week to compare' : null} />
         <StatCard label="Reports today" icon={<FilePlus2 aria-hidden="true" />} to="/moderation?tab=new"
-          value={n(today)} loading={loading} spark={daily.map((d) => d.reported)}
+          value={<CountUp value={today} />} loading={loading} spark={daily.map((d) => d.reported)}
           delta={percentChange(today, yesterday)} goodWhen="down" deltaNote="vs yesterday" />
       </div>
 
@@ -125,14 +128,17 @@ export function OverviewPage() {
   );
 }
 
-function HeroTile({ to, tone, icon, label, value, loading, foot }: {
+function HeroTile({ to, tone, icon, label, value, loading, foot, severity = false }: {
   to: string; tone: string; icon: ReactNode; label: string; value?: number; loading: boolean; foot: string;
+  /** A rise here is bad news, so a live increase may tint red. */
+  severity?: boolean;
 }) {
   return (
     <Link to={to} className="hero-tile">
       <span className="hero-tile-label"><span className={`hero-tile-icon ${tone}`}>{icon}</span>{label}</span>
       <span className="hero-tile-value">
-        {loading ? <span className="skeleton" style={{ width: 40, height: 28, display: 'inline-block' }} /> : (value ?? 0).toLocaleString()}
+        {loading ? <span className="skeleton" style={{ width: 40, height: 28, display: 'inline-block' }} />
+          : <CountUp value={value ?? 0} fromZero ms={400} goodWhen="down" tone={severity ? 'severity' : 'neutral'} />}
       </span>
       <span className="hero-tile-foot">{foot}<ArrowRight size={14} aria-hidden="true" /></span>
     </Link>
@@ -141,11 +147,13 @@ function HeroTile({ to, tone, icon, label, value, loading, foot }: {
 
 /** Barangays as quiet rows: name, a thin bar, and how many are high severity. */
 function AreaList({ areas, onSelect }: { areas: ReturnType<typeof areaStats>; onSelect: (name: string) => void }) {
+  const { ref, reveal } = useChartReveal();
   const max = Math.max(...areas.map((a) => a.active), 1);
   return (
-    <ol className="area-list">
+    <ol ref={ref} className={`area-list${reveal ? ' reveal' : ''}`}>
       {areas.map((a, i) => (
-        <li key={a.name}>
+        // A re-sorted barangay slides to its new rank so you can follow it.
+        <motion.li key={a.name} layout="position" transition={{ layout: { duration: 0.22 } }}>
           <button type="button" className="area-row" onClick={() => onSelect(a.name)}
             aria-label={`${a.name}: ${a.active} active, ${a.high} high severity. Show on map`}>
             <span className="area-rank">{i + 1}</span>
@@ -155,7 +163,7 @@ function AreaList({ areas, onSelect }: { areas: ReturnType<typeof areaStats>; on
             <span className={`area-high${a.high ? '' : ' none'}`}>{a.high ? `${a.high} high` : 'No high'}</span>
             <ArrowRight size={15} aria-hidden="true" className="area-go" />
           </button>
-        </li>
+        </motion.li>
       ))}
     </ol>
   );

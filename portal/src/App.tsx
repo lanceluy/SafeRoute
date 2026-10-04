@@ -1,5 +1,6 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router';
+import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import type { Session } from './api/types';
 import { LiveNotices } from './components/LiveNotices';
 import { Sidebar } from './components/Sidebar';
@@ -8,6 +9,7 @@ import { LoginPage } from './pages/LoginPage';
 import { LiveProvider } from './state/live';
 import { useSession } from './state/session';
 import { ToastProvider } from './state/toast';
+import { EASE, PageReveal, T, useScrollGate } from './lib/motion';
 import { useStats } from './state/useStats';
 
 // Pages load on demand: the map (Leaflet) and charts (Recharts) are the heavy parts.
@@ -23,15 +25,18 @@ const HelpPage = lazy(() => import('./pages/HelpPage').then((m) => ({ default: m
 export function App() {
   const session = useSession();
   return (
-    <ToastProvider>
-      {!session ? <LoginPage /> : (
-        <LiveProvider>
-          <BrowserRouter>
-            <Shell session={session} />
-          </BrowserRouter>
-        </LiveProvider>
-      )}
-    </ToastProvider>
+    // "user": under reduced motion, Motion keeps fades and drops movement.
+    <MotionConfig reducedMotion="user" transition={{ ease: EASE, duration: T.std }}>
+      <ToastProvider>
+        {!session ? <LoginPage /> : (
+          <LiveProvider>
+            <BrowserRouter>
+              <Shell session={session} />
+            </BrowserRouter>
+          </LiveProvider>
+        )}
+      </ToastProvider>
+    </MotionConfig>
   );
 }
 
@@ -60,24 +65,50 @@ function Shell({ session }: { session: Session }) {
   });
   const [navOpen, setNavOpen] = useState(false);
   const { stats } = useStats();
+  const location = useLocation();
+  const main = useRef<HTMLElement>(null);
+  // A new page starts at the top, without animation; smooth scrolling is for things the user asked for.
+  useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [location.pathname]);
+  // Blocks that start below the fold animate when scrolled to, not on load.
+  useScrollGate(main, location.pathname);
 
   const rail = !phone && (!wide || pinnedRail);
-  const toggleRail = () => setPinnedRail((r) => {
-    try { localStorage.setItem(RAIL_KEY, r ? '0' : '1'); } catch { /* not remembered */ }
-    return !r;
-  });
+  // Collapsing fades the labels out first, then narrows; expanding widens, then fades them in.
+  const [railMotion, setRailMotion] = useState<'' | 'rail-closing' | 'rail-opening'>('');
+  const railTimer = useRef(0);
+  const toggleRail = () => {
+    const collapse = !pinnedRail;
+    const commit = () => setPinnedRail(() => {
+      try { localStorage.setItem(RAIL_KEY, collapse ? '1' : '0'); } catch { /* not remembered */ }
+      return collapse;
+    });
+    window.clearTimeout(railTimer.current);
+    if (collapse) {
+      setRailMotion('rail-closing');
+      railTimer.current = window.setTimeout(() => { commit(); setRailMotion(''); }, 100);
+    } else {
+      commit();
+      setRailMotion('rail-opening');
+      railTimer.current = window.setTimeout(() => setRailMotion(''), 450);
+    }
+  };
 
   return (
-    <div className={`app${rail ? ' rail' : ''}${navOpen ? ' nav-open' : ''}`}>
+    <div className={`app${rail ? ' rail' : ''}${railMotion ? ` ${railMotion}` : ''}${navOpen ? ' nav-open' : ''}`}>
       <Sidebar rail={rail} canToggle={wide} onToggle={toggleRail} onNavigate={() => setNavOpen(false)}
         needsReview={stats?.totals.needsReview} />
       {navOpen && <div className="sidebar-scrim" onClick={() => setNavOpen(false)} aria-hidden="true" />}
       <div className="app-column">
         <TopBar session={session} onMenu={() => setNavOpen(true)} />
         <LiveNotices />
-        <main className="app-main">
+        <main className="app-main" ref={main}>
+          {/* The old page fades out briefly, then the new one rises in (CSS, header first). The
+              sidebar and top bar stay put as anchors. */}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div key={location.pathname} className="route" exit={{ opacity: 0, transition: { duration: 0.1 } }}>
+          <PageReveal>
           <Suspense fallback={<div className="page-loading" role="status"><span className="spinner" aria-hidden="true" />Loading…</div>}>
-            <Routes>
+            <Routes location={location}>
               <Route path="/" element={<OverviewPage />} />
               <Route path="/map" element={<MapPage />} />
               <Route path="/moderation" element={<ModerationPage />} />
@@ -89,6 +120,9 @@ function Shell({ session }: { session: Session }) {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
+          </PageReveal>
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
     </div>

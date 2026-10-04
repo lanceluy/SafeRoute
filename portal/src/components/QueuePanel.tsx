@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { useSearchParams } from 'react-router';
 import { MapPin } from 'lucide-react';
 import { UNASSIGNED, type Hazard, type HazardType, type QueueSort, type Stats } from '../api/types';
@@ -14,6 +15,7 @@ import { BulkBar } from './BulkBar';
 import { FilterBar, NO_FILTERS, activeFilterCount, type Filters } from './FilterBar';
 import { HazardRow } from './HazardRow';
 import { Chevron } from './Chevron';
+import { TabIndicator } from './Segmented';
 import { Menu } from './Menu';
 import { EmptyState, ErrorState, SkeletonRows } from './States';
 import { QueueMoreMenu } from './QueueMoreMenu';
@@ -171,6 +173,15 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
   // An empty tab points at another one that still has work, inbox first.
   const counts = (t: QueueTab) => tabCount(t, stats?.queueCounts) ?? 0;
   const primaryTabs = tabs.filter((t) => !t.more);
+  const tabsId = useId();
+  // A new key each time a (re)load finishes, so results fade in after a tab or filter change.
+  const [loads, setLoads] = useState(0);
+  const [wasLoading, setWasLoading] = useState(queue.loading);
+  if (wasLoading !== queue.loading) {
+    setWasLoading(queue.loading);
+    if (!queue.loading) setLoads((n) => n + 1);
+  }
+  const phaseKey = queue.loading ? 'loading' : queue.error ? 'error' : `results-${loads}`;
   const noun = page === 'moderation' ? 'report' : 'hazard';
   const term = c.search.trim().toLowerCase();
   const places = page === 'map' && term.length >= 2
@@ -198,13 +209,15 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
             <button key={t.key} type="button" role="tab" aria-selected={c.tab.key === t.key}
               className={`tab${c.tab.key === t.key ? ' active' : ''}`} onClick={() => c.setTab(t.key)}>
               {t.label}
-              {count !== undefined && <span className={`tab-count${urgent ? ' urgent' : ''}${count === 0 ? ' zero' : ''}`}>{count}</span>}
+              {/* Keyed on the value: a new count fades in rather than the label jumping. */}
+              {count !== undefined && <span key={count} className={`tab-count${urgent ? ' urgent' : ''}${count === 0 ? ' zero' : ''}`}>{count}</span>}
+              {c.tab.key === t.key && <TabIndicator id={tabsId} />}
             </button>
           );
         })}
         {moreTabs.length > 0 && (
           <Menu label="More queues" align="left"
-            trigger={<span className={`tab tab-more${c.tab.more ? ' active' : ''}`}>{c.tab.more ? c.tab.label : 'More'}<Chevron /></span>}
+            trigger={<span className={`tab tab-more${c.tab.more ? ' active' : ''}`}>{c.tab.more ? c.tab.label : 'More'}<Chevron />{c.tab.more && <TabIndicator id={tabsId} />}</span>}
             items={moreTabs.map((t) => ({
               label: t.label, checked: c.tab.key === t.key, radio: true,
               meta: tabCount(t, stats?.queueCounts), onSelect: () => c.setTab(t.key),
@@ -223,12 +236,17 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
             hazards={shown} title={listTitle} filters={exportFilters} barangays={barangays} departments={departments} stats={stats}
             onSelectMode={() => setSelectMode(true)} />
         } />
-      {selectMode && (
-        <BulkBar selected={selectedHazards} total={shown.length} allChecked={allChecked}
-          onToggleAll={() => setChecked(allChecked ? new Set() : new Set(shown.map((h) => h.id)))}
-          departments={departments} barangays={barangays} stats={stats} exportable={page === 'moderation'}
-          onCancel={endSelect} onDone={() => { setChecked(new Set()); window.setTimeout(queue.reload, 900); }} />
-      )}
+      <AnimatePresence initial={false}>
+        {selectMode && (
+          <motion.div key="bulk" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { duration: 0.18 } }}
+            exit={{ opacity: 0, y: 8, transition: { duration: 0.14 } }}>
+            <BulkBar selected={selectedHazards} total={shown.length} allChecked={allChecked}
+              onToggleAll={() => setChecked(allChecked ? new Set() : new Set(shown.map((h) => h.id)))}
+              departments={departments} barangays={barangays} stats={stats} exportable={page === 'moderation'}
+              onCancel={endSelect} onDone={() => { setChecked(new Set()); window.setTimeout(queue.reload, 900); }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* On the map, a search that names a barangay offers to show that place. */}
       {places.length > 0 && (
         <div className="place-results" aria-label="Places">
@@ -260,6 +278,12 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
         {scrolled && newShown.length > 0 && (
           <button type="button" className="new-reports-pill" onClick={jumpToNew}>↑ {plural(newShown.length, 'new report')}</button>
         )}
+        {/* Tab and filter changes: the old results fade out, then the skeleton or the new results
+            rise in. Live reloads keep the same key, so they never fade the whole list. */}
+        <AnimatePresence mode="wait" initial={false}>
+        <motion.div key={phaseKey} className="queue-phase"
+          initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0, transition: { duration: 0.18 } }}
+          exit={{ opacity: 0, transition: { duration: 0.08 } }}>
         {queue.loading && <SkeletonRows />}
         {!queue.loading && queue.error && (
           <ErrorState title="We couldn’t load hazard reports." message={queue.error} onRetry={queue.reload} />
@@ -280,14 +304,19 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
         )}
         {!queue.loading && !queue.error && shown.length > 0 && (
           <ul className="hazard-list">
+            {/* Rows that leave the queue (resolved, reassigned) collapse; re-sorted rows slide. */}
+            <AnimatePresence initial={false}>
             {ordered.map((h) => (
               <HazardRow key={h.id} hazard={h} selected={h.id === selectedId} isNew={queue.newIds.has(h.id)}
                 barangays={barangays} onSelect={onSelect}
                 checkable={selectMode} checked={checked.has(h.id)} onCheck={toggleChecked}
                 tabKey={c.tab.key} chipKeys={c.chips} now={now} onResolve={setResolving} onShowOnMap={onShowOnMap} />
             ))}
+            </AnimatePresence>
           </ul>
         )}
+        </motion.div>
+        </AnimatePresence>
       </div>
       {resolving && (
         <ActionDialog action="resolve" hazard={resolving} onClose={() => setResolving(null)}

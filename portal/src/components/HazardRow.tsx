@@ -1,7 +1,9 @@
-import { memo } from 'react';
+import { forwardRef, memo } from 'react';
+import { motion } from 'motion/react';
 import { ChevronRight, MapPin, MoreHorizontal, TriangleAlert } from 'lucide-react';
 import type { Hazard } from '../api/types';
 import { ago, plural, shortDate } from '../lib/format';
+import { useChangeFlash } from '../lib/motion';
 import type { Barangay } from '../lib/geo';
 import { SEVERITY_LABEL, TYPE_LABEL, isActive, shortId } from '../lib/hazards';
 import { STALE_DAYS, ageDays, isStale, needsAction, queueReason, shortAge } from '../lib/queue';
@@ -9,6 +11,18 @@ import { usePlace } from '../state/places';
 import { useToast } from '../state/toast';
 import { StatusBadge, TypeIcon } from './Badges';
 import { Menu } from './Menu';
+
+interface HazardRowProps {
+  hazard: Hazard; selected: boolean; isNew?: boolean; barangays: Barangay[];
+  onSelect: (h: Hazard) => void;
+  /** Select mode: a checkbox for bulk actions. */
+  checkable?: boolean; checked?: boolean; onCheck?: (h: Hazard) => void;
+  /** The queue tab and "Filter by" chips, for the "why it's here" line. */
+  tabKey: string; chipKeys: string[];
+  now: number;
+  /** Quick actions, revealed on hover or focus. */
+  onResolve?: (h: Hazard) => void; onShowOnMap?: (h: Hazard) => void;
+}
 
 /**
  * One hazard in a queue: no inputs, no destructive buttons (Remove stays in the detail drawer).
@@ -19,20 +33,12 @@ import { Menu } from './Menu';
  * New, Archived, merged reports); severity as the colour of the type icon; icon + text for verification; plain text for
  * place, department and age. A row needing action gets a red left bar and nothing else red.
  */
-export const HazardRow = memo(function HazardRow({
+export const HazardRow = memo(forwardRef<HTMLLIElement, HazardRowProps>(function HazardRow({
   hazard, selected, isNew, barangays, onSelect, checkable, checked, onCheck, tabKey, chipKeys, now, onResolve, onShowOnMap,
-}: {
-  hazard: Hazard; selected: boolean; isNew?: boolean; barangays: Barangay[];
-  onSelect: (h: Hazard) => void;
-  /** Select mode: a checkbox for bulk actions. */
-  checkable?: boolean; checked?: boolean; onCheck?: (h: Hazard) => void;
-  /** The queue tab and "Filter by" chips, for the "why it's here" line. */
-  tabKey: string; chipKeys: string[];
-  now: number;
-  /** Quick actions, revealed on hover or focus. */
-  onResolve?: (h: Hazard) => void; onShowOnMap?: (h: Hazard) => void;
-}) {
+}, ref) {
   const toast = useToast();
+  // After a review action, the row's background flashes once so the change is easy to spot.
+  const changed = useChangeFlash(`${hazard.status}|${hazard.municipalPriority}|${hazard.assignedDepartment}|${hazard.severity}`, 1100);
   const place = usePlace(hazard.latitude, hazard.longitude, barangays);
   const active = isActive(hazard.status);
   const reason = queueReason(tabKey, chipKeys, hazard, now);
@@ -70,13 +76,16 @@ export const HazardRow = memo(function HazardRow({
   };
 
   return (
-    <li className={`hazard-item${checkable ? ' checkable' : ''}`}>
+    // Layout: a re-sorted row slides to its new place. Exit: a row that leaves the queue collapses.
+    <motion.li ref={ref} layout="position" className={`hazard-item${checkable ? ' checkable' : ''}`}
+      transition={{ layout: { duration: 0.22 } }}
+      exit={{ opacity: 0, height: 0, overflow: 'hidden', transition: { duration: 0.18 } }}>
       {checkable && (
         <input type="checkbox" className="row-check" checked={!!checked} onChange={() => onCheck?.(hazard)}
           aria-label={`Select ${title} ${shortId(hazard.id)}`} />
       )}
       <button type="button" id={`row-${hazard.id}`}
-        className={`hazard-row${selected ? ' selected' : ''}${action || urgent ? ' needs-action' : ''}${isNew ? ' is-new' : ''}`}
+        className={`hazard-row${selected ? ' selected' : ''}${action || urgent ? ' needs-action' : ''}${isNew ? ' is-new' : ''}${changed ? ' just-changed' : ''}`}
         aria-current={selected ? 'true' : undefined} onClick={() => onSelect(hazard)}>
         <span className={`row-icon sev-fill-${hazard.severity.toLowerCase()}`} title={`${SEVERITY_LABEL[hazard.severity]} severity`}>
           <TypeIcon type={hazard.type} size={17} />
@@ -135,6 +144,6 @@ export const HazardRow = memo(function HazardRow({
             ]} />
         </span>
       )}
-    </li>
+    </motion.li>
   );
-});
+}));

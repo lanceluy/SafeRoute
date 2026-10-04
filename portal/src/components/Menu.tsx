@@ -1,5 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'motion/react';
+import { POPOVER } from '../lib/motion';
 import { Check } from 'lucide-react';
 
 export interface MenuItem {
@@ -106,8 +108,10 @@ export function Menu({ label, trigger, items, align = 'right', direction = 'down
         aria-label={label} onClick={() => setOpen((o) => !o)}>
         {trigger}
       </button>
-      {open && createPortal(
-        <div className="menu-list" role="menu" id={id} ref={listRef} onKeyDown={moveFocus}>
+      {createPortal(
+        <AnimatePresence>
+        {open && (
+        <motion.div key="list" className="menu-list" role="menu" id={id} ref={listRef} onKeyDown={moveFocus} {...POPOVER}>
           {shown.map((item) => isHeading(item) ? (
             <div key={`h-${item.heading}`} className="menu-heading" role="presentation">{item.heading}</div>
           ) : (
@@ -133,7 +137,9 @@ export function Menu({ label, trigger, items, align = 'right', direction = 'down
             )
           ))}
           {footer}
-        </div>,
+        </motion.div>
+        )}
+        </AnimatePresence>,
         document.body,
       )}
     </div>

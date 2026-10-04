@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router';
 import { ArrowRight, CircleCheck, RefreshCw, TriangleAlert } from 'lucide-react';
 import { BarList, RainChart } from '../components/Charts';
@@ -15,6 +15,8 @@ import { useBarangays } from '../state/places';
 import { useStats } from '../state/useStats';
 import { useRadar, useRainHistory, useWeather, type Polled } from '../state/useWeather';
 import type { Barangay } from '../lib/geo';
+import { Segmented } from '../components/Segmented';
+import { CountUp } from '../components/CountUp';
 
 type RainMapMode = 'live' | RainWindow;
 const MODES: { value: RainMapMode; label: string; span?: string }[] = [
@@ -56,13 +58,14 @@ export function WeatherPage() {
           {' '}· <a href={WEATHER_SOURCE_URL} target="_blank" rel="noreferrer">Open-Meteo</a>
         </>}
         actions={<button type="button" className="btn btn-secondary" onClick={reload} disabled={loading}>
-          <RefreshCw size={15} aria-hidden="true" />{loading ? 'Refreshing…' : 'Refresh'}
+          <RefreshCw size={15} aria-hidden="true" className={loading ? 'spinning' : undefined} />{loading ? 'Refreshing…' : 'Refresh'}
         </button>} />
 
       {!weather && error && <ErrorState title="We couldn’t load the weather." message={error} onRetry={reload} />}
 
       {update && (
-        <div className={`weather-update${update.watch ? ' watch' : ''}`} role="status">
+        // Keyed on the level: becoming a watch replays the one-off tint, a new update slides in.
+        <div key={update.watch ? 'watch' : 'update'} className={`weather-update${update.watch ? ' watch' : ''}`} role="status">
           <span className="weather-update-tag">{update.watch ? 'Weather watch' : 'Live update'}</span>
           <span className="weather-update-text">{update.text}</span>
           {update.watch && flooding > 0
@@ -83,7 +86,7 @@ export function WeatherPage() {
             {weather.hourly.every((h) => h.precipitation === 0) && <p className="muted chart-empty">No rain expected in the next 24 hours.</p>}
             <ol className="hour-cards" aria-label="Hourly forecast">
               {weather.hourly.map((h, i) => (
-                <li key={h.time} className={i === 0 ? 'now' : undefined}>
+                <li key={h.time} className={i === 0 ? 'now' : undefined} style={{ '--i': Math.min(i, 12) } as CSSProperties}>
                   <span className="hour-time">{i === 0 ? 'Now' : hourLabel(h.time)}</span>
                   <span className="weather-icon" title={conditionLabel(h.code)}
                     dangerouslySetInnerHTML={{ __html: conditionIcon(h.code, isDaytime(h.time), 22) }} />
@@ -108,7 +111,7 @@ export function WeatherPage() {
         <Card title="7-day forecast" subtitle="High and low, rain and chance of rain">
           <ol className="day-cells">
             {weather.daily.map((d, i) => (
-              <li key={d.date} className={i === 0 ? 'today' : undefined} title={conditionLabel(d.code)}>
+              <li key={d.date} className={i === 0 ? 'today' : undefined} title={conditionLabel(d.code)} style={{ '--i': i } as CSSProperties}>
                 <span className="day-name">{dayName(d.date, i)}</span>
                 <span className="weather-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: conditionIcon(d.code, true, 28) }} />
                 <span className="sr-only">{conditionLabel(d.code)}</span>
@@ -133,9 +136,9 @@ function Conditions({ weather, flood }: { weather: Weather; flood?: Risk }) {
     <aside className="conditions" aria-label="Current conditions">
       <p className="conditions-kicker">Current conditions</p>
       <div className="conditions-now">
-        <span className="conditions-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: conditionIcon(c.code, c.isDay, 56) }} />
+        <span className="conditions-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: conditionIcon(c.code, c.isDay, 56, true) }} />
         <div>
-          <div className="conditions-temp">{Math.round(c.temperature)}°C</div>
+          <div className="conditions-temp"><CountUp value={Math.round(c.temperature)} fromZero fadeLater />°C</div>
           <div className="conditions-label">{conditionLabel(c.code)}</div>
           <p className="muted small">Feels like {Math.round(c.feelsLike)}°C</p>
         </div>
@@ -169,7 +172,7 @@ function RainMap({ risks, barangays, history }: { risks: Risk[]; barangays: Bara
   const liveByName = useMemo(() => new Map((areas ?? []).map((a) => [a.name, a.now])), [areas]);
   const overlay: MapOverlay | null = live && radar.data ? {
     url: radar.data.tileUrl, attribution: `Radar: <a href="${RADAR_SOURCE_URL}">RainViewer</a>`,
-    tileSize: 512, zoomOffset: -1, maxNativeZoom: RADAR_MAX_ZOOM + 1,
+    maxNativeZoom: RADAR_MAX_ZOOM + 1,
   } : null;
   const alerts = risks.filter((r) => r.level !== 'Low');
 
@@ -186,11 +189,7 @@ function RainMap({ risks, barangays, history }: { risks: Risk[]; barangays: Bara
         label={live ? 'Live rain radar over Makati with barangay outlines'
           : 'Makati barangays shaded by rainfall; the list below the map has the same numbers'} />
 
-      <div className="rain-map-modes glass" role="group" aria-label="Rain map">
-        {MODES.map((m) => (
-          <button key={m.value} type="button" aria-pressed={mode === m.value} onClick={() => setMode(m.value)}>{m.label}</button>
-        ))}
-      </div>
+      <Segmented className="rain-map-modes glass" label="Rain map" options={MODES} value={mode} onChange={setMode} />
 
       <div className={`weather-alert glass${alerts.length ? ' on' : ''}`} role="status">
         {alerts.length
@@ -202,7 +201,7 @@ function RainMap({ risks, barangays, history }: { risks: Risk[]; barangays: Bara
           : <><CircleCheck size={16} aria-hidden="true" /><span><strong>No active weather alerts</strong></span></>}
       </div>
 
-      <div className="rain-map-legend glass" aria-label={live ? 'Radar rain intensity' : 'Rainfall scale'}>
+      <div key={mode} className="rain-map-legend glass" aria-label={live ? 'Radar rain intensity' : 'Rainfall scale'}>
         {live
           ? radar.error && !radar.data
             ? <span className="weather-stale">Live radar unavailable</span>
@@ -228,11 +227,8 @@ function RainByBarangay({ history }: { history: Polled<RainHistory> }) {
   return (
     <Card title="Rain by barangay" subtitle={`Totals over ${span}. Weather models work on a grid a few kilometres wide, so neighbours often share a value.`}
       action={
-        <div className="segmented small" role="group" aria-label="Period">
-          {MODES.filter((m) => m.value !== 'live').map((m) => (
-            <button key={m.value} type="button" aria-pressed={mode === m.value} onClick={() => setMode(m.value as RainWindow)}>{m.label}</button>
-          ))}
-        </div>
+        <Segmented className="segmented small" label="Period" value={mode}
+          options={MODES.filter((m) => m.value !== 'live') as { value: RainWindow; label: string }[]} onChange={setMode} />
       }>
       {!areas && history.error
         ? <ErrorState title="We couldn’t load past rainfall." message={history.error} onRetry={history.reload} />

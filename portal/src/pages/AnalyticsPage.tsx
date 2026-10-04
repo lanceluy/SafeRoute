@@ -17,6 +17,9 @@ import { SEQUENTIAL_BLUE } from '../lib/scales';
 import { useBarangays, useStreetsVersion } from '../state/places';
 import { useQueue } from '../state/useQueue';
 import { useStats } from '../state/useStats';
+import { Segmented } from '../components/Segmented';
+import { Swap } from '../components/Swap';
+import { CountUp } from '../components/CountUp';
 
 type Range = 'today' | '7d' | '30d' | 'quarter' | 'custom';
 const RANGES: { value: Range; label: string }[] = [
@@ -118,6 +121,8 @@ export function AnalyticsPage() {
   const [customTo, setCustomTo] = useState(today);
   const { from, to } = useMemo(() => rangeBounds(range, customFrom, customTo), [range, customFrom, customTo]);
   const { stats, error, reload } = useStats(from, to);
+  // A new date range crossfades the line charts; a live update of the same range doesn't.
+  const rangeKey = stats ? `${stats.from}|${stats.to}` : '';
   const active = useQueue(ACTIVE);
   const resolved = useQueue(RESOLVED);
   const [trend, setTrend] = useState<Trend>('volume');
@@ -185,11 +190,7 @@ export function AnalyticsPage() {
         subtitle={stats ? <>{shortDate(stats.from).replace(/,.*$/, '')} – {shortDate(stats.to).replace(/,.*$/, '')} · Open numbers are as of now</> : 'Loading…'}
         actions={
           <div className="range-picker" role="group" aria-label="Date range">
-            <div className="segmented">
-              {RANGES.map((r) => (
-                <button key={r.value} type="button" aria-pressed={range === r.value} onClick={() => setRange(r.value)}>{r.label}</button>
-              ))}
-            </div>
+            <Segmented label="Range" options={RANGES} value={range} onChange={setRange} />
             {range === 'custom' && (
               <div className="custom-range">
                 <label><span className="sr-only">From</span>
@@ -208,15 +209,15 @@ export function AnalyticsPage() {
 
       {/* Headline numbers */}
       <div className="stat-row">
-        <StatCard label="Reports received" icon={<Inbox aria-hidden="true" />} loading={!stats} value={received.toLocaleString()}
+        <StatCard label="Reports received" icon={<Inbox aria-hidden="true" />} loading={!stats} value={<CountUp value={received} />}
           spark={daily.map((d) => d.newReports + d.mergedReports)} foot={stats ? <>{stats.totals.reportedInRange} new hazards</> : null} />
         <StatCard label="Resolved" icon={<CheckCircle2 aria-hidden="true" />} loading={!stats}
-          value={stats?.totals.resolvedInRange.toLocaleString() ?? ''} spark={daily.map((d) => d.resolved)}
+          value={stats ? <CountUp value={stats.totals.resolvedInRange} goodWhen="up" /> : ''} spark={daily.map((d) => d.resolved)}
           foot={stats ? <>{percent(stats.totals.resolvedInRange, stats.totals.reportedInRange)} of new hazards</> : null} />
         <StatCard label="Average time to resolve" icon={<Timer aria-hidden="true" />} loading={!stats} value={avgValue} unit={avgUnit}
           delta={percentChange(avg, stats?.resolution.previousAverageHours)} goodWhen="down" deltaNote="vs previous period"
           foot={stats && avg == null ? 'Nothing resolved in this range' : null} />
-        <StatCard label="Open now" icon={<CircleDot aria-hidden="true" />} loading={!stats} value={stats?.totals.active.toLocaleString() ?? ''}
+        <StatCard label="Open now" icon={<CircleDot aria-hidden="true" />} loading={!stats} value={stats ? <CountUp value={stats.totals.active} goodWhen="down" /> : ''}
           spark={daily.map((d) => d.backlog)} foot={stats ? <>{severityCounts.HIGH} high severity</> : null} to="/map?tab=active" />
       </div>
 
@@ -226,10 +227,13 @@ export function AnalyticsPage() {
         <Card title={TREND_TITLE[trend]} subtitle={TREND_SUB[trend]}
           action={<Toggle value={trend} onChange={setTrend} label="Chart"
             options={[['volume', 'Reported'], ['severity', 'By severity'], ['intake', 'New vs merged']]} />}>
-          {!stats ? <Skeleton h={260} />
-            : trend === 'volume' ? <TrendChart daily={daily} height={260} />
-              : trend === 'severity' ? <SeverityMultiples daily={daily} />
-                : <IntakeChart daily={daily} height={260} />}
+          {!stats ? <Skeleton h={260} /> : (
+            <Swap k={`${trend}|${rangeKey}`}>
+              {trend === 'volume' ? <TrendChart daily={daily} height={260} />
+                : trend === 'severity' ? <SeverityMultiples daily={daily} />
+                  : <IntakeChart daily={daily} height={260} />}
+            </Swap>
+          )}
         </Card>
         <Card title="Open by severity" subtitle="Hazards open right now">
           {stats ? <SeverityGauge counts={severityCounts} label="open" /> : <Skeleton h={220} />}
@@ -278,11 +282,15 @@ export function AnalyticsPage() {
           subtitle={speed === 'resolve' ? 'Report to resolved, for hazards resolved in this range' : 'Report to first verified, for hazards verified in this range'}
           action={<Toggle value={speed} onChange={setSpeed} label="Measure" options={[['resolve', 'Resolve'], ['verify', 'Verify']]} />}>
           {stats
-            ? <TypeDurations rows={speed === 'resolve' ? stats.resolution.byType : stats.verification.byType} what={speed === 'resolve' ? 'resolved' : 'verified'} />
+            ? (
+              <Swap k={speed}>
+                <TypeDurations rows={speed === 'resolve' ? stats.resolution.byType : stats.verification.byType} what={speed === 'resolve' ? 'resolved' : 'verified'} />
+              </Swap>
+            )
             : <Skeleton h={200} />}
         </Card>
         <Card title="Unresolved backlog" subtitle="Open hazards at the end of each day">
-          {stats ? <BacklogSteps daily={daily} height={220} /> : <Skeleton h={220} />}
+          {stats ? <Swap k={rangeKey}><BacklogSteps daily={daily} height={220} /></Swap> : <Skeleton h={220} />}
         </Card>
       </div>
 
@@ -308,6 +316,7 @@ export function AnalyticsPage() {
             </div>
             <Toggle value={where} onChange={setWhere} label="Map" options={[['barangays', 'Barangays'], ['concentration', 'Concentration']]} />
           </div>
+          <Swap k={where}>
           {where === 'barangays' ? (
             <>
               <div className="map-controls-row">
@@ -338,17 +347,14 @@ export function AnalyticsPage() {
           ) : (
             <>
               <div className="map-controls-row">
-                <div className="segmented small" role="group" aria-label="Weighting">
-                  {HEAT_LAYERS.map((l) => (
-                    <button key={l.value} type="button" aria-pressed={heatLayer === l.value} onClick={() => setHeatLayer(l.value)}>{l.label}</button>
-                  ))}
-                </div>
+                <Segmented className="segmented small" label="Weighting" options={HEAT_LAYERS} value={heatLayer} onChange={setHeatLayer} />
               </div>
               <div className="heat-map">
                 <MapView hazards={active.hazards} layer={heatLayer} barangays={barangays} fitKey="analytics" loading={active.loading} />
               </div>
             </>
           )}
+          </Swap>
         </section>
         <div className="stack">
           <Card title="Most open hazards" subtitle="Barangays with the most, and how many are high severity">
@@ -372,13 +378,8 @@ export function AnalyticsPage() {
 function Toggle<T extends string>({ value, onChange, options, label }: {
   value: T; onChange: (v: T) => void; options: [T, string][]; label: string;
 }) {
-  return (
-    <div className="segmented small" role="group" aria-label={label}>
-      {options.map(([v, text]) => (
-        <button key={v} type="button" aria-pressed={value === v} onClick={() => onChange(v)}>{text}</button>
-      ))}
-    </div>
-  );
+  return <Segmented className="segmented small" label={label} value={value} onChange={onChange}
+    options={options.map(([v, text]) => ({ value: v, label: text }))} />;
 }
 
 function Skeleton({ h }: { h: number }) {
