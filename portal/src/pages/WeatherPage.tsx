@@ -175,7 +175,7 @@ function RainMap({ risks, barangays, history }: { risks: Risk[]; barangays: Bara
 
   return (
     <div className="rain-map">
-      <AreaMap barangays={barangays} values={shaded} max={max} overlay={overlay} framing={live ? 'wide' : 'fit'}
+      <AreaMap barangays={barangays} values={shaded} max={max} overlay={overlay}
         format={(v, name) => {
           if (live) {
             const now = liveByName.get(name);
@@ -183,7 +183,7 @@ function RainMap({ risks, barangays, history }: { risks: Risk[]; barangays: Bara
           }
           return v == null ? 'No data' : `${v.toFixed(1)} mm`;
         }}
-        label={live ? 'Live rain radar over Metro Manila with Makati barangay outlines'
+        label={live ? 'Live rain radar over Makati with barangay outlines'
           : 'Makati barangays shaded by rainfall; the list below the map has the same numbers'} />
 
       <div className="rain-map-modes glass" role="group" aria-label="Rain map">

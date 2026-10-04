@@ -1258,6 +1258,7 @@ input[type="date"] { padding-right: 6px; }
 .rain-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); margin-top: var(--s3); font-size: 12px; }
 .rain-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -2px; }
 .rain-ramp { flex: 1; min-width: 120px; max-width: 320px; height: 10px; border-radius: 5px; }
+.area-map path.leaflet-interactive:focus, .area-map path.leaflet-interactive:focus-visible { outline: none; }
 .leaflet-tooltip.area-tip { font-family: var(--font); font-size: 13px; }
 
 /* Live update strip: blue for information, amber only when action is warranted. */
