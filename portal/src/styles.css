@@ -887,8 +887,11 @@ input[type="date"] { padding-right: 6px; }
 }
 .row-icon.lg { width: 44px; height: 44px; }
 .row-icon.sm { width: 24px; height: 24px; }
-/* Hazard-type icons are neutral: red, amber and yellow mean severity and nothing else. */
+/* In the queue, the hazard-type tile is filled with its severity colour; red, amber and yellow mean severity and nothing else. */
 .hazard-row .row-icon { width: 36px; height: 36px; border-radius: 10px; }
+.sev-fill-high { background: var(--sev-high); color: #fff; }
+.sev-fill-medium { background: var(--sev-medium); color: #fff; }
+.sev-fill-low { background: var(--sev-low); color: #422006; }
 .type-tile { background: var(--type-tile-bg); color: var(--type-tile-fg); }
 .cell-note { font-size: 12px; color: var(--text-3); }
 .cell-note.warn { color: var(--sev-high-text); }
@@ -910,6 +913,7 @@ input[type="date"] { padding-right: 6px; }
 .row-place { font-size: 12.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-reason { font-size: 12px; color: var(--text-3); }
 .row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 12.5px; color: var(--text-2); margin-top: 4px; }
+.row-meta:empty { display: none; }
 .row-chevron { color: var(--text-3); align-self: center; flex-shrink: 0; transition: color var(--t-fast); }
 .new-reports-pill {
   position: sticky; top: var(--s2); z-index: 5; display: block; margin: 0 auto var(--s2); background: var(--accent); color: var(--on-accent); border: 0;

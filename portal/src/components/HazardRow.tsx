@@ -3,11 +3,11 @@ import { ChevronRight, MapPin, MoreHorizontal, TriangleAlert } from 'lucide-reac
 import type { Hazard } from '../api/types';
 import { ago, plural, shortDate } from '../lib/format';
 import type { Barangay } from '../lib/geo';
-import { TYPE_LABEL, isActive, shortId } from '../lib/hazards';
+import { SEVERITY_LABEL, TYPE_LABEL, isActive, shortId } from '../lib/hazards';
 import { STALE_DAYS, ageDays, isStale, needsAction, queueReason, shortAge } from '../lib/queue';
 import { usePlace } from '../state/places';
 import { useToast } from '../state/toast';
-import { SeverityDot, StatusBadge, TypeIcon } from './Badges';
+import { StatusBadge, TypeIcon } from './Badges';
 import { Menu } from './Menu';
 
 /**
@@ -16,7 +16,7 @@ import { Menu } from './Menu';
  * wide; CSS container queries on `.queue` choose which parts show.
  *
  * Badge rules, so a row never shouts: pills only for exceptional states (Needs action, Urgent,
- * New, Archived, merged reports); a dot for severity; icon + text for verification; plain text for
+ * New, Archived, merged reports); severity as the colour of the type icon; icon + text for verification; plain text for
  * place, department and age. A row needing action gets a red left bar and nothing else red.
  */
 export const HazardRow = memo(function HazardRow({
@@ -78,7 +78,10 @@ export const HazardRow = memo(function HazardRow({
       <button type="button" id={`row-${hazard.id}`}
         className={`hazard-row${selected ? ' selected' : ''}${action || urgent ? ' needs-action' : ''}${isNew ? ' is-new' : ''}`}
         aria-current={selected ? 'true' : undefined} onClick={() => onSelect(hazard)}>
-        <span className="row-icon type-tile"><TypeIcon type={hazard.type} size={17} /></span>
+        <span className={`row-icon sev-fill-${hazard.severity.toLowerCase()}`} title={`${SEVERITY_LABEL[hazard.severity]} severity`}>
+          <TypeIcon type={hazard.type} size={17} />
+          <span className="sr-only">{SEVERITY_LABEL[hazard.severity]} severity</span>
+        </span>
 
         {/* What and where. */}
         <span className="row-body">
@@ -98,9 +101,8 @@ export const HazardRow = memo(function HazardRow({
             {place.street && place.barangay && <span className="stacked-only"> · {place.barangay}</span>}
           </span>
           {showReason && <span className="row-reason">{reason}</span>}
-          {/* Narrow queues: severity, then exceptions only (verified is the normal case). */}
+          {/* Narrow queues: exceptions only (verified is the normal case). */}
           <span className="row-meta stacked-only">
-            <SeverityDot severity={hazard.severity} />
             {hazard.status === 'DISPUTED' && <span className="pill pill-contested">Contested</span>}
             {!isActive(hazard.status) && <StatusBadge status={hazard.status} plain />}
             {flag}
@@ -109,10 +111,7 @@ export const HazardRow = memo(function HazardRow({
 
         {/* Table columns (wide queues only) */}
         <span className="cell cell-area table-only">{place.barangay ?? '—'}</span>
-        <span className="cell cell-stack table-only">
-          <SeverityDot severity={hazard.severity} />
-          {flag}
-        </span>
+        <span className="cell cell-stack table-only">{flag}</span>
         <span className="cell cell-stack table-only">
           <StatusBadge status={hazard.status} plain />
           {disputed}
