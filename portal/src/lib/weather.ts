@@ -240,3 +240,60 @@ export function isDaytime(time: string) {
   const h = Number(time.slice(11, 13));
   return h >= 6 && h < 18;
 }
+
+// ------------------------------------------------------------------ what it means for streets
+
+export type RiskLevel = 'Low' | 'Moderate' | 'High';
+export interface Risk { key: string; label: string; level: RiskLevel; note: string }
+
+const LEVEL_OF: Record<Tone, RiskLevel> = { good: 'Low', warning: 'Moderate', critical: 'High' };
+const FOG = new Set([45, 48]);
+const STORM = new Set([95, 96, 99]);
+
+/**
+ * Weather read as pedestrian risk, from the same forecast and PAGASA bands as the rest of the page:
+ * flooding (rain bands, plus open flooding reports), slippery roads, visibility and heat.
+ */
+export function weatherRisks(w: Weather, floodingReports: number): Risk[] {
+  const next6 = w.hourly.slice(0, 6);
+  const peak6 = Math.max(0, ...next6.map((h) => h.precipitation));
+  const next3 = w.hourly.slice(0, 3).reduce((s, h) => s + h.precipitation, 0);
+  const rain = rainBand(peak6);
+  let flood = LEVEL_OF[rain.tone];
+  if (flood === 'Low' && floodingReports > 0 && peak6 >= 2.5) flood = 'Moderate';
+  const wetNow = w.current.precipitation > 0 || next3 >= 1;
+  const slippery: RiskLevel = peak6 >= 7.5 ? 'High' : wetNow ? 'Moderate' : 'Low';
+  const storm = next6.some((h) => STORM.has(h.code)) || STORM.has(w.current.code);
+  const visibility: RiskLevel = FOG.has(w.current.code) || storm || peak6 >= 15 ? 'High' : peak6 >= 7.5 ? 'Moderate' : 'Low';
+  const heat = heatBand(w.current.feelsLike);
+  return [
+    { key: 'flood', label: 'Flooding', level: flood,
+      note: `${rain.label}${floodingReports ? ` · ${floodingReports} flooding report${floodingReports === 1 ? '' : 's'} open` : ''}` },
+    { key: 'slippery', label: 'Slippery roads', level: slippery, note: wetNow ? `${next3.toFixed(1)} mm expected in the next 3 hours` : 'Dry for the next 3 hours' },
+    { key: 'visibility', label: 'Poor visibility', level: visibility,
+      note: FOG.has(w.current.code) ? 'Fog' : storm ? 'Thunderstorms possible' : peak6 >= 7.5 ? 'Heavy rain' : 'Clear enough' },
+    { key: 'heat', label: 'Heat exposure', level: LEVEL_OF[heat.tone], note: `${heat.label} · feels like ${Math.round(w.current.feelsLike)}°C` },
+  ];
+}
+
+/**
+ * One line about what's coming: a watch (amber) when heavy rain or heat warrants action,
+ * otherwise a calm update (blue).
+ */
+export function weatherUpdate(w: Weather): { watch: boolean; text: string } {
+  const soon = w.hourly.slice(0, 12);
+  const heavy = soon.find((h) => h.precipitation >= 7.5);
+  if (heavy) return { watch: true, text: `Heavy rain around ${hourLabel(heavy.time)} may increase flooding this ${partOfDay(heavy.time)}.` };
+  const storm = soon.find((h) => STORM.has(h.code));
+  if (storm) return { watch: true, text: `Thunderstorms possible around ${hourLabel(storm.time)}.` };
+  const heat = heatBand(w.current.feelsLike);
+  if (heat.tone !== 'good') return { watch: true, text: `Heat index ${Math.round(w.current.feelsLike)}°C: ${heat.label.toLowerCase()} for people walking.` };
+  const likely = soon.find((h) => h.chance >= 60 && h.precipitation >= 0.5);
+  if (likely) return { watch: false, text: `Rain likely around ${hourLabel(likely.time)} (${likely.chance}% chance).` };
+  return { watch: false, text: 'No significant rain expected in the next 12 hours.' };
+}
+
+function partOfDay(time: string) {
+  const h = Number(time.slice(11, 13));
+  return h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening';
+}

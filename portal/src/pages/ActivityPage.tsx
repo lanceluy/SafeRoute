@@ -43,6 +43,10 @@ function sentence(e: ActivityEntry, departments: Department[]) {
     case 'MUNICIPAL_PRIORITY': return e.newValue
       ? `${who(e)} set ${hazard} to ${valueLabel(e.newValue).toLowerCase()} city priority`
       : `${who(e)} cleared the city priority of ${hazard}`;
+    case 'STAFF_REVIEWED': return e.note === 'Restored from Archived'
+      ? `${who(e)} restored ${hazard} from Archived`
+      : `${who(e)} marked ${hazard} reviewed`;
+    case 'ARCHIVED': return `${hazard} was archived after 7 days without staff review`;
   }
 }
 

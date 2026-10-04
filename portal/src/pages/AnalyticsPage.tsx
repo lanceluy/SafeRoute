@@ -1,16 +1,18 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { CheckCircle2, CircleDot, Inbox, Table2, Timer } from 'lucide-react';
 import type { Confidence, HazardType, QueueQuery, Severity, Stats } from '../api/types';
+import { BacklogSteps, DotColumns, Funnel, ProgressRows, SegmentBar, SeverityGauge, SeverityMultiples } from '../components/AnalyticsCharts';
+import { AreaFrequencyCard } from '../components/AreaFrequency';
 import { AreaMap } from '../components/AreaMap';
-import {
-  BacklogChart, BarList, ColumnChart, DivergingBars, IntakeChart, ReportTimesHeatmap, SeverityStackBars, SeverityTrendChart, TrendChart,
-} from '../components/Charts';
+import { BarList, ColumnChart, DivergingBars, IntakeChart, TrendChart } from '../components/Charts';
 import { MapView, type MapLayer } from '../components/MapView';
 import { ErrorState } from '../components/States';
+import { Card, PageHeader, StatCard, percentChange } from '../components/ui';
 import { areaStats, type AreaRow } from '../lib/areas';
 import { duration, shortDate } from '../lib/format';
 import { barangayAt, streetAt } from '../lib/geo';
-import { CONFIDENCE_LABEL, SEVERITY_COLOR, SEVERITY_LABEL, TYPE_LABEL } from '../lib/hazards';
+import { CONFIDENCE_HINT, CONFIDENCE_LABEL, TYPE_LABEL } from '../lib/hazards';
 import { SEQUENTIAL_BLUE } from '../lib/scales';
 import { useBarangays, useStreetsVersion } from '../state/places';
 import { useQueue } from '../state/useQueue';
@@ -47,6 +49,10 @@ const RESOLVED: QueueQuery = { statuses: ['RESOLVED'], sort: 'newest' };
 const SEVERITIES: Severity[] = ['HIGH', 'MEDIUM', 'LOW'];
 /** Most trusted first; contested last, since it's a different kind of problem. */
 const CONFIDENCES: Confidence[] = ['HIGH', 'MEDIUM', 'LOW', 'UNCONFIRMED', 'CONTESTED'];
+/** Ordinal blue for the trusted-to-weak steps (validated --ordinal), grey for none yet, violet for contested. */
+const CONFIDENCE_COLOR: Record<Confidence, string> = {
+  HIGH: 'var(--conf-high)', MEDIUM: 'var(--conf-medium)', LOW: 'var(--conf-low)', UNCONFIRMED: 'var(--conf-none)', CONTESTED: 'var(--contested)',
+};
 const AGE_BUCKETS = [
   { key: 'lt1', label: '< 1 day', max: 1 },
   { key: '1-3', label: '1–3 days', max: 4 },
@@ -57,7 +63,7 @@ const AGE_BUCKETS = [
 
 type AreaMetric = 'active' | 'high' | 'avgAgeDays' | 'resolutionRate' | 'disputeRate';
 const AREA_METRICS: { value: AreaMetric; label: string; format: (v: number) => string }[] = [
-  { value: 'active', label: 'Active hazards', format: (v) => `${v} active` },
+  { value: 'active', label: 'Open hazards', format: (v) => `${v} open` },
   { value: 'high', label: 'High severity', format: (v) => `${v} high severity` },
   { value: 'avgAgeDays', label: 'Average age', format: (v) => `${v.toFixed(1)} days on average` },
   { value: 'resolutionRate', label: 'Resolution rate', format: (v) => `${Math.round(v * 100)}% resolved` },
@@ -65,16 +71,43 @@ const AREA_METRICS: { value: AreaMetric; label: string; format: (v: number) => s
 ];
 
 const HEAT_LAYERS: { value: MapLayer; label: string; note: string }[] = [
-  { value: 'density', label: 'Density', note: 'Every active hazard counts the same.' },
+  { value: 'density', label: 'Density', note: 'Every open hazard counts the same.' },
   { value: 'severity', label: 'Severity', note: 'High-severity hazards count most.' },
   { value: 'high', label: 'High risk', note: 'Only high-severity hazards.' },
   { value: 'age', label: 'Age', note: 'Older unresolved hazards count more, fully after two weeks.' },
 ];
 
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+type Trend = 'volume' | 'severity' | 'intake';
+type Speed = 'resolve' | 'verify';
+type Where = 'barangays' | 'concentration';
+const TREND_TITLE: Record<Trend, string> = { volume: 'Reports over time', severity: 'Reports by severity', intake: 'New vs merged reports' };
+const TREND_SUB: Record<Trend, string> = {
+  volume: 'Hazards reported and resolved per day',
+  severity: 'New hazards per day, one chart per severity',
+  intake: 'Whether each report found a new hazard or joined one already on the map',
+};
+
 function percent(n: number, of: number) {
   return of ? `${Math.round((n / of) * 100)}%` : '—';
 }
 
+/** "2.4 days" → ["2.4", "days"], so the number can be large and the unit quiet. */
+function splitUnit(text: string): [string, string | undefined] {
+  const [value, ...rest] = text.split(' ');
+  return [value, rest.join(' ') || undefined];
+}
+
+/** "12 AM", "3 PM". */
+function hourName(h: number) {
+  return `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+/**
+ * Analytics reads in sections, each answering one question: how much (volume and the report
+ * pipeline), what's open now, how fast, when, and where. Related views share a card behind a
+ * toggle instead of each taking its own.
+ */
 export function AnalyticsPage() {
   const navigate = useNavigate();
   const barangays = useBarangays();
@@ -87,6 +120,10 @@ export function AnalyticsPage() {
   const { stats, error, reload } = useStats(from, to);
   const active = useQueue(ACTIVE);
   const resolved = useQueue(RESOLVED);
+  const [trend, setTrend] = useState<Trend>('volume');
+  const [speed, setSpeed] = useState<Speed>('resolve');
+  const [where, setWhere] = useState<Where>('barangays');
+  const [showTable, setShowTable] = useState(false);
   const [heatLayer, setHeatLayer] = useState<MapLayer>('severity');
   const [areaMetric, setAreaMetric] = useState<AreaMetric>('active');
   const [now] = useState(() => Date.now());
@@ -95,9 +132,10 @@ export function AnalyticsPage() {
     ? areaStats(barangays, active.hazards, resolved.hazards, Date.parse(stats.from), Date.parse(stats.to))
     : []), [barangays, active.hazards, resolved.hazards, stats]);
 
-  // Derived from the active hazards themselves (as of now).
+  // Derived from the open hazards themselves (as of now).
   const confidence = useMemo(() => CONFIDENCES.map((c) => ({
     key: c, label: CONFIDENCE_LABEL[c], value: active.hazards.filter((h) => h.confidence === c).length,
+    color: CONFIDENCE_COLOR[c], hint: CONFIDENCE_HINT[c],
   })), [active.hazards]);
   const ages = useMemo(() => {
     const counts = AGE_BUCKETS.map((b) => ({ key: b.key, label: b.label, value: 0 }));
@@ -118,186 +156,228 @@ export function AnalyticsPage() {
     return [...byType].map(([type, r]) => ({ key: type, label: TYPE_LABEL[type], ...r }))
       .sort((a, b) => b.left + b.right - (a.left + a.right));
   }, [active.hazards]);
+  const byWeekday = useMemo(() => WEEKDAYS.map((name, i) => ({
+    key: name, label: name, short: name.slice(0, 3),
+    value: (stats?.reportTimes ?? []).filter((c) => c.dayOfWeek === i + 1).reduce((s, c) => s + c.count, 0),
+  })), [stats]);
+  const byHour = useMemo(() => Array.from({ length: 24 }, (_, h) => ({
+    key: String(h), label: hourName(h), short: h % 6 === 0 ? hourName(h) : '',
+    value: (stats?.reportTimes ?? []).filter((c) => c.hour === h).reduce((s, c) => s + c.count, 0),
+  })), [stats]);
 
   const metric = AREA_METRICS.find((m) => m.value === areaMetric)!;
   const areaValues = useMemo(() => new Map(areas.map((a) => [a.name, a[areaMetric] as number | null])), [areas, areaMetric]);
   const areaMax = Math.max(0, ...[...areaValues.values()].map((v) => v ?? 0));
-
-  const avg = stats?.resolution.averageHours ?? null;
-  const prev = stats?.resolution.previousAverageHours ?? null;
-  const change = avg != null && prev ? Math.round(((avg - prev) / prev) * 100) : null;
   const heat = HEAT_LAYERS.find((l) => l.value === heatLayer)!;
 
+  const daily = stats?.daily ?? [];
+  const avg = stats?.resolution.averageHours ?? null;
+  const [avgValue, avgUnit] = splitUnit(duration(avg));
+  const received = daily.reduce((s, d) => s + d.newReports + d.mergedReports, 0);
+  const severityCounts = Object.fromEntries(
+    SEVERITIES.map((s) => [s, stats?.activeBySeverity.find((x) => x.key === s)?.count ?? 0]),
+  ) as Record<Severity, number>;
+  const goTo = (q: string) => navigate(`/map?tab=active&${q}`);
+
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Analytics</h1>
-          <p className="muted">
-            {stats ? <>{shortDate(stats.from).replace(/,.*$/, '')} – {shortDate(stats.to).replace(/,.*$/, '')} · Active numbers are as of now</> : 'Loading…'}
-          </p>
-        </div>
-        <div className="range-picker" role="group" aria-label="Date range">
-          <div className="segmented">
-            {RANGES.map((r) => (
-              <button key={r.value} type="button" aria-pressed={range === r.value} onClick={() => setRange(r.value)}>{r.label}</button>
-            ))}
-          </div>
-          {range === 'custom' && (
-            <div className="custom-range">
-              <label><span className="sr-only">From</span>
-                <input type="date" value={customFrom} max={customTo || today} onChange={(e) => setCustomFrom(e.target.value)} />
-              </label>
-              <span aria-hidden="true">–</span>
-              <label><span className="sr-only">To</span>
-                <input type="date" value={customTo} min={customFrom} max={today} onChange={(e) => setCustomTo(e.target.value)} />
-              </label>
+    <div className="page analytics">
+      <PageHeader title="Analytics"
+        subtitle={stats ? <>{shortDate(stats.from).replace(/,.*$/, '')} – {shortDate(stats.to).replace(/,.*$/, '')} · Open numbers are as of now</> : 'Loading…'}
+        actions={
+          <div className="range-picker" role="group" aria-label="Date range">
+            <div className="segmented">
+              {RANGES.map((r) => (
+                <button key={r.value} type="button" aria-pressed={range === r.value} onClick={() => setRange(r.value)}>{r.label}</button>
+              ))}
             </div>
-          )}
-        </div>
-      </div>
+            {range === 'custom' && (
+              <div className="custom-range">
+                <label><span className="sr-only">From</span>
+                  <input type="date" value={customFrom} max={customTo || today} onChange={(e) => setCustomFrom(e.target.value)} />
+                </label>
+                <span aria-hidden="true">–</span>
+                <label><span className="sr-only">To</span>
+                  <input type="date" value={customTo} min={customFrom} max={today} onChange={(e) => setCustomTo(e.target.value)} />
+                </label>
+              </div>
+            )}
+          </div>
+        } />
 
       {error && <ErrorState title="We couldn’t load analytics." message={error} onRetry={reload} />}
 
-      {/* 1. Summary */}
-      <div className="kpis">
-        <Stat label="Reported" value={stats?.totals.reportedInRange.toLocaleString()} />
-        <Stat label="Active now" value={stats?.totals.active.toLocaleString()} />
-        <Stat label="High severity" value={stats?.totals.highSeverity.toLocaleString()} tone="critical" hint="Active high-severity hazards, as of now" />
-        <Stat label="Resolved" value={stats?.totals.resolvedInRange.toLocaleString()} />
-        <Stat label="Resolution rate" value={stats ? percent(stats.totals.resolvedInRange, stats.totals.reportedInRange) : undefined}
-          hint="Resolved in the range as a share of hazards reported in it" />
-        <Stat label="Avg. time to resolve" value={stats ? duration(avg) : undefined}
-          delta={change ? { text: `${change < 0 ? '↓' : '↑'} ${Math.abs(change)}% vs previous period`, good: change < 0 } : undefined} />
+      {/* Headline numbers */}
+      <div className="stat-row">
+        <StatCard label="Reports received" icon={<Inbox aria-hidden="true" />} loading={!stats} value={received.toLocaleString()}
+          spark={daily.map((d) => d.newReports + d.mergedReports)} foot={stats ? <>{stats.totals.reportedInRange} new hazards</> : null} />
+        <StatCard label="Resolved" icon={<CheckCircle2 aria-hidden="true" />} loading={!stats}
+          value={stats?.totals.resolvedInRange.toLocaleString() ?? ''} spark={daily.map((d) => d.resolved)}
+          foot={stats ? <>{percent(stats.totals.resolvedInRange, stats.totals.reportedInRange)} of new hazards</> : null} />
+        <StatCard label="Average time to resolve" icon={<Timer aria-hidden="true" />} loading={!stats} value={avgValue} unit={avgUnit}
+          delta={percentChange(avg, stats?.resolution.previousAverageHours)} goodWhen="down" deltaNote="vs previous period"
+          foot={stats && avg == null ? 'Nothing resolved in this range' : null} />
+        <StatCard label="Open now" icon={<CircleDot aria-hidden="true" />} loading={!stats} value={stats?.totals.active.toLocaleString() ?? ''}
+          spark={daily.map((d) => d.backlog)} foot={stats ? <>{severityCounts.HIGH} high severity</> : null} to="/map?tab=active" />
       </div>
 
-      {/* 2. Trends */}
-      <div className="grid-2">
-        <Card title="Reports over time" sub="How reporting volume changes, and how much gets resolved">
-          {stats ? <TrendChart daily={stats.daily} /> : <Skeleton h={240} />}
+      {/* Volume */}
+      <h2 className="section-title">Volume</h2>
+      <div className="grid-main-side">
+        <Card title={TREND_TITLE[trend]} subtitle={TREND_SUB[trend]}
+          action={<Toggle value={trend} onChange={setTrend} label="Chart"
+            options={[['volume', 'Reported'], ['severity', 'By severity'], ['intake', 'New vs merged']]} />}>
+          {!stats ? <Skeleton h={260} />
+            : trend === 'volume' ? <TrendChart daily={daily} height={260} />
+              : trend === 'severity' ? <SeverityMultiples daily={daily} />
+                : <IntakeChart daily={daily} height={260} />}
         </Card>
-        <Card title="Unresolved backlog" sub="Active hazards remaining at the end of each day">
-          {stats ? <BacklogChart daily={stats.daily} height={240} /> : <Skeleton h={240} />}
+        <Card title="Open by severity" subtitle="Hazards open right now">
+          {stats ? <SeverityGauge counts={severityCounts} label="open" /> : <Skeleton h={220} />}
         </Card>
       </div>
-      <Card title="Severity trend" sub="Hazards reported each day, by severity">
-        {stats ? <SeverityTrendChart daily={stats.daily} /> : <Skeleton h={240} />}
+      <Card title="Report pipeline"
+        subtitle="From reports received to hazards resolved in this range. Verified and resolved count when they happened, so they can include older hazards.">
+        {stats ? (
+          <Funnel label="Report pipeline" stages={[
+            { key: 'received', label: 'Reports received', value: received, hint: 'Every report submitted, duplicates included' },
+            { key: 'hazards', label: 'New hazards', value: stats.totals.reportedInRange, hint: 'Reports that found a hazard not already on the map' },
+            { key: 'verified', label: 'Verified', value: stats.verification.verifiedCount, hint: 'Hazards the community verified in this range' },
+            { key: 'resolved', label: 'Resolved', value: stats.totals.resolvedInRange, hint: 'Hazards resolved in this range' },
+          ]} />
+        ) : <Skeleton h={260} />}
       </Card>
 
-      {/* 3. Composition and quality */}
+      {/* What's open now */}
+      <h2 className="section-title">What’s open now</h2>
       <div className="grid-3">
-        <Card title="Active by type">
+        <Card title="By type" subtitle="Select one to see it on the map">
           {stats ? <BarList rows={stats.activeByType.map((t) => ({ key: t.key, label: TYPE_LABEL[t.key], value: t.count }))}
-            onSelect={(type) => navigate(`/map?tab=active&type=${type}`)} empty="No active hazards" /> : <Skeleton h={200} />}
+            onSelect={(type) => goTo(`type=${type}`)} empty="No open hazards" /> : <Skeleton h={200} />}
         </Card>
-        <Card title="Active by severity">
-          {stats ? <BarList rows={SEVERITIES.map((s) => ({
-            key: s, label: SEVERITY_LABEL[s], color: SEVERITY_COLOR[s],
-            value: stats.activeBySeverity.find((x) => x.key === s)?.count ?? 0,
-          }))} empty="No active hazards" /> : <Skeleton h={200} />}
+        <Card title="Confidence" subtitle="How well the community backs open reports">
+          {active.loading ? <Skeleton h={200} /> : <SegmentBar parts={confidence} empty="No open hazards" />}
         </Card>
-        <Card title="Report confidence" sub="How well-supported the active hazards are">
-          {active.loading ? <Skeleton h={200} /> : <BarList rows={confidence} empty="No active hazards" />}
-        </Card>
-      </div>
-      <div className="grid-2">
-        <Card title="Community verification" sub="Confirmations and disputes on active hazards, by type">
-          {active.loading ? <Skeleton h={220} />
-            : <DivergingBars rows={opinions} leftLabel="Disputes" rightLabel="Confirmations" empty="No community responses yet" />}
-        </Card>
-        <Card title="Age of active hazards" sub="How long unresolved hazards have been on the map">
-          {active.loading ? <Skeleton h={220} /> : <ColumnChart rows={ages} label="Active hazards by age" unit="active hazards" />}
-        </Card>
-      </div>
-
-      {/* 4. Operations */}
-      <div className="grid-3">
-        <Card title="Time to verification" sub="Report to first verified, for hazards verified in the range">
-          {stats ? <TypeDurations rows={stats.verification.byType} what="verified" /> : <Skeleton h={200} />}
-        </Card>
-        <Card title="Time to resolve by type" sub="Report to resolved, for hazards resolved in the range">
-          {stats ? <TypeDurations rows={stats.resolution.byType} what="resolved" /> : <Skeleton h={200} />}
-        </Card>
-        <Card title="How hazards close" sub="Status changes in the range; an expired hazard wasn’t necessarily fixed">
+        <Card title="How hazards close" subtitle="Status changes in this range">
           {stats ? <Outcomes outcomes={stats.outcomes} /> : <Skeleton h={200} />}
         </Card>
       </div>
-      <Card title="New vs existing hazards" sub="Whether each incoming report found a new hazard or reinforced one already on the map">
-        {stats ? <IntakeChart daily={stats.daily} /> : <Skeleton h={220} />}
-      </Card>
-
-      {/* 5. Geography */}
       <div className="grid-2">
-        <Card title="Severity by barangay" sub="Active hazards; click one to see it on the map">
-          <SeverityStackBars
-            rows={areas.filter((a) => a.active > 0).slice(0, 10).map((a) => ({ key: a.name, label: a.name, high: a.high, medium: a.medium, low: a.low }))}
-            onSelect={(name) => navigate(`/map?tab=active&area=${encodeURIComponent(name)}`)} empty="No active hazards in Makati barangays" />
+        <Card title="Community response by type" subtitle="Confirmations and disputes on open hazards">
+          {active.loading ? <Skeleton h={220} />
+            : <DivergingBars rows={opinions} leftLabel="Disputes" rightLabel="Confirmations" empty="No community responses yet" />}
         </Card>
+        <Card title="How long they’ve been open" subtitle="Open hazards by age">
+          {active.loading ? <Skeleton h={220} /> : <ColumnChart rows={ages} label="Open hazards by age" unit="open hazards" />}
+        </Card>
+      </div>
+
+      {/* Speed */}
+      <h2 className="section-title">Speed</h2>
+      <div className="grid-2">
+        <Card title={speed === 'resolve' ? 'Time to resolve by type' : 'Time to verification by type'}
+          subtitle={speed === 'resolve' ? 'Report to resolved, for hazards resolved in this range' : 'Report to first verified, for hazards verified in this range'}
+          action={<Toggle value={speed} onChange={setSpeed} label="Measure" options={[['resolve', 'Resolve'], ['verify', 'Verify']]} />}>
+          {stats
+            ? <TypeDurations rows={speed === 'resolve' ? stats.resolution.byType : stats.verification.byType} what={speed === 'resolve' ? 'resolved' : 'verified'} />
+            : <Skeleton h={200} />}
+        </Card>
+        <Card title="Unresolved backlog" subtitle="Open hazards at the end of each day">
+          {stats ? <BacklogSteps daily={daily} height={220} /> : <Skeleton h={220} />}
+        </Card>
+      </div>
+
+      {/* When */}
+      <h2 className="section-title">When</h2>
+      <div className="grid-2">
+        <Card title="Reports by weekday" subtitle="Every report received in this range">
+          {stats ? <DotColumns buckets={byWeekday} label="Reports by weekday" rows={9} /> : <Skeleton h={200} />}
+        </Card>
+        <Card title="Reports by hour" subtitle="Local time, all days together">
+          {stats ? <DotColumns buckets={byHour} label="Reports by hour of day" rows={9} /> : <Skeleton h={200} />}
+        </Card>
+      </div>
+
+      {/* Where */}
+      <h2 className="section-title">Where</h2>
+      <div className="grid-main-side">
         <section className="card heat-card">
           <div className="card-head">
-            <h2>Hazard concentration</h2>
-            <div className="segmented small" role="group" aria-label="Map layer">
-              {HEAT_LAYERS.map((l) => (
-                <button key={l.value} type="button" aria-pressed={heatLayer === l.value} onClick={() => setHeatLayer(l.value)}>{l.label}</button>
-              ))}
+            <div>
+              <h2>{where === 'barangays' ? 'Barangays' : 'Hazard concentration'}</h2>
+              <p className="card-sub">{where === 'barangays' ? 'Shaded by the measure you pick' : `Open hazards. ${heat.note}`}</p>
             </div>
+            <Toggle value={where} onChange={setWhere} label="Map" options={[['barangays', 'Barangays'], ['concentration', 'Concentration']]} />
           </div>
-          <div className="heat-map">
-            <MapView hazards={active.hazards} layer={heatLayer} barangays={barangays} fitKey="analytics" loading={active.loading} />
-          </div>
-          <p className="muted small">Active hazards. {heat.note}</p>
+          {where === 'barangays' ? (
+            <>
+              <div className="map-controls-row">
+                <label className="select-label">
+                  <span className="sr-only">Shade by</span>
+                  <select value={areaMetric} onChange={(e) => setAreaMetric(e.target.value as AreaMetric)}>
+                    {AREA_METRICS.map((m) => <option key={m.value} value={m.value}>Shade by: {m.label}</option>)}
+                  </select>
+                </label>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowTable((t) => !t)} aria-expanded={showTable}>
+                  <Table2 size={15} aria-hidden="true" />{showTable ? 'Show map' : 'Show as table'}
+                </button>
+              </div>
+              {showTable
+                ? <AreaTable areas={areas} onSelect={(name) => goTo(`area=${encodeURIComponent(name)}`)} />
+                : <>
+                  <AreaMap barangays={barangays} values={areaValues} max={areaMax}
+                    format={(v) => (v == null ? 'No data' : metric.format(v))}
+                    label={`Makati barangays shaded by ${metric.label.toLowerCase()}; the table view has the same numbers`} />
+                  <div className="rain-legend" aria-label="Colour scale">
+                    <span className="muted">{metric.format(0)}</span>
+                    <span className="rain-ramp" style={{ background: `linear-gradient(90deg, ${SEQUENTIAL_BLUE.join(', ')})` }} />
+                    <span className="muted">{metric.format(areaMax)}</span>
+                  </div>
+                </>}
+              {resolved.truncated && <p className="muted small">Resolved counts use the latest {resolved.hazards.length} resolved hazards.</p>}
+            </>
+          ) : (
+            <>
+              <div className="map-controls-row">
+                <div className="segmented small" role="group" aria-label="Weighting">
+                  {HEAT_LAYERS.map((l) => (
+                    <button key={l.value} type="button" aria-pressed={heatLayer === l.value} onClick={() => setHeatLayer(l.value)}>{l.label}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="heat-map">
+                <MapView hazards={active.hazards} layer={heatLayer} barangays={barangays} fitKey="analytics" loading={active.loading} />
+              </div>
+            </>
+          )}
         </section>
+        <div className="stack">
+          <Card title="Most open hazards" subtitle="Barangays with the most, and how many are high severity">
+            <ProgressRows empty="No open hazards in Makati barangays"
+              rows={areas.filter((a) => a.active > 0).slice(0, 6).map((a) => ({
+                key: a.name, label: a.name, value: a.active, note: a.high ? `${a.high} high` : undefined,
+                hint: `${a.name}: ${a.active} open (${a.high} high, ${a.medium} medium, ${a.low} low)`,
+              }))} format={(n) => `${n} open`} />
+          </Card>
+          <Card title="Recurring hotspots" subtitle="Places about 165 m across with repeated reports">
+            {stats ? <Hotspots hotspots={stats.hotspots.slice(0, 6)} barangays={barangays} /> : <Skeleton h={180} />}
+          </Card>
+        </div>
       </div>
-      <div className="grid-2">
-        <Card title="When hazards are reported" sub="Every report received in the range, by weekday and hour">
-          {stats ? <ReportTimesHeatmap cells={stats.reportTimes} /> : <Skeleton h={220} />}
-        </Card>
-        <Card title="Recurring hotspots" sub="Places (about 165 m across) with repeated reports in the range">
-          {stats ? <Hotspots hotspots={stats.hotspots} barangays={barangays} /> : <Skeleton h={220} />}
-        </Card>
-      </div>
-      <div className="grid-2 grid-wide-left">
-        <section className="card">
-          <div className="card-head">
-            <h2>By barangay</h2>
-            <span className="muted">Click a row to see it on the map</span>
-          </div>
-          <AreaTable areas={areas} onSelect={(name) => navigate(`/map?tab=active&area=${encodeURIComponent(name)}`)} />
-          {resolved.truncated && <p className="muted small">Resolved counts use the latest {resolved.hazards.length} resolved hazards.</p>}
-        </section>
-        <section className="card">
-          <div className="card-head">
-            <h2>Barangay map</h2>
-            <label className="select-label">
-              <span className="sr-only">Colour by</span>
-              <select value={areaMetric} onChange={(e) => setAreaMetric(e.target.value as AreaMetric)}>
-                {AREA_METRICS.map((m) => <option key={m.value} value={m.value}>Colour by: {m.label}</option>)}
-              </select>
-            </label>
-          </div>
-          <AreaMap barangays={barangays} values={areaValues} max={areaMax}
-            format={(v) => (v == null ? 'No data' : metric.format(v))}
-            label={`Makati barangays shaded by ${metric.label.toLowerCase()}; the table has the same numbers`} />
-          <div className="rain-legend" aria-label="Colour scale">
-            <span className="muted">{metric.format(0)}</span>
-            <span className="rain-ramp" style={{ background: `linear-gradient(90deg, ${SEQUENTIAL_BLUE.join(', ')})` }} />
-            <span className="muted">{metric.format(areaMax)}</span>
-          </div>
-        </section>
-      </div>
+      <AreaFrequencyCard barangays={barangays} from={from} to={to} />
     </div>
   );
 }
 
-function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+/** A small segmented control for switching one card between related views. */
+function Toggle<T extends string>({ value, onChange, options, label }: {
+  value: T; onChange: (v: T) => void; options: [T, string][]; label: string;
+}) {
   return (
-    <section className="card">
-      <div className="card-head card-head-stacked">
-        <h2>{title}</h2>
-        {sub && <span className="muted">{sub}</span>}
-      </div>
-      {children}
-    </section>
+    <div className="segmented small" role="group" aria-label={label}>
+      {options.map(([v, text]) => (
+        <button key={v} type="button" aria-pressed={value === v} onClick={() => onChange(v)}>{text}</button>
+      ))}
+    </div>
   );
 }
 
@@ -332,23 +412,23 @@ function TypeDurations({ rows, what }: { rows: { type: HazardType; averageHours:
 function Outcomes({ outcomes }: { outcomes: Stats['outcomes'] }) {
   const rows = [
     { key: 'resolved', label: 'Resolved', value: outcomes.resolved, hint: 'Fixed and closed by staff or the community' },
-    { key: 'expired', label: 'Expired', value: outcomes.expired, hint: 'Nobody confirmed it for its type’s time to live' },
+    { key: 'expired', label: 'Expired', value: outcomes.expired, hint: 'Nobody confirmed it for its type’s time to live; not necessarily fixed' },
     { key: 'removed', label: 'Removed', value: outcomes.removed, hint: 'Taken down as false, spam or invalid' },
     { key: 'reopened', label: 'Reopened', value: outcomes.reopened, hint: 'Came back after being marked resolved' },
   ];
   const total = rows.reduce((s, r) => s + r.value, 0);
-  return <BarList rows={rows.map((r) => ({ ...r, hint: `${r.label}: ${r.value} (${percent(r.value, total)}). ${r.hint}.` }))}
-    format={(n) => `${n} · ${percent(n, total)}`} empty="No hazards closed or reopened in this range" />;
+  return <ProgressRows rows={rows.map((r) => ({ ...r, note: total ? percent(r.value, total) : undefined }))}
+    empty="No hazards closed or reopened in this range" />;
 }
 
 function Hotspots({ hotspots, barangays }: { hotspots: Stats['hotspots']; barangays: ReturnType<typeof useBarangays> }) {
   if (!hotspots.length) return <p className="muted chart-empty">No place had repeated reports in this range</p>;
   return (
-    <BarList rows={hotspots.map((h, i) => {
+    <ProgressRows rows={hotspots.map((h, i) => {
       const street = streetAt(h.latitude, h.longitude);
       const area = barangayAt(barangays, h.latitude, h.longitude)?.name;
       const label = [street || null, area].filter(Boolean).join(' · ') || `${h.latitude.toFixed(4)}, ${h.longitude.toFixed(4)}`;
-      return { key: String(i), label, value: h.count, hint: `${label}: ${h.count} reports, mostly ${TYPE_LABEL[h.topType].toLowerCase()}` };
+      return { key: String(i), label, value: h.count, note: TYPE_LABEL[h.topType].toLowerCase(), hint: `${label}: ${h.count} reports, mostly ${TYPE_LABEL[h.topType].toLowerCase()}` };
     })} format={(n) => `${n} reports`} />
   );
 }
@@ -358,9 +438,9 @@ function AreaTable({ areas, onSelect }: { areas: AreaRow[]; onSelect: (name: str
     <div className="table-wrap">
       <table className="data-table">
         <thead>
-          <tr><th scope="col">Barangay</th><th scope="col" className="num">Active</th><th scope="col" className="num">High</th>
+          <tr><th scope="col">Barangay</th><th scope="col" className="num">Open</th><th scope="col" className="num">High</th>
             <th scope="col" className="num">Resolved</th><th scope="col" className="num">Avg. age</th>
-            <th scope="col" className="num" title="Resolved in the range as a share of those plus the ones still active">Resolution rate</th></tr>
+            <th scope="col" className="num" title="Resolved in the range as a share of those plus the ones still open">Resolution rate</th></tr>
         </thead>
         <tbody>
           {areas.map((a) => (
@@ -379,14 +459,3 @@ function AreaTable({ areas, onSelect }: { areas: AreaRow[]; onSelect: (name: str
   );
 }
 
-function Stat({ label, value, hint, delta, tone }: {
-  label: string; value?: string; hint?: string; delta?: { text: string; good: boolean }; tone?: 'critical';
-}) {
-  return (
-    <div className={`kpi static${tone ? ` kpi-${tone} kpi-toned` : ''}`} title={hint}>
-      <span className="kpi-value">{value ?? <span className="skeleton" style={{ width: 56, height: 32, display: 'inline-block' }} />}</span>
-      <span className="kpi-label">{label}</span>
-      {delta && <span className={`kpi-delta ${delta.good ? 'good' : 'bad'}`}>{delta.text}</span>}
-    </div>
-  );
-}

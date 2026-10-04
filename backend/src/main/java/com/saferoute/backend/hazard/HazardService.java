@@ -374,6 +374,7 @@ public class HazardService {
         hazard.setExpiresAt(expiryPolicy.expiryFrom(hazard.getType(), now));
         audit.statusChanged(hazardId, moderatorId, oldStatus, newStatus, note);
         audit.record(hazardId, moderatorId, HazardAuditLog.Action.MODERATOR_REOPENED, note);
+        hazard.markReviewed(moderatorId);
         hazard = hazardRepository.save(hazard);
         eventProducer.publishUpdated(hazard, HazardChange.REINSTATED, moderatorId);
         return HazardResponse.from(hazard);
@@ -392,6 +393,7 @@ public class HazardService {
         reputationService.onHazardRemovedAsFalse(hazard);
         audit.statusChanged(hazardId, moderatorId, oldStatus, HazardStatus.REMOVED, note);
         audit.record(hazardId, moderatorId, HazardAuditLog.Action.MODERATOR_REMOVED, note);
+        hazard.markReviewed(moderatorId);
         hazard = hazardRepository.save(hazard);
         eventProducer.publishUpdated(hazard, HazardChange.REMOVED, moderatorId);
         return HazardResponse.from(hazard);

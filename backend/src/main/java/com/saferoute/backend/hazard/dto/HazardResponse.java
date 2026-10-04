@@ -31,7 +31,13 @@ public record HazardResponse(
         /** City response: department code (names from /api/meta/departments), null = unassigned. */
         String assignedDepartment,
         MunicipalPriority municipalPriority,
-        Instant assignedAt
+        Instant assignedAt,
+        /** Last staff action; null = not yet looked at by the city. */
+        Instant reviewedAt,
+        /** Non-null when archived: a week passed without staff review. Still active for commuters. */
+        Instant archivedAt,
+        /** Other reports collated into this one by the duplicate check. */
+        int mergedReportCount
 ) {
     public static HazardResponse from(Hazard hazard) {
         return new HazardResponse(
@@ -56,7 +62,10 @@ public record HazardResponse(
                 hazard.getVersion() != null ? hazard.getVersion() : 0,
                 hazard.getAssignedDepartment(),
                 hazard.getMunicipalPriority(),
-                hazard.getAssignedAt()
+                hazard.getAssignedAt(),
+                hazard.getReviewedAt(),
+                hazard.getArchivedAt(),
+                hazard.getMergedReportCount()
         );
     }
 }

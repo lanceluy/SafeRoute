@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { Info, Layers, X } from 'lucide-react';
 import type { MapLayer } from './MapView';
+import { Menu } from './Menu';
 
 const LAYERS: { value: MapLayer; label: string; hint: string }[] = [
   { value: 'markers', label: 'Hazard markers', hint: 'Each report, grouped when close together' },
@@ -7,78 +9,78 @@ const LAYERS: { value: MapLayer; label: string; hint: string }[] = [
   { value: 'severity', label: 'Severity heatmap', hint: 'Weighted by how dangerous they are' },
 ];
 
-function readOpen(key: string, fallback: boolean) {
-  try {
-    const v = localStorage.getItem(key);
-    return v === null ? fallback : v === '1';
-  } catch {
-    return fallback;
-  }
-}
+/** RainViewer's "Universal Blue" rain colours, light to heavy (same as the Weather page). */
+const RAIN_KEY = ['#00a3e0', '#005588', '#ffee00', '#ffaa00', '#c10000'];
 
-function useRemembered(key: string, fallback: boolean) {
-  const [open, setOpen] = useState(() => readOpen(key, fallback));
-  const toggle = () => setOpen((o) => {
-    try { localStorage.setItem(key, o ? '0' : '1'); } catch { /* not remembered */ }
-    return !o;
-  });
-  return [open, toggle] as const;
-}
-
-export function LayerSwitcher({ layer, onChange }: { layer: MapLayer; onChange: (l: MapLayer) => void }) {
-  const [open, toggle] = useRemembered('saferoute.layers.open', false);
+/**
+ * A toolbar button for the hazard layer (one of) and the rain overlay (on top of any of them).
+ * Picking a hazard layer closes the menu; the overlay checkbox leaves it open.
+ */
+export function LayersButton({ layer, onChange, rain, onRain }: {
+  layer: MapLayer; onChange: (l: MapLayer) => void; rain: boolean; onRain: (on: boolean) => void;
+}) {
   return (
-    <div className="map-panel map-layers">
-      <button type="button" className="map-panel-toggle" aria-expanded={open} onClick={toggle}>
-        <span aria-hidden="true">◧</span> Map layers
-      </button>
-      {open && (
-        <fieldset>
-          <legend className="sr-only">Map layer</legend>
-          {LAYERS.map((l) => (
-            <label key={l.value} className="radio" title={l.hint}>
-              <input type="radio" name="layer" checked={layer === l.value} onChange={() => onChange(l.value)} />
-              {l.label}
-            </label>
-          ))}
-        </fieldset>
-      )}
-    </div>
+    <Menu label={`Map layers: ${LAYERS.find((l) => l.value === layer)?.label}${rain ? ', rain radar' : ''}`} align="left"
+      trigger={<span className={`map-tool-btn${layer !== 'markers' || rain ? ' on' : ''}`} title="Layers"><Layers size={18} aria-hidden="true" /></span>}
+      items={[
+        { heading: 'Hazards' },
+        ...LAYERS.map((l) => ({ label: l.label, hint: l.hint, checked: layer === l.value, radio: true, onSelect: () => onChange(l.value) })),
+        { heading: 'Weather' },
+        { label: 'Rain radar (live)', hint: 'Where it is raining now, under the hazards', checked: rain, onSelect: () => onRain(!rain) },
+      ]} />
   );
 }
 
-export function MapLegend({ layer }: { layer: MapLayer }) {
-  const [open, toggle] = useRemembered('saferoute.legend.open', true);
+/**
+ * The severity key as one small strip; the full explanation opens from ⓘ. Experienced users
+ * need the colours, not the paragraph.
+ */
+export function MapLegend({ layer, rain = false }: { layer: MapLayer; rain?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const heat = layer !== 'markers';
   return (
-    <div className="map-panel map-legend">
-      <button type="button" className="map-panel-toggle" aria-expanded={open} onClick={toggle}>
-        <span aria-hidden="true">≡</span> Legend
-      </button>
-      {open && (layer === 'markers' ? (
-        <div className="legend-body">
-          <p className="legend-heading">Severity (color)</p>
-          <ul>
-            <li><span className="legend-swatch sev-bg-high" />High</li>
-            <li><span className="legend-swatch sev-bg-medium" />Medium</li>
-            <li><span className="legend-swatch sev-bg-low" />Low</li>
-          </ul>
-          <p className="legend-heading">Status (corner mark)</p>
-          <ul>
-            <li><span className="legend-mark">○</span>Reported</li>
-            <li><span className="legend-mark">✓</span>Verified</li>
-            <li><span className="legend-mark">!</span>Contested</li>
-          </ul>
-          <p className="legend-heading">Symbol = hazard type</p>
-          <p className="legend-note">Numbers are groups of nearby hazards. Zoom in or click to separate them.</p>
+    <div className="map-legend">
+      {open && (
+        <div className="map-legend-card" role="dialog" aria-label="Legend">
+          <button type="button" className="icon-btn map-legend-close" onClick={() => setOpen(false)} aria-label="Close legend"><X size={15} aria-hidden="true" /></button>
+          {heat ? (
+            <>
+              <p className="legend-heading">{layer === 'severity' ? 'Severity-weighted' : 'Report density'}</p>
+              <div className={`legend-ramp ramp-${layer}`} />
+              <div className="legend-ramp-labels"><span>Fewer</span><span>More</span></div>
+              {layer === 'severity' && <p className="legend-note">High-severity hazards count most.</p>}
+            </>
+          ) : (
+            <>
+              {rain && <>
+                <p className="legend-heading">Rain radar</p>
+                <div className="legend-ramp" style={{ background: `linear-gradient(90deg, ${RAIN_KEY.join(', ')})` }} />
+                <div className="legend-ramp-labels"><span>Light</span><span>Torrential</span></div>
+                <p className="legend-note">Live from RainViewer, about 600 m detail, updated every few minutes.</p>
+              </>}
+              <p className="legend-heading">Markers</p>
+              <p className="legend-note">Colour is severity; the white symbol is the hazard type. Selecting one dims the rest.</p>
+              <p className="legend-note"><span className="legend-mark">!</span> Contested: the community disagrees.</p>
+              <p className="legend-note"><span className="legend-cluster">12</span> A group of nearby hazards. A red ring means at least one is high severity. Zoom in or click to separate them.</p>
+            </>
+          )}
         </div>
-      ) : (
-        <div className="legend-body">
-          <p className="legend-heading">{layer === 'severity' ? 'Severity-weighted' : 'Report density'}</p>
-          <div className={`legend-ramp ramp-${layer}`} />
-          <div className="legend-ramp-labels"><span>Fewer</span><span>More</span></div>
-          {layer === 'severity' && <p className="legend-note">High-severity hazards count most.</p>}
-        </div>
-      ))}
+      )}
+      <div className="map-legend-strip">
+        {heat ? (
+          <span className="legend-strip-ramp"><span className={`legend-ramp ramp-${layer}`} />Fewer → more</span>
+        ) : (
+          <>
+            <span><i className="sev-bg-high" />High</span>
+            <span><i className="sev-bg-medium" />Medium</span>
+            <span><i className="sev-bg-low" />Low</span>
+          </>
+        )}
+        {rain && <span className="legend-strip-ramp"><span className="legend-ramp" style={{ background: `linear-gradient(90deg, ${RAIN_KEY.join(', ')})` }} />Rain</span>}
+        <button type="button" className="legend-info" aria-expanded={open} onClick={() => setOpen((o) => !o)} aria-label="Explain the map" title="Legend">
+          <Info size={15} aria-hidden="true" />
+        </button>
+      </div>
     </div>
   );
 }

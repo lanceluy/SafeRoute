@@ -49,7 +49,7 @@ export function useThemeColors() {
   const read = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return {
     dark,
-    navy: read('--navy'), series1: read('--series-1'), series2: read('--series-2'),
+    navy: read('--accent'), series1: read('--series-1'), series2: read('--series-2'), good: read('--series-good'),
     grid: read('--grid'), axis: read('--axis'), surface: read('--surface'), text2: read('--text-2'),
   };
 }

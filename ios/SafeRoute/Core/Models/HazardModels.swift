@@ -165,22 +165,27 @@ enum Severity: String, Codable, Comparable, TolerantDecodableEnum {
         }
     }
 
-    /// Map marker palette: strong red only for high severity, muted amber for medium, so the map
-    /// stays readable when many hazards are shown.
+    /// Map marker palette: red for high, amber for medium, yellow for low (the portal's #EAB308),
+    /// so the three read apart at a glance on the map.
     var markerColor: UIColor {
         switch self {
         case .high: return .systemRed
-        case .medium: return UIColor(red: 0.85, green: 0.62, blue: 0.27, alpha: 1)
-        case .low: return UIColor(red: 0.62, green: 0.60, blue: 0.42, alpha: 1)
+        case .medium: return UIColor(red: 0.85, green: 0.52, blue: 0.16, alpha: 1)
+        case .low: return UIColor(red: 0.918, green: 0.702, blue: 0.031, alpha: 1)
         case .unknown: return .systemGray
         }
+    }
+
+    /// The type glyph on a marker disc: white reads poorly on yellow, so low uses a dark brown.
+    var markerGlyphColor: UIColor {
+        self == .low ? UIColor(red: 0.26, green: 0.13, blue: 0.02, alpha: 1) : .white
     }
 
     var uiColor: UIColor {
         switch self {
         case .high: return .systemRed
         case .medium: return .systemOrange
-        case .low: return UIColor(red: 0.80, green: 0.62, blue: 0.0, alpha: 1) // darker yellow for contrast
+        case .low: return UIColor(red: 0.918, green: 0.702, blue: 0.031, alpha: 1) // yellow, as on the map
         case .unknown: return .systemGray
         }
     }

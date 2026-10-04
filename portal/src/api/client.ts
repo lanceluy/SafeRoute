@@ -1,7 +1,7 @@
 // Authenticated access to the SafeRoute backend. Access tokens last 30 minutes: on a 401 the
 // client refreshes once and retries; if that fails the session ends.
 import type {
-  ActivityEntry, Department, Hazard, HazardDetail, MunicipalPriority, Page, QueueQuery, SavedView, Session, Stats,
+  ActivityEntry, Department, Hazard, HazardDetail, MunicipalPriority, Page, QueueQuery, SavedView, Session, StaffMember, Stats,
   TimelineEntry,
 } from './types';
 
@@ -242,6 +242,24 @@ export const api = {
     return (await request(`/moderation/hazards/${id}/response`, {
       method: 'PUT', json: { department, priority, note: note || null },
     })).json() as Promise<Hazard>;
+  },
+
+  /** "Mark reviewed": stops the one-week archive clock and brings an archived hazard back. */
+  async review(id: string, note = '') {
+    return (await request(`/moderation/hazards/${id}/review`, { method: 'POST', json: { note: note || null } })).json() as Promise<Hazard>;
+  },
+
+  staff(signal?: AbortSignal) {
+    return getJson<StaffMember[]>('/moderation/staff', signal);
+  },
+
+  /** Officials only: a new municipal official account for a colleague. */
+  async createStaff(displayName: string, email: string, password: string) {
+    return (await request('/moderation/staff', { method: 'POST', json: { displayName, email, password } })).json() as Promise<StaffMember>;
+  },
+
+  async revokeStaff(id: string) {
+    await request(`/moderation/staff/${id}`, { method: 'DELETE' });
   },
 
   savedViews(signal?: AbortSignal) {

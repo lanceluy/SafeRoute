@@ -117,9 +117,32 @@ public class Hazard {
     @Column(name = "assigned_at")
     private Instant assignedAt;
 
+    /** When a staff member last acted on it; null = nobody has, so the archive clock is running. */
+    @Column(name = "reviewed_at")
+    private Instant reviewedAt;
+
+    @Column(name = "reviewed_by")
+    private UUID reviewedBy;
+
+    /** Set after a week without staff review. Still active and on the map; only out of the working queues. */
+    @Column(name = "archived_at")
+    private Instant archivedAt;
+
+    /** Other people's submissions collated into this hazard by the duplicate check. */
+    @Column(name = "merged_report_count", nullable = false)
+    @Builder.Default
+    private int mergedReportCount = 0;
+
     @PreUpdate
     public void onUpdate() {
         this.updatedAt = Instant.now();
+    }
+
+    /** A staff member acted on it: stops the archive clock and brings it back if archived. */
+    public void markReviewed(UUID staffId) {
+        this.reviewedAt = Instant.now();
+        this.reviewedBy = staffId;
+        this.archivedAt = null;
     }
 
     public double latitude() {

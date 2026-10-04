@@ -83,6 +83,7 @@ final class AppState: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: userKey),
            let cached = try? JSONDecoder.api.decode(CurrentUser.self, from: data) {
             currentUser = cached // lets the app open offline
+            map.restoreCached(for: cached.id) // and with the hazards it last knew
         }
         do {
             let me = try await APIClient.shared.send(.me, as: CurrentUser.self)
@@ -199,6 +200,7 @@ final class AppState: ObservableObject {
         UserDefaults.standard.set(try? JSONEncoder.api.encode(user), forKey: userKey)
         offlineQueue.activate(ownerId: user.id)
         alerts.activate(userId: user.id)
+        map.restoreCached(for: user.id)
     }
 
     private func startSession() {

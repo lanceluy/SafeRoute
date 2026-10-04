@@ -12,9 +12,20 @@ export function SeverityBadge({ severity, suffix = true }: { severity: Severity;
   );
 }
 
-export function StatusBadge({ status }: { status: HazardStatus }) {
+/** "● High": severity as a category in lists, where a pill on every row would be noise. */
+export function SeverityDot({ severity }: { severity: Severity }) {
   return (
-    <span className={`badge status status-${status.toLowerCase()}`} title={STATUS_HINT[status]}>
+    <span className={`sev-text sev-text-${severity.toLowerCase()}`}>
+      <span className={`sev-dot sev-bg-${severity.toLowerCase()}`} aria-hidden="true" />
+      {SEVERITY_LABEL[severity]}<span className="sr-only"> severity</span>
+    </span>
+  );
+}
+
+/** `plain` drops the pill: icon and text only, for rows. */
+export function StatusBadge({ status, plain = false }: { status: HazardStatus; plain?: boolean }) {
+  return (
+    <span className={`${plain ? 'plain-badge' : 'badge status'} status-${status.toLowerCase()}`} title={STATUS_HINT[status]}>
       <span aria-hidden="true" className="status-mark">{STATUS_MARK[status]}</span>
       {STATUS_LABEL[status]}
     </span>
@@ -22,11 +33,11 @@ export function StatusBadge({ status }: { status: HazardStatus }) {
 }
 
 /** Confidence is how trustworthy the report looks; it's separate from how dangerous it is. */
-export function ConfidenceBadge({ confidence, long = false }: { confidence: Confidence | null; long?: boolean }) {
+export function ConfidenceBadge({ confidence, long = false, plain = false }: { confidence: Confidence | null; long?: boolean; plain?: boolean }) {
   if (!confidence) return null;
   const bars = CONFIDENCE_BARS[confidence];
   return (
-    <span className={`badge confidence conf-${confidence.toLowerCase()}`} title={CONFIDENCE_HINT[confidence]}>
+    <span className={`${plain ? 'plain-badge' : 'badge confidence'} conf-${confidence.toLowerCase()}`} title={CONFIDENCE_HINT[confidence]}>
       {confidence === 'CONTESTED'
         ? <span aria-hidden="true" className="status-mark">!</span>
         : (

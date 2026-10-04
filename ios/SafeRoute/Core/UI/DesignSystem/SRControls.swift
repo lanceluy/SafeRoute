@@ -298,7 +298,7 @@ struct HazardIcon: View {
     var body: some View {
         Image(systemName: type.symbolName)
             .font(.system(size: size * 0.46, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(Color(uiColor: severity.markerGlyphColor))
             .frame(width: size, height: size)
             .background(severity.color, in: Circle())
             .accessibilityHidden(true)

@@ -7,6 +7,9 @@ import com.saferoute.backend.hazard.dto.HazardResponse;
 import com.saferoute.backend.moderation.dto.ActivityEntry;
 import com.saferoute.backend.moderation.dto.ModerationStats;
 import com.saferoute.backend.moderation.dto.MunicipalResponseRequest;
+import com.saferoute.backend.moderation.dto.ReviewRequest;
+import com.saferoute.backend.moderation.dto.StaffAccountRequest;
+import com.saferoute.backend.moderation.dto.StaffMember;
 import com.saferoute.backend.moderation.dto.SavedViewRequest;
 import com.saferoute.backend.moderation.dto.SavedViewResponse;
 import jakarta.validation.Valid;
@@ -33,12 +36,38 @@ public class ModerationController {
     private final ModerationQueryService queries;
     private final MunicipalResponseService responses;
     private final SavedViewService savedViews;
+    private final StaffAccountService staff;
 
     public ModerationController(ModerationQueryService queries, MunicipalResponseService responses,
-                                SavedViewService savedViews) {
+                                SavedViewService savedViews, StaffAccountService staff) {
         this.queries = queries;
         this.responses = responses;
         this.savedViews = savedViews;
+        this.staff = staff;
+    }
+
+    @GetMapping("/staff")
+    @Operation(summary = "Portal staff accounts")
+    public List<StaffMember> staff() {
+        return staff.list();
+    }
+
+    @PostMapping("/staff")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('MUNICIPAL_OFFICIAL')")
+    @Operation(summary = "Create a municipal official account for a colleague",
+            description = "Officials only. The new account can sign in to the portal straight away with the given password.")
+    public StaffMember createStaff(@Valid @RequestBody StaffAccountRequest request,
+                                   @AuthenticationPrincipal AuthenticatedUser principal) {
+        return staff.create(principal.id(), request);
+    }
+
+    @DeleteMapping("/staff/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('MUNICIPAL_OFFICIAL')")
+    @Operation(summary = "Remove a colleague's portal access", description = "Officials only; the account becomes a normal one.")
+    public void revokeStaff(@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser principal) {
+        staff.revoke(principal.id(), id);
     }
 
     @PutMapping("/hazards/{id}/response")
@@ -47,6 +76,14 @@ public class ModerationController {
     public HazardResponse setResponse(@PathVariable UUID id, @Valid @RequestBody MunicipalResponseRequest request,
                                       @AuthenticationPrincipal AuthenticatedUser principal) {
         return responses.update(id, principal.id(), request);
+    }
+
+    @PostMapping("/hazards/{id}/review")
+    @Operation(summary = "Mark reviewed: the city has seen it",
+            description = "Stops the one-week archive clock, and brings an archived hazard back to the working queues.")
+    public HazardResponse review(@PathVariable UUID id, @Valid @RequestBody(required = false) ReviewRequest request,
+                                 @AuthenticationPrincipal AuthenticatedUser principal) {
+        return responses.review(id, principal.id(), request != null ? request.note() : null);
     }
 
     @GetMapping("/saved-views")
@@ -73,7 +110,7 @@ public class ModerationController {
             description = "Default order: DISPUTED first, then reports from the lowest-reputation reporters. "
                     + "`view` picks a queue tab and replaces `statuses`; every other filter narrows it further.")
     public PageResponse<HazardResponse> queue(
-            @Parameter(description = "recent, attention, high, contested, expiring, unconfirmed, active, removed or unassigned")
+            @Parameter(description = "recent, attention, high, contested, expiring, unconfirmed, active, removed, unassigned, archived or duplicates")
             @RequestParam(required = false) String view,
             @Parameter(description = "Comma-separated statuses (default: active ones). Ignored with `view`.")
             @RequestParam(required = false) String statuses,

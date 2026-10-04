@@ -1,18 +1,20 @@
-import { useEffect, useRef } from 'react';
-import L from '../lib/leaflet';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { LocateFixed, Minus, Plus } from 'lucide-react';
+import L, { baseTiles } from '../lib/leaflet';
 import { useThemeColors } from '../lib/theme';
 import 'leaflet.markercluster';
 import 'leaflet.heat';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import type { Hazard, Severity } from '../api/types';
 import type { Barangay } from '../lib/geo';
-import { SEVERITY_RANK, STATUS_LABEL, STATUS_MARK, TYPE_LABEL, typeIcon } from '../lib/hazards';
+import { STATUS_LABEL, TYPE_LABEL, typeIcon } from '../lib/hazards';
 
 /** density: every hazard alike · severity: high counts most · high: high severity only · age: older counts more. */
 export type MapLayer = 'markers' | 'density' | 'severity' | 'high' | 'age';
 
 const MAKATI: L.LatLngTuple = [14.5547, 121.0244];
-const FOCUS_ZOOM = 17;
+// The gray canvas tiles are native up to 16; beyond that they are upscaled and the labels blur.
+const FOCUS_ZOOM = 16;
 const HEAT_WEIGHT: Record<Severity, number> = { HIGH: 1, MEDIUM: 0.6, LOW: 0.3 };
 /** In the age layer a hazard reaches full weight after two weeks unresolved. */
 const AGE_FULL_DAYS = 14;
@@ -23,27 +25,36 @@ function heatWeight(h: Hazard, layer: MapLayer, now: number) {
   return 0.7;
 }
 
+/**
+ * One colour (severity) and one white glyph (type). Status lives in the list and the inspector;
+ * only Contested earns a small corner mark. The selected marker grows and gets a halo.
+ */
 function pinIcon(h: Hazard, selected: boolean, pulse: boolean) {
-  const status = h.status.toLowerCase();
+  const size = selected ? 46 : 34;
   return L.divIcon({
     className: 'pin-wrap',
-    iconSize: selected ? [44, 44] : [32, 32],
-    iconAnchor: selected ? [22, 22] : [16, 16],
-    html: `<div class="pin sev-bg-${h.severity.toLowerCase()} pin-${status}${selected ? ' pin-selected' : ''}${pulse ? ' pin-pulse' : ''}">`
-      + `${typeIcon(h.type, selected ? 22 : 16)}<span class="pin-status" aria-hidden="true">${STATUS_MARK[h.status]}</span></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    html: `<div class="pin sev-bg-${h.severity.toLowerCase()} pin-${h.status.toLowerCase()}${selected ? ' pin-selected' : ''}${pulse ? ' pin-pulse' : ''}">`
+      + `${typeIcon(h.type, selected ? 22 : 17)}${h.status === 'DISPUTED' ? '<span class="pin-status" aria-hidden="true">!</span>' : ''}</div>`,
   });
 }
 
+/**
+ * Clusters are neutral: a group mixes severities, so one fill colour would mislead. A red ring
+ * says "at least one high severity inside".
+ */
 function clusterIcon(cluster: L.MarkerCluster) {
   const markers = cluster.getAllChildMarkers() as (L.Marker & { hazard?: Hazard })[];
-  const worst = markers.reduce<Severity>((w, m) => (m.hazard && SEVERITY_RANK[m.hazard.severity] < SEVERITY_RANK[w] ? m.hazard.severity : w), 'LOW');
+  const high = markers.filter((m) => m.hazard?.severity === 'HIGH').length;
   const n = cluster.getChildCount();
   const size = n < 10 ? 40 : n < 50 ? 48 : 56;
+  const label = `${n} hazards${high ? `, ${high} high severity` : ''}`;
   return L.divIcon({
     className: 'pin-wrap',
     iconSize: [size, size],
     // Just the number on the map; the full wording stays for hover and screen readers.
-    html: `<div class="cluster cluster-${worst.toLowerCase()}" style="width:${size}px;height:${size}px" role="img" aria-label="${n} hazards" title="${n} hazards"><strong>${n}</strong></div>`,
+    html: `<div class="cluster${high ? ' cluster-has-high' : ''}" style="width:${size}px;height:${size}px" role="img" aria-label="${label}" title="${label}"><strong>${n}</strong></div>`,
   });
 }
 
@@ -51,10 +62,18 @@ function clusterIcon(cluster: L.MarkerCluster) {
  * Leaflet map of hazards: clustered markers (color = severity, glyph = type, corner mark =
  * status) or a heatmap, plus barangay outlines. Selecting reveals and enlarges the marker.
  */
-export function MapView({ hazards, selectedId, onSelect, layer, barangays, highlightArea, pulseIds, fitKey, loading, insetRight = 0,
-  region, drawing = false, onDrawn }: {
+export function MapView({ hazards, selectedId, highlightId, onSelect, layer, barangays, highlightArea, pulseIds, fitKey, loading, insetRight = 0,
+  region, drawing = false, onDrawn, toolbar, controls = false, weatherOverlay }: {
   hazards: Hazard[];
   selectedId?: string | null;
+  /** Shown like the selection (bigger, others dimmed) without moving the map: a marker preview. */
+  highlightId?: string | null;
+  /** Extra buttons for the floating toolbar, after zoom and recenter. */
+  toolbar?: ReactNode;
+  /** Show the floating toolbar (zoom, recenter, then `toolbar`). Otherwise Leaflet's zoom control. */
+  controls?: boolean;
+  /** Live rain radar tiles drawn above the streets and below the markers. */
+  weatherOverlay?: { url: string; maxNativeZoom: number; attribution: string } | null;
   onSelect?: (id: string) => void;
   layer: MapLayer;
   barangays?: Barangay[];
@@ -85,17 +104,17 @@ export function MapView({ hazards, selectedId, onSelect, layer, barangays, highl
   useEffect(() => { navyRef.current = colors.navy; });
 
   useEffect(() => {
-    const m = L.map(el.current!, { zoomControl: true, preferCanvas: false }).setView(MAKATI, 14);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors (ODbL)',
-    }).addTo(m);
+    const m = L.map(el.current!, { zoomControl: !controls, preferCanvas: false }).setView(MAKATI, 14);
+    // Group generously at city scale; street level shows every hazard.
     cluster.current = L.markerClusterGroup({
-      showCoverageOnHover: false, maxClusterRadius: 50, spiderfyOnMaxZoom: true, iconCreateFunction: clusterIcon,
+      showCoverageOnHover: false, maxClusterRadius: 80, spiderfyOnMaxZoom: true, iconCreateFunction: clusterIcon,
       // Street level shows every hazard, so selecting one never needs to zoom further than this.
       disableClusteringAtZoom: FOCUS_ZOOM,
       chunkedLoading: true,
     });
+    // Rain radar sits above the tiles and outlines (400 is the overlay pane) but below the markers (600).
+    m.createPane('weather').style.zIndex = '450';
+    m.getPane('weather')!.style.pointerEvents = 'none';
     map.current = m;
     const resize = new ResizeObserver(() => m.invalidateSize());
     resize.observe(el.current!);
@@ -104,7 +123,30 @@ export function MapView({ hazards, selectedId, onSelect, layer, barangays, highl
       m.remove();
       map.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The base map follows the theme.
+  const base = useRef<L.LayerGroup | null>(null);
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    base.current?.remove();
+    base.current = baseTiles(colors.dark, barangays).addTo(m);
+  }, [colors.dark, barangays]);
+
+  // Live rain radar, when asked for.
+  const radar = useRef<L.TileLayer | null>(null);
+  useEffect(() => {
+    const m = map.current;
+    radar.current?.remove();
+    radar.current = null;
+    if (!m || !weatherOverlay) return;
+    radar.current = L.tileLayer(weatherOverlay.url, {
+      pane: 'weather', opacity: 0.6, tileSize: 512, zoomOffset: -1, maxNativeZoom: weatherOverlay.maxNativeZoom,
+      attribution: weatherOverlay.attribution,
+    }).addTo(m);
+  }, [weatherOverlay?.url, weatherOverlay?.maxNativeZoom, weatherOverlay?.attribution]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Barangay outlines, faint; the selected area stands out.
   useEffect(() => {
@@ -181,22 +223,23 @@ export function MapView({ hazards, selectedId, onSelect, layer, barangays, highl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hazards, layer]);
 
-  // Selected marker: bigger, on top, revealed out of its cluster, centered.
+  // Selected (or previewed) marker: bigger and on top; a selection is also revealed and centered.
+  const focusId = selectedId ?? highlightId ?? null;
   const lastSelected = useRef<string | null>(null);
   const flownTo = useRef<string | null>(null);
   useEffect(() => {
     const prev = lastSelected.current;
-    if (prev && prev !== selectedId) {
+    if (prev && prev !== focusId) {
       const old = markers.current.get(prev);
       if (old?.hazard) { old.setIcon(pinIcon(old.hazard, false, false)); old.setZIndexOffset(0); }
     }
-    lastSelected.current = selectedId ?? null;
+    lastSelected.current = focusId;
     if (!selectedId) flownTo.current = null;
     const m = map.current;
+    const focused = focusId ? markers.current.get(focusId) : undefined;
+    if (focused?.hazard) { focused.setIcon(pinIcon(focused.hazard, true, false)); focused.setZIndexOffset(1000); }
     const marker = selectedId ? markers.current.get(selectedId) : undefined;
     if (!m || !marker?.hazard) return;
-    marker.setIcon(pinIcon(marker.hazard, true, false));
-    marker.setZIndexOffset(1000);
     // Live refreshes rebuild the markers; only move the map when the selection itself changes.
     if (flownTo.current === selectedId) return;
     flownTo.current = selectedId ?? null;
@@ -204,7 +247,7 @@ export function MapView({ hazards, selectedId, onSelect, layer, barangays, highl
     const zoom = Math.max(m.getZoom(), FOCUS_ZOOM);
     const point = m.project(marker.getLatLng(), zoom).add([insetRight / 2, 0]);
     m.flyTo(m.unproject(point, zoom), zoom, { duration: 0.5 });
-  }, [selectedId, hazards, layer, insetRight]);
+  }, [selectedId, focusId, hazards, layer, insetRight]);
 
   useEffect(() => {
     if (!pulseIds?.size) return;
@@ -281,9 +324,30 @@ export function MapView({ hazards, selectedId, onSelect, layer, barangays, highl
     m.fitBounds(bounds.pad(0.15), { maxZoom: 16, animate: true });
   }, [fitKey, hazards, selectedId, highlightArea]);
 
+  const zoom = (by: number) => map.current?.setZoom(map.current.getZoom() + by);
+  // Back to the whole picture: every hazard shown, or Makati when there are none.
+  const recenter = () => {
+    const m = map.current;
+    if (!m) return;
+    if (hazards.length) m.flyToBounds(L.latLngBounds(hazards.map((h) => [h.latitude, h.longitude] as L.LatLngTuple)).pad(0.15), { maxZoom: 16, duration: 0.5 });
+    else m.flyTo(MAKATI, 14, { duration: 0.5 });
+  };
+
   return (
-    <div className="map-shell">
+    <div className={`map-shell${focusId ? ' has-focus' : ''}`}>
       <div ref={el} className="map" role="region" aria-label="Hazard map" />
+      {controls && (
+        <div className="map-toolbar" role="toolbar" aria-label="Map controls">
+          <div className="map-toolbar-group">
+            <button type="button" onClick={() => zoom(1)} aria-label="Zoom in" title="Zoom in"><Plus size={18} aria-hidden="true" /></button>
+            <button type="button" onClick={() => zoom(-1)} aria-label="Zoom out" title="Zoom out"><Minus size={18} aria-hidden="true" /></button>
+          </div>
+          <div className="map-toolbar-group">
+            <button type="button" onClick={recenter} aria-label="Show all hazards" title="Show all hazards"><LocateFixed size={18} aria-hidden="true" /></button>
+            {toolbar}
+          </div>
+        </div>
+      )}
       {loading && <div className="map-loading" role="status"><span className="spinner" aria-hidden="true" />Loading hazards…</div>}
     </div>
   );

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import type { Hazard, HazardType, QueueSort, Stats } from '../api/types';
+import { useSearchParams } from 'react-router';
+import { MapPin } from 'lucide-react';
+import { UNASSIGNED, type Hazard, type HazardType, type QueueSort, type Stats } from '../api/types';
 import { plural } from '../lib/format';
 import type { Barangay } from '../lib/geo';
-import { buildQuery, isStale, refine, resolveTab, STALE_DAYS, type QueueChip, type QueueTab } from '../lib/queue';
+import { buildQuery, filterChips, refine, resolveTab, tabCount, type QueueChip, type QueueTab } from '../lib/queue';
 import { useShortcuts } from '../lib/shortcuts';
 import { ActionDialog } from './ActionDialog';
 import type { ViewConfig } from '../lib/views';
@@ -11,6 +13,8 @@ import { useQueue } from '../state/useQueue';
 import { BulkBar } from './BulkBar';
 import { FilterBar, NO_FILTERS, activeFilterCount, type Filters } from './FilterBar';
 import { HazardRow } from './HazardRow';
+import { Chevron } from './Chevron';
+import { Menu } from './Menu';
 import { EmptyState, ErrorState, SkeletonRows } from './States';
 import { QueueMoreMenu } from './QueueMoreMenu';
 
@@ -49,7 +53,8 @@ export function useQueueControls(tabs: QueueTab[], chipDefs: QueueChip[], barang
     if (next?.archive) setChips([]);
   };
   const [search, setSearch] = useState('');
-  const [filtersOpen, setFiltersOpen] = useState(!!initialArea || !!initialType);
+  // Active filters show as pills under the dropdowns, so the More panel only opens when asked.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -57,7 +62,8 @@ export function useQueueControls(tabs: QueueTab[], chipDefs: QueueChip[], barang
   }, []);
   const tab = tabs.find((t) => t.key === tabKey) ?? tabs[0];
   const query = useMemo(() => buildQuery(tab, filters, sort, barangays), [tab, filters, sort, barangays]);
-  const queue = useQueue(query);
+  const raw = useQueue(query);
+  const queue = useMemo(() => (tab.hideArchived ? { ...raw, hazards: raw.hazards.filter((h) => !h.archivedAt) } : raw), [raw, tab.hideArchived]);
   const base = useMemo(() => refine(queue.hazards, search, filters, barangays), [queue.hazards, search, filters, barangays]);
   const active = useMemo(() => chipDefs.filter((c) => chips.includes(c.key)), [chipDefs, chips]);
   const shown = useMemo(() => (active.length ? base.filter((h) => active.every((c) => c.match(h, now))) : base), [base, active, now]);
@@ -79,9 +85,26 @@ export function useQueueControls(tabs: QueueTab[], chipDefs: QueueChip[], barang
       setFilters(v.filters);
       setSort(v.sort);
       setSearch(v.search);
-      setFiltersOpen(activeFilterCount(v.filters) > 0);
     },
   };
+}
+
+/**
+ * Applies a search from the top bar (?q=, with an optional ?tab=), then drops it from the URL so the
+ * same search can be run again and a reload doesn't repeat it.
+ */
+export function useSearchLink(c: QueueControls) {
+  const [params, setParams] = useSearchParams();
+  const q = params.get('q');
+  const { setSearch, setTab } = c;
+  useEffect(() => {
+    if (q == null) return;
+    const tab = params.get('tab');
+    if (tab) setTab(tab);
+    setSearch(q);
+    setParams((p) => { const next = new URLSearchParams(p); next.delete('q'); return next; }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
 }
 
 /** Tabs, search/sort/filters and the compact hazard list. */
@@ -114,8 +137,6 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
-  const highCount = shown.filter((h) => h.severity === 'HIGH').length;
-  const staleCount = shown.filter((h) => isStale(h, now)).length;
 
   // Bring the selected row into view (e.g. after clicking its marker).
   useEffect(() => {
@@ -148,78 +169,91 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
   useShortcuts({ arrowdown: () => step(1), arrowup: () => step(-1), j: () => step(1), k: () => step(-1) });
 
   // An empty tab points at another one that still has work, inbox first.
-  const counts = (t: QueueTab) => (t.view ? stats?.queueCounts[t.view] ?? 0 : 0);
+  const counts = (t: QueueTab) => tabCount(t, stats?.queueCounts) ?? 0;
+  const primaryTabs = tabs.filter((t) => !t.more);
+  const noun = page === 'moderation' ? 'report' : 'hazard';
+  const term = c.search.trim().toLowerCase();
+  const places = page === 'map' && term.length >= 2
+    ? barangays.filter((b) => b.name.toLowerCase().includes(term) && b.name !== c.filters.area).slice(0, 3) : [];
+  const moreTabs = tabs.filter((t) => t.more);
   const elsewhere = tabs.filter((t) => t.key !== c.tab.key && !t.archive && counts(t) > 0)
     .sort((a, b) => (a.key === 'attention' ? -1 : b.key === 'attention' ? 1 : 0))[0];
   const activeChips = c.chipDefs.filter((ch) => c.chips.includes(ch.key));
   const listTitle = [c.tab.label, ...activeChips.map((ch) => ch.label)].join(' · ');
+  // Printed under "Scope" on exports.
+  const exportFilters = [
+    ...filterChips(c.filters, (code) => (code === UNASSIGNED ? 'Unassigned' : departments.find((d) => d.code === code)?.name ?? code)).map((f) => f.label),
+    ...(c.search ? [`Search “${c.search}”`] : []),
+  ];
 
   return (
     <div className="queue">
       {title && <h2 className="queue-title">{title}</h2>}
-      {/* 1. Where am I? Four primary tabs. Only the urgent count stands out. */}
+      {/* 1. Where am I? Primary tabs, with the rarer ones under More. Only a waiting review count is red. */}
       <div className="tabs" role="tablist" aria-label="Queue">
-        {tabs.map((t) => {
-          const count = t.view ? stats?.queueCounts[t.view] : undefined;
-          // Needs attention / review is the main work queue: tinted, with a warning mark, whenever it has items.
+        {primaryTabs.map((t) => {
+          const count = tabCount(t, stats?.queueCounts);
           const urgent = t.key === 'attention' && !!count;
           return (
             <button key={t.key} type="button" role="tab" aria-selected={c.tab.key === t.key}
-              className={`tab${c.tab.key === t.key ? ' active' : ''}${urgent ? ' tab-urgent' : ''}`} onClick={() => c.setTab(t.key)}>
-              {urgent && <span className="tab-warn" aria-hidden="true">⚠</span>}
+              className={`tab${c.tab.key === t.key ? ' active' : ''}`} onClick={() => c.setTab(t.key)}>
               {t.label}
               {count !== undefined && <span className={`tab-count${urgent ? ' urgent' : ''}${count === 0 ? ' zero' : ''}`}>{count}</span>}
             </button>
           );
         })}
+        {moreTabs.length > 0 && (
+          <Menu label="More queues" align="left"
+            trigger={<span className={`tab tab-more${c.tab.more ? ' active' : ''}`}>{c.tab.more ? c.tab.label : 'More'}<Chevron /></span>}
+            items={moreTabs.map((t) => ({
+              label: t.label, checked: c.tab.key === t.key, radio: true,
+              meta: tabCount(t, stats?.queueCounts), onSelect: () => c.setTab(t.key),
+            }))} />
+        )}
       </div>
-      {/* 2. How do I narrow it down? Chips narrow the open tab; they can combine. */}
-      {!c.tab.archive && c.chipDefs.length > 0 && (
-        <div className="queue-chips" role="group" aria-label="Filter by">
-          <span className="queue-chips-label">Filter by</span>
-          {c.chipDefs.map((ch) => {
-            const on = c.chips.includes(ch.key);
-            return (
-              <button key={ch.key} type="button" className={`queue-chip${on ? ' on' : ''}`} aria-pressed={on} onClick={() => c.toggleChip(ch.key)}>
-                {ch.label}
-                <span className="queue-chip-count">{c.chipCounts[ch.key] ?? 0}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {/* 2. Search, then the filters as dropdowns; active ones show as removable pills. */}
       <FilterBar ref={searchRef} search={c.search} onSearch={c.setSearch} sort={c.sort} onSort={c.setSort}
+        placeholder={page === 'map' ? 'Search hazards or places…' : undefined}
         filters={c.filters} onFilters={c.setFilters} barangays={barangays} departments={departments}
+        chipDefs={c.chipDefs} chips={c.chips} onToggleChip={c.toggleChip} onClearChips={c.clearChips} showStatus={!c.tab.archive}
         open={c.filtersOpen} onToggle={c.toggleFilters} extra={
-          // 3. What can I do here? Views, export and select share one menu.
+          // Views, export and select share one menu.
           <QueueMoreMenu page={page} onApply={c.apply}
             current={() => ({ page, tab: c.tab.key, chips: c.chips, filters: c.filters, sort: c.sort, search: c.search })}
-            hazards={shown} title={listTitle} barangays={barangays} departments={departments} stats={stats}
+            hazards={shown} title={listTitle} filters={exportFilters} barangays={barangays} departments={departments} stats={stats}
             onSelectMode={() => setSelectMode(true)} />
         } />
       {selectMode && (
         <BulkBar selected={selectedHazards} total={shown.length} allChecked={allChecked}
           onToggleAll={() => setChecked(allChecked ? new Set() : new Set(shown.map((h) => h.id)))}
-          departments={departments} barangays={barangays} stats={stats}
+          departments={departments} barangays={barangays} stats={stats} exportable={page === 'moderation'}
           onCancel={endSelect} onDone={() => { setChecked(new Set()); window.setTimeout(queue.reload, 900); }} />
       )}
+      {/* On the map, a search that names a barangay offers to show that place. */}
+      {places.length > 0 && (
+        <div className="place-results" aria-label="Places">
+          <span className="place-results-label">Places</span>
+          {places.map((b) => (
+            <button key={b.name} type="button" className="place-result"
+              onClick={() => { c.setFilters({ ...c.filters, area: b.name }); c.setSearch(''); }}>
+              <MapPin size={14} aria-hidden="true" />{b.name}<span>Show area</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {/* 3. How many. */}
       <p className="queue-summary" aria-live="polite">
-        {!queue.loading && !queue.error && shown.length > 0 && (
+        {!queue.loading && !queue.error && (
           <>
-            <strong>{plural(shown.length, 'hazard')}</strong>
-            {c.search || c.filters.area ? ` of ${queue.hazards.length}` : ''}
-            {queue.truncated && ` (first ${queue.hazards.length} of ${queue.total})`}
-            {' · '}<span className={highCount ? 'summary-high' : undefined}>{highCount} high severity</span>
-            {' · '}<span className={staleCount ? 'summary-stale' : undefined} title={`Active and reported more than ${STALE_DAYS} days ago`}>{staleCount} older than {STALE_DAYS} days</span>
-            {activeFilterCount(c.filters) > 0 && ' · filtered'}
+            <strong>{plural(shown.length, noun)}</strong>
+            {shown.length !== queue.hazards.length || c.search ? <span> of {queue.hazards.length}</span> : null}
+            {queue.truncated && <span> (first {queue.hazards.length} of {queue.total})</span>}
           </>
         )}
       </p>
       {!queue.loading && !queue.error && shown.length > 0 && !selectMode && (
         <div className="queue-head table-only" aria-hidden="true">
-          <span />
-          <span>Hazard</span><span>Severity</span><span>Status</span><span>Confidence</span><span>Area</span>
-          <span className="num">Community</span><span>Assigned</span><span className="num">Age</span><span />
+          <span>Hazard</span><span>Location</span><span>Priority</span><span>Status</span><span className="num">Age</span><span />
         </div>
       )}
       <div className="queue-scroll" ref={listRef} onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 80)}>
@@ -232,13 +266,13 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
         )}
         {!queue.loading && !queue.error && shown.length === 0 && (
           activeChips.length && !c.search && !activeFilterCount(c.filters)
-            ? <EmptyState icon="⌕" title={activeChips.length === 1 ? activeChips[0].empty.title : 'Nothing matches these filters'}
+            ? <EmptyState icon="search" title={activeChips.length === 1 ? activeChips[0].empty.title : 'Nothing matches these filters'}
                 action={{ text: `${plural(queue.hazards.length, 'hazard')} in ${c.tab.label} without ${activeChips.length === 1 ? 'this filter' : 'these filters'}.`,
                   label: activeChips.length === 1 ? 'Clear filter' : 'Clear filters', onClick: c.clearChips }}>
                 {activeChips.length === 1 ? activeChips[0].empty.body : 'No hazard in this tab matches all of them.'}
               </EmptyState>
             : c.search || activeFilterCount(c.filters) || activeChips.length
-            ? <EmptyState icon="⌕" title="No hazards match">Try a different search, or clear the filters.</EmptyState>
+            ? <EmptyState icon="search" title="No hazards match">Try a different search, or clear the filters.</EmptyState>
             : <EmptyState title={c.tab.empty.title} action={elsewhere ? {
                 text: `You still have ${plural(counts(elsewhere), 'report')} in ${elsewhere.label}.`,
                 label: `Go to ${elsewhere.label}`, onClick: () => c.setTab(elsewhere.key),
@@ -248,7 +282,7 @@ export function QueuePanel({ c, tabs, stats, barangays, selectedId, onSelect, se
           <ul className="hazard-list">
             {ordered.map((h) => (
               <HazardRow key={h.id} hazard={h} selected={h.id === selectedId} isNew={queue.newIds.has(h.id)}
-                barangays={barangays} departments={departments} onSelect={onSelect}
+                barangays={barangays} onSelect={onSelect}
                 checkable={selectMode} checked={checked.has(h.id)} onCheck={toggleChecked}
                 tabKey={c.tab.key} chipKeys={c.chips} now={now} onResolve={setResolving} onShowOnMap={onShowOnMap} />
             ))}

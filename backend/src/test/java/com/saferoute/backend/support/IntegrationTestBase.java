@@ -118,8 +118,16 @@ public abstract class IntegrationTestBase {
     }
 
     protected TestUser registerModerator() throws Exception {
+        return registerStaff("MODERATOR");
+    }
+
+    protected TestUser registerOfficial() throws Exception {
+        return registerStaff("MUNICIPAL_OFFICIAL");
+    }
+
+    private TestUser registerStaff(String role) throws Exception {
         TestUser user = registerUser();
-        jdbc.update("UPDATE users SET role = 'MODERATOR' WHERE id = ?", user.id());
+        jdbc.update("UPDATE users SET role = ? WHERE id = ?", role, user.id());
         JsonNode body = json(mvc.perform(post("/api/auth/login").with(uniqueIp())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(toJson(Map.of("email", user.email(), "password", user.password()))))

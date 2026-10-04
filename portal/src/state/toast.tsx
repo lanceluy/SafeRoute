@@ -1,3 +1,4 @@
+import { Check, CircleAlert, Info, X } from 'lucide-react';
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 
 export interface Toast {
@@ -35,14 +36,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div className="toasts" role="status" aria-live="polite">
         {toasts.map((t) => (
           <div key={t.id} className={`toast toast-${t.kind}`}>
-            <span className="toast-icon" aria-hidden="true">{t.kind === 'success' ? '✓' : t.kind === 'error' ? '!' : 'i'}</span>
+            <span className="toast-icon" aria-hidden="true">
+              {t.kind === 'success' ? <Check size={13} strokeWidth={3} /> : t.kind === 'error' ? <CircleAlert size={14} /> : <Info size={14} />}
+            </span>
             <span className="toast-message">{t.message}</span>
             {t.action && (
               <button type="button" className="btn-link" onClick={() => { dismiss(t.id); t.action!.run(); }}>
                 {t.action.label}
               </button>
             )}
-            <button type="button" className="icon-btn toast-close" aria-label="Dismiss" onClick={() => dismiss(t.id)}>×</button>
+            <button type="button" className="icon-btn toast-close" aria-label="Dismiss" onClick={() => dismiss(t.id)}><X size={16} aria-hidden="true" /></button>
           </div>
         ))}
       </div>

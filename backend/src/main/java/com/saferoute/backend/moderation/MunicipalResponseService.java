@@ -18,8 +18,9 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Assigning a hazard to a department and setting the city's priority. Both are audited, and the
- * change goes out as a hazard_updated frame so the portal and commuters' apps show it at once.
+ * Assigning a hazard to a department and setting the city's priority, and marking it reviewed.
+ * All are audited, and each change goes out as a hazard_updated frame so the portal and
+ * commuters' apps show it at once. Any of them stops the archive clock.
  */
 @Service
 public class MunicipalResponseService {
@@ -58,8 +59,26 @@ public class MunicipalResponseService {
             changed = true;
         }
         if (!changed) return HazardResponse.from(hazard);
+        hazard.markReviewed(staffId);
         hazard = hazardRepository.save(hazard);
         eventProducer.publishUpdated(hazard, HazardChange.MUNICIPAL_RESPONSE, staffId);
+        return HazardResponse.from(hazard);
+    }
+
+    /** "Mark reviewed": the city has seen it. Also how an archived hazard comes back to the queue. */
+    @Transactional
+    public HazardResponse review(UUID hazardId, UUID staffId, String note) {
+        Hazard hazard = hazardRepository.findByIdForUpdate(hazardId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "HAZARD_NOT_FOUND", "Hazard not found: " + hazardId));
+        if (!hazard.getStatus().isActive()) {
+            throw new ApiException(HttpStatus.CONFLICT, "HAZARD_NOT_ACTIVE", "Hazard is " + hazard.getStatus());
+        }
+        boolean wasArchived = hazard.getArchivedAt() != null;
+        audit.record(hazardId, staffId, HazardAuditLog.Action.STAFF_REVIEWED,
+                note != null && !note.isBlank() ? note.trim() : (wasArchived ? "Restored from Archived" : null));
+        hazard.markReviewed(staffId);
+        hazard = hazardRepository.save(hazard);
+        eventProducer.publishUpdated(hazard, HazardChange.REVIEWED, staffId);
         return HazardResponse.from(hazard);
     }
 }

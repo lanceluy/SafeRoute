@@ -1,12 +1,19 @@
 import { useEffect, useRef } from 'react';
-import L from '../lib/leaflet';
+import L, { baseTiles } from '../lib/leaflet';
 import type { Barangay } from '../lib/geo';
 import { sequentialColor } from '../lib/scales';
 import { useThemeColors } from '../lib/theme';
 
 const MAKATI: L.LatLngTuple = [14.5547, 121.0244];
-/** The "wide" framing: Metro Manila around Makati, e.g. for live radar. */
-const WIDE_ZOOM = 11;
+
+/** Makati framed with even padding at the map's real size. */
+function fitMakati(m: L.Map, barangays: Barangay[], animate: boolean) {
+  if (!barangays.length) return;
+  m.invalidateSize();
+  const bounds = L.latLngBounds(barangays.flatMap((b) => [[b.bbox[0], b.bbox[1]], [b.bbox[2], b.bbox[3]]] as L.LatLngTuple[]));
+  if (animate) m.flyToBounds(bounds, { padding: [28, 28], duration: 0.6 });
+  else m.fitBounds(bounds, { padding: [28, 28], animate: false });
+}
 
 export interface MapOverlay {
   /** Leaflet tile URL template. */
@@ -23,7 +30,7 @@ export interface MapOverlay {
  * barangay; or outlines only over a tile overlay such as radar. The overlay gets its own pane:
  * dark mode inverts the street tiles, and an overlay's colours must not be inverted with them.
  */
-export function AreaMap({ barangays, values, max, format, overlay, framing = 'fit', label }: {
+export function AreaMap({ barangays, values, max, format, overlay, label }: {
   barangays: Barangay[];
   /** Value per barangay name; null draws outlines only. */
   values: Map<string, number | null> | null;
@@ -31,7 +38,6 @@ export function AreaMap({ barangays, values, max, format, overlay, framing = 'fi
   /** Tooltip text for a barangay's value (null = not shaded or no data). */
   format: (value: number | null, name: string) => string;
   overlay?: MapOverlay | null;
-  framing?: 'fit' | 'wide';
   label: string;
 }) {
   const el = useRef<HTMLDivElement>(null);
@@ -41,36 +47,44 @@ export function AreaMap({ barangays, values, max, format, overlay, framing = 'fi
   const colors = useThemeColors();
   const formatRef = useRef(format);
   useEffect(() => { formatRef.current = format; });
+  const barangaysRef = useRef(barangays);
+  useEffect(() => { barangaysRef.current = barangays; });
 
   useEffect(() => {
-    const m = L.map(el.current!, { scrollWheelZoom: false, zoomControl: true }).setView(MAKATI, 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors (ODbL)',
-    }).addTo(m);
+    // Quarter-zoom steps let a fit frame Makati snugly instead of rounding down a whole level.
+    const m = L.map(el.current!, { scrollWheelZoom: false, zoomControl: true, zoomSnap: 0.25 }).setView(MAKATI, 13);
     m.createPane('overlay').style.zIndex = '250'; // above the street tiles (200), below the shapes (400)
     map.current = m;
-    const resize = new ResizeObserver(() => m.invalidateSize());
+    const resize = new ResizeObserver(() => {
+      fitMakati(m, barangaysRef.current, false);
+    });
     resize.observe(el.current!);
     return () => { resize.disconnect(); m.remove(); map.current = null; };
   }, []);
 
+  // The base map follows the theme.
+  const base = useRef<L.LayerGroup | null>(null);
   useEffect(() => {
     const m = map.current;
-    if (!m || !barangays.length) return;
-    if (framing === 'wide') {
-      m.setView(MAKATI, WIDE_ZOOM);
-    } else {
-      m.fitBounds(L.latLngBounds(barangays.flatMap((b) => [[b.bbox[0], b.bbox[1]], [b.bbox[2], b.bbox[3]]] as L.LatLngTuple[])),
-        { padding: [12, 12] });
-    }
-  }, [framing, barangays]);
+    if (!m) return;
+    base.current?.remove();
+    base.current = baseTiles(colors.dark, barangays).addTo(m);
+  }, [colors.dark, barangays]);
+
+  useEffect(() => {
+    const m = map.current;
+    if (m) fitMakati(m, barangays, false);
+  }, [barangays]);
+
+  // The selected barangay keeps a bold outline (the browser's focus box around an SVG path is a rectangle).
+  const selected = useRef<string | null>(null);
 
   useEffect(() => {
     const m = map.current;
     if (!m || !barangays.length) return;
     shapes.current?.remove();
     const outline = { color: colors.navy, weight: 1, opacity: colors.dark ? 0.6 : 0.5 };
+    const bold = { weight: 3, opacity: 1 };
     shapes.current = L.geoJSON({
       type: 'FeatureCollection',
       features: barangays.map((b) => ({
@@ -79,16 +93,26 @@ export function AreaMap({ barangays, values, max, format, overlay, framing = 'fi
     } as GeoJSON.FeatureCollection, {
       style: (f) => {
         const value = values?.get(f?.properties.name);
+        const edge = f?.properties.name === selected.current ? { ...outline, ...bold } : outline;
         return value == null
-          ? { ...outline, fillColor: colors.navy, fillOpacity: values ? 0.08 : 0 }
-          : { ...outline, fillColor: sequentialColor(value, max), fillOpacity: 0.62 };
+          ? { ...edge, fillColor: colors.navy, fillOpacity: values ? 0.08 : 0 }
+          // Lighter than before so Makati's streets still read under the shading.
+          : { ...edge, fillColor: sequentialColor(value, max), fillOpacity: 0.5 };
       },
       onEachFeature: (f, layer) => {
         layer.bindTooltip(() => `<strong>${f.properties.name}</strong><br>${formatRef.current(values?.get(f.properties.name) ?? null, f.properties.name)}`,
           { sticky: true, className: 'area-tip' });
+        const path = layer as L.Path;
+        const select = () => {
+          selected.current = f.properties.name;
+          shapes.current?.resetStyle();
+          path.setStyle(bold).bringToFront();
+        };
         layer.on({
-          mouseover: () => (layer as L.Path).setStyle({ weight: 3, opacity: 1 }),
-          mouseout: () => shapes.current?.resetStyle(layer),
+          mouseover: () => path.setStyle(bold),
+          mouseout: () => { if (selected.current !== f.properties.name) shapes.current?.resetStyle(layer); },
+          click: select,
+          add: () => path.getElement()?.addEventListener('focus', select),
         });
       },
     }).addTo(m);

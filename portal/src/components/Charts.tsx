@@ -1,10 +1,8 @@
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import type { Severity, Stats } from '../api/types';
+import type { Stats } from '../api/types';
 import { dayLabel } from '../lib/format';
-import { SEVERITY_COLOR, SEVERITY_LABEL } from '../lib/hazards';
-import { sequentialColor } from '../lib/scales';
 import { hourLabel, type Weather } from '../lib/weather';
 import { useThemeColors } from '../lib/theme';
 
@@ -15,96 +13,38 @@ import { useThemeColors } from '../lib/theme';
 function useChartColors() {
   const c = useThemeColors();
   return {
-    reported: c.series1, resolved: c.series2, grid: c.grid, surface: c.surface,
+    reported: c.series1, resolved: c.series2, fixed: c.good, grid: c.grid, surface: c.surface,
     axis: { stroke: c.axis, fontSize: 12, tickLine: false, axisLine: false },
   };
 }
 
 /**
- * Reported (line) vs resolved (bars) per day. Both are counts on one axis; bars keep a handful of
- * resolutions visible next to many reports, where a second thin line would vanish along the floor.
+ * Reported (blue) and resolved (green) per day as two quiet lines over a faint fill. Not animated:
+ * live updates re-render the chart, and a draw-in animation would restart (and get cut off) each time.
  */
 export function TrendChart({ daily, height = 240 }: { daily: Stats['daily']; height?: number }) {
-  const { reported, resolved, grid, surface, axis } = useChartColors();
+  const { reported, fixed, grid, surface, axis } = useChartColors();
   const data = daily.map((d) => ({ ...d, label: dayLabel(d.date) }));
+  const dot = (fill: string) => (data.length <= 14 ? { r: 3, strokeWidth: 2, stroke: surface, fill } : false);
   return (
     <figure className="chart" aria-label="Hazards reported and resolved per day">
-      <ResponsiveContainer width="100%" height={height}>
-        <ComposedChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
-          <CartesianGrid stroke={grid} vertical={false} />
-          <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={16} />
-          <YAxis allowDecimals={false} {...axis} width={40} />
-          <Tooltip content={<DayTooltip />} cursor={{ fill: grid }} />
-          <Legend verticalAlign="top" align="right" height={28} wrapperStyle={{ fontSize: 13 }} />
-          <Bar dataKey="resolved" name="Resolved" fill={resolved} radius={[4, 4, 0, 0]} maxBarSize={18} legendType="square" />
-          <Line type="monotone" dataKey="reported" name="Reported" stroke={reported} strokeWidth={2} legendType="plainline"
-            dot={data.length <= 14 ? { r: 4, strokeWidth: 2, stroke: surface, fill: reported } : false} activeDot={{ r: 5, stroke: surface, strokeWidth: 2 }} />
-        </ComposedChart>
-      </ResponsiveContainer>
-    </figure>
-  );
-}
-
-/** Hazards still open at the end of each day, as a lightly filled area: "are we falling behind?" */
-export function BacklogChart({ daily, height = 200 }: { daily: Stats['daily']; height?: number }) {
-  const { reported, grid, surface, axis } = useChartColors();
-  const data = daily.map((d) => ({ ...d, label: dayLabel(d.date) }));
-  return (
-    <figure className="chart" aria-label="Unresolved backlog at the end of each day">
-      <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
-          <CartesianGrid stroke={grid} vertical={false} />
-          <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={16} />
-          <YAxis allowDecimals={false} {...axis} width={40} />
-          <Tooltip content={<DayTooltip only="backlog" />} cursor={{ stroke: axis.stroke, strokeDasharray: '3 3' }} />
-          <Area type="monotone" dataKey="backlog" name="Unresolved" stroke={reported} strokeWidth={2} fill={reported} fillOpacity={0.14}
-            dot={false} activeDot={{ r: 5, stroke: surface, strokeWidth: 2 }} />
-        </AreaChart>
-      </ResponsiveContainer>
-    </figure>
-  );
-}
-
-const STACK: Severity[] = ['LOW', 'MEDIUM', 'HIGH'];
-const SEVERITY_KEY: Record<Severity, 'reportedHigh' | 'reportedMedium' | 'reportedLow'> = {
-  HIGH: 'reportedHigh', MEDIUM: 'reportedMedium', LOW: 'reportedLow',
-};
-
-/** Reports per day stacked by severity (high on top): is a spike serious hazards or minor ones? */
-export function SeverityTrendChart({ daily, height = 240 }: { daily: Stats['daily']; height?: number }) {
-  const { grid, surface, axis } = useChartColors();
-  const data = daily.map((d) => ({ ...d, label: dayLabel(d.date) }));
-  return (
-    <figure className="chart" aria-label="Hazards reported per day by severity">
       <div className="diverging-legend chart-legend">
-        {[...STACK].reverse().map((s) => <span key={s}><i className="swatch" style={{ background: SEVERITY_COLOR[s] }} />{SEVERITY_LABEL[s]}</span>)}
+        <span><i className="swatch line" style={{ background: reported }} />Reported</span>
+        <span><i className="swatch line" style={{ background: fixed }} />Resolved</span>
       </div>
       <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
+        <AreaChart data={data} margin={{ top: 8, right: 20, bottom: 0, left: -12 }}>
           <CartesianGrid stroke={grid} vertical={false} />
           <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={16} />
           <YAxis allowDecimals={false} {...axis} width={40} />
-          <Tooltip content={<SeverityTooltip />} cursor={{ stroke: axis.stroke, strokeDasharray: '3 3' }} />
-          {STACK.map((s) => (
-            <Area key={s} type="monotone" dataKey={SEVERITY_KEY[s]} name={SEVERITY_LABEL[s]} stackId="sev"
-              stroke={surface} strokeWidth={1.5} fill={SEVERITY_COLOR[s]} fillOpacity={0.85} />
-          ))}
+          <Tooltip content={<DayTooltip />} cursor={{ stroke: axis.stroke, strokeDasharray: '3 3' }} />
+          <Area type="monotone" dataKey="reported" name="Reported" stroke={reported} strokeWidth={2} fill={reported} fillOpacity={0.08}
+            dot={dot(reported)} activeDot={{ r: 5, stroke: surface, strokeWidth: 2 }} isAnimationActive={false} />
+          <Area type="monotone" dataKey="resolved" name="Resolved" stroke={fixed} strokeWidth={2} fill={fixed} fillOpacity={0.08}
+            dot={dot(fixed)} activeDot={{ r: 5, stroke: surface, strokeWidth: 2 }} isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
     </figure>
-  );
-}
-
-function SeverityTooltip({ active, payload }: { active?: boolean; payload?: { payload: Stats['daily'][number] }[] }) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  return (
-    <div className="chart-tip">
-      <strong>{new Date(`${d.date}T00:00:00`).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' })}</strong>
-      {[...STACK].reverse().map((s) => (
-        <span key={s}><i className="swatch" style={{ background: SEVERITY_COLOR[s] }} />{d[SEVERITY_KEY[s]]} {SEVERITY_LABEL[s].toLowerCase()}</span>
-      ))}
-    </div>
   );
 }
 
@@ -160,7 +100,40 @@ export function ColumnChart({ rows, height = 220, label, unit }: {
           <Tooltip cursor={{ fill: grid }} content={({ active, payload }) => (active && payload?.length
             ? <div className="chart-tip"><strong>{payload[0].payload.label}</strong><span>{payload[0].payload.value} {unit}</span></div>
             : null)} />
-          <Bar dataKey="value" fill={fill} radius={[4, 4, 0, 0]} label={{ position: 'top', fontSize: 12, fill: axis.stroke }} />
+          <Bar dataKey="value" fill={fill} radius={[4, 4, 0, 0]} maxBarSize={44} label={{ position: 'top', fontSize: 12, fill: axis.stroke }} />
+        </BarChart>
+      </ResponsiveContainer>
+    </figure>
+  );
+}
+
+/**
+ * How often hazards were reported per day or week, for one barangay and type (the Analytics
+ * selector). One series, one hue, no per-bar labels: the tooltip carries the numbers.
+ */
+export function FrequencyChart({ rows, height = 240, label }: {
+  rows: { key: string; label: string; range: string; hazards: number; reports: number }[]; height?: number; label: string;
+}) {
+  const { reported: fill, grid, axis } = useChartColors();
+  return (
+    <figure className="chart" aria-label={label}>
+      <ResponsiveContainer width="100%" height={height}>
+        <BarChart data={rows} margin={{ top: 16, right: 16, bottom: 0, left: -12 }} barCategoryGap={2}>
+          <CartesianGrid stroke={grid} vertical={false} />
+          <XAxis dataKey="label" {...axis} minTickGap={16} />
+          <YAxis allowDecimals={false} {...axis} width={40} />
+          <Tooltip cursor={{ fill: grid }} content={({ active, payload }) => {
+            if (!active || !payload?.length) return null;
+            const r = payload[0].payload as (typeof rows)[number];
+            return (
+              <div className="chart-tip">
+                <strong>{r.range}</strong>
+                <span>{r.hazards} hazard{r.hazards === 1 ? '' : 's'}</span>
+                {r.reports > r.hazards && <span className="muted">{r.reports} reports, duplicates included</span>}
+              </div>
+            );
+          }} />
+          <Bar dataKey="hazards" fill={fill} radius={[4, 4, 0, 0]} maxBarSize={36} />
         </BarChart>
       </ResponsiveContainer>
     </figure>
@@ -180,7 +153,7 @@ function DayTooltip({ active, payload, only }: {
         ? <span>{d.backlog} unresolved at day’s end</span>
         : <>
           <span><i style={{ background: colors.reported }} />{d.reported} reported</span>
-          <span><i style={{ background: colors.resolved }} />{d.resolved} resolved</span>
+          <span><i style={{ background: colors.fixed }} />{d.resolved} resolved</span>
         </>}
     </div>
   );
@@ -197,7 +170,7 @@ export function RainChart({ hourly, height = 200 }: { hourly: Weather['hourly'];
           <CartesianGrid stroke={grid} vertical={false} />
           <XAxis dataKey="label" {...axis} interval="preserveStartEnd" minTickGap={24} />
           {/* A dry day still gets a readable 0–2 mm scale instead of a flat, unlabeled axis. */}
-          <YAxis {...axis} width={40} unit=" mm" domain={[0, (max: number) => Math.max(2, Math.ceil(max))]} allowDecimals={false} />
+          <YAxis {...axis} width={56} unit=" mm" domain={[0, (max: number) => Math.max(2, Math.ceil(max))]} allowDecimals={false} />
           <Tooltip content={<RainTooltip />} cursor={{ fill: grid }} />
           <Bar dataKey="precipitation" name="Rain" fill={fill} radius={[4, 4, 0, 0]} minPointSize={0} />
         </BarChart>
@@ -282,92 +255,6 @@ export function DivergingBars({ rows, leftLabel, rightLabel, empty = 'No data ye
           </li>
         ))}
       </ul>
-    </div>
-  );
-}
-
-/** Horizontal bars split by severity (high first), one row per place. */
-export function SeverityStackBars({ rows, onSelect, empty = 'No data yet' }: {
-  rows: { key: string; label: string; high: number; medium: number; low: number }[];
-  onSelect?: (key: string) => void; empty?: string;
-}) {
-  const max = Math.max(1, ...rows.map((r) => r.high + r.medium + r.low));
-  if (!rows.length || rows.every((r) => r.high + r.medium + r.low === 0)) return <p className="muted chart-empty">{empty}</p>;
-  const order: Severity[] = ['HIGH', 'MEDIUM', 'LOW'];
-  const value = (r: typeof rows[number], s: Severity) => (s === 'HIGH' ? r.high : s === 'MEDIUM' ? r.medium : r.low);
-  return (
-    <div>
-      <div className="diverging-legend">
-        {order.map((s) => <span key={s}><i className="swatch" style={{ background: SEVERITY_COLOR[s] }} />{SEVERITY_LABEL[s]}</span>)}
-      </div>
-      <ul className="bar-list">
-        {rows.map((r) => {
-          const total = r.high + r.medium + r.low;
-          const content = (
-            <>
-              <span className="bar-label">{r.label}</span>
-              <span className="bar-track stack-track">
-                {order.map((s) => value(r, s) > 0 && (
-                  <span key={s} className="stack-seg" style={{ width: `${(value(r, s) / max) * 100}%`, background: SEVERITY_COLOR[s] }} />
-                ))}
-              </span>
-              <span className="bar-value">{total}</span>
-            </>
-          );
-          const hint = `${r.label}: ${r.high} high, ${r.medium} medium, ${r.low} low`;
-          return (
-            <li key={r.key} title={hint}>
-              {onSelect ? <button type="button" className="bar-row" onClick={() => onSelect(r.key)}>{content}</button>
-                : <div className="bar-row">{content}</div>}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-/** Weekday × hour grid on the shared blue ramp; each cell's count is in its tooltip and title. */
-export function ReportTimesHeatmap({ cells }: { cells: Stats['reportTimes'] }) {
-  const counts = new Map(cells.map((c) => [`${c.dayOfWeek}-${c.hour}`, c.count]));
-  const max = Math.max(0, ...cells.map((c) => c.count));
-  if (max === 0) return <p className="muted chart-empty">No reports in this range</p>;
-  const hourName = (h: number) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
-  return (
-    <div className="heatgrid-wrap">
-      <table className="heatgrid" aria-label="Reports by weekday and hour">
-        <thead>
-          <tr>
-            <th scope="col"><span className="sr-only">Day</span></th>
-            {Array.from({ length: 24 }, (_, h) => (
-              <th key={h} scope="col" className={h % 3 === 0 ? '' : 'minor'}>{h % 3 === 0 ? hourName(h).replace(' ', '') : <span className="sr-only">{hourName(h)}</span>}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {WEEKDAYS.map((day, d) => (
-            <tr key={day}>
-              <th scope="row">{day}</th>
-              {Array.from({ length: 24 }, (_, h) => {
-                const n = counts.get(`${d + 1}-${h}`) ?? 0;
-                return (
-                  <td key={h} title={`${day} ${hourName(h)}: ${n} report${n === 1 ? '' : 's'}`}
-                    style={{ background: n ? sequentialColor(n, max) : undefined }}>
-                    <span className="sr-only">{n}</span>
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="rain-legend">
-        <span className="muted">Fewer</span>
-        {[0.15, 0.35, 0.55, 0.75, 1].map((f) => <i key={f} className="swatch lg" style={{ background: sequentialColor(f * max, max) }} />)}
-        <span className="muted">More (busiest hour: {max})</span>
-      </div>
     </div>
   );
 }

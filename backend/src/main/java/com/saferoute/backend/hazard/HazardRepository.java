@@ -100,6 +100,16 @@ public interface HazardRepository extends JpaRepository<Hazard, UUID> {
         """, nativeQuery = true)
     List<UUID> findExpiredIds(@Param("now") Instant now, @Param("limit") int limit);
 
+    /** Active hazards no staff member has acted on since before {@code cutoff}, oldest first. */
+    @Query(value = """
+        SELECT id FROM hazards
+        WHERE status IN ('REPORTED', 'VERIFIED', 'DISPUTED') AND reviewed_at IS NULL AND archived_at IS NULL
+          AND created_at < :cutoff
+        ORDER BY created_at
+        LIMIT :limit
+        """, nativeQuery = true)
+    List<UUID> findUnreviewedIds(@Param("cutoff") Instant cutoff, @Param("limit") int limit);
+
     List<Hazard> findByIdIn(Collection<UUID> ids);
 
     long countByReporterIdAndReporterRewardedTrue(UUID reporterId);

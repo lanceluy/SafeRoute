@@ -34,7 +34,12 @@ final class MapViewModel: ObservableObject {
     /// "Near you" means within this distance; the map always loads at least this much around the user.
     nonisolated static let nearbyRadiusMeters: Double = 1000
 
-    @Published private(set) var hazards: [UUID: Hazard] = [:]
+    @Published private(set) var hazards: [UUID: Hazard] = [:] {
+        didSet { scheduleCacheSave() }
+    }
+    /// When the hazards on the map came from the on-device cache (opened offline); nil once a
+    /// load from the server succeeds.
+    @Published private(set) var showingSavedSince: Date?
     @Published var filters = MapFilters.load() {
         didSet {
             filters.save()
@@ -71,6 +76,16 @@ final class MapViewModel: ObservableObject {
     /// flight can't remove a hazard that appeared or changed after it was taken.
     private(set) var liveSequence = 0
     private var lastLiveUpdate: [UUID: Int] = [:]
+
+    // Offline cache (Task 2, revision 1)
+    private let cache: HazardCache
+    /// The signed-in account; the cache is only written for, and read by, its owner.
+    private var cacheOwner: UUID?
+    private var cacheSaveTask: Task<Void, Never>?
+
+    init(cache: HazardCache = HazardCache()) {
+        self.cache = cache
+    }
 
     // MARK: Derived
 
@@ -193,6 +208,7 @@ final class MapViewModel: ObservableObject {
                 loadedBox = nil
             }
             loadState = .loaded
+            showingSavedSince = nil
         } catch is CancellationError {
             return
         } catch {
@@ -389,7 +405,37 @@ final class MapViewModel: ObservableObject {
         WebSocketClient.shared.updateRoute(activeRoute?.coordinates)
     }
 
+    // MARK: Offline cache
+
+    /// Signed in (or reopened with a saved session): show the hazards saved on this device until
+    /// the first load from the server replaces them, and keep the cache current from here on.
+    func restoreCached(for owner: UUID) {
+        cacheOwner = owner
+        guard hazards.isEmpty, let snapshot = cache.load(ownerId: owner), !snapshot.hazards.isEmpty else { return }
+        for hazard in snapshot.hazards { upsert(hazard) }
+        showingSavedSince = snapshot.savedAt
+    }
+
+    /// Writes at most every couple of seconds: live updates can arrive in bursts.
+    private func scheduleCacheSave() {
+        guard let owner = cacheOwner, cacheSaveTask == nil else { return }
+        cacheSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard let self, !Task.isCancelled else { return }
+            self.cacheSaveTask = nil
+            guard self.cacheOwner == owner else { return }
+            let snapshot = Array(self.hazards.values)
+            let cache = self.cache
+            await Task.detached(priority: .utility) { try? cache.save(snapshot, ownerId: owner) }.value
+        }
+    }
+
     func reset() {
+        cacheOwner = nil
+        cacheSaveTask?.cancel()
+        cacheSaveTask = nil
+        cache.clear()
+        showingSavedSince = nil
         generation += 1
         loadTask?.cancel()
         endNavigation()
