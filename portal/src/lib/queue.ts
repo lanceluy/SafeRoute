@@ -46,9 +46,9 @@ const ATTENTION_EMPTY = { title: 'Nothing needs attention', body: 'No contested 
 
 /** Primary tabs: where am I? Moderation adds Duplicates and Archived (Task 2 revisions). */
 export const MAP_TABS: QueueTab[] = [
+  ACTIVE_TAB, // first, so it's the tab the map opens on
   NEW_TAB,
   { key: 'attention', label: 'Needs attention', view: 'attention', empty: ATTENTION_EMPTY },
-  ACTIVE_TAB,
   { key: 'closed', label: 'Closed', statuses: ['RESOLVED', 'EXPIRED', 'REMOVED'], archive: true,
     empty: { title: 'No closed hazards', body: 'Resolved, expired and removed reports appear here.' } },
 ];
@@ -76,6 +76,7 @@ export const MODERATION_TABS: QueueTab[] = [
 /** Mirrors ExpiryPolicy.java's default time to live per type (hours). */
 const TTL_HOURS: Record<Hazard['type'], number> = {
   FLOODING: 12, PATH_OBSTRUCTION: 24, CONSTRUCTION: 72, OPEN_MANHOLE: 168, POOR_LIGHTING: 720, BROKEN_SIDEWALK: 1080, ACCESSIBILITY_BARRIER: 2160,
+  VEHICLE_BLOCKING_SIDEWALK: 6, TRAFFIC_SIGNAL_OUTAGE: 12, ROAD_DEBRIS: 12, SAFETY_CONCERN: 12, FALLEN_TREE: 48, CROSSWALK_ISSUE: 720,
 };
 
 /** In the last fifth of its time to live, like ExpiryPolicy.isExpiringSoon. */

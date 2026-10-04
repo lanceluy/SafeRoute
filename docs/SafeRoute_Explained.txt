@@ -203,11 +203,13 @@ Key design decisions:
 6. HAZARD TYPES AND SEVERITY CLASSIFICATION
 --------------------------------------------------------------------------------
 
-The seven pedestrian-focused categories are deliberately few, so reporting stays
+The thirteen pedestrian-focused categories are deliberately few, so reporting stays
 quick and the data stays consistent:
 
   FLOODING, BROKEN_SIDEWALK, OPEN_MANHOLE, POOR_LIGHTING,
-  ACCESSIBILITY_BARRIER, CONSTRUCTION, PATH_OBSTRUCTION
+  ACCESSIBILITY_BARRIER, CONSTRUCTION, PATH_OBSTRUCTION,
+  TRAFFIC_SIGNAL_OUTAGE, FALLEN_TREE, VEHICLE_BLOCKING_SIDEWALK,
+  ROAD_DEBRIS, CROSSWALK_ISSUE, SAFETY_CONCERN
 
 Severity (LOW / MEDIUM / HIGH) is assigned by a simple rule-based classifier rather
 than machine learning. For each type, the reporter answers one structured question,
@@ -227,9 +229,22 @@ and each answer maps to a severity:
   Construction           Is the sidewalk still usable?         Open=LOW, Narrowed=MED,
                                                                Closed (walk on road)=HIGH
   Path obstruction       Can pedestrians pass?                 Easily=LOW, Difficulty=MED, No=HIGH
+  Traffic signal outage  What is the signal doing?             Walk signal only=MED,
+                                                               Flashing or stuck=MED,
+                                                               Completely out=HIGH
+  Fallen tree/branches   Can pedestrians pass?                 Easily=LOW, Difficulty=MED, No=HIGH
+  Vehicle on sidewalk    Can pedestrians pass?                 Easily=LOW, Difficulty=MED, No=HIGH
+  Road debris or spill   What is it?                          Small debris=LOW, Spill=MED,
+                                                               Large or hazardous=HIGH
+  Crosswalk issue        What is wrong with the crosswalk?     Faded=LOW, Partly blocked=MED,
+                                                               Missing or blocked=HIGH
+  Crime/harassment       What best describes it?               Suspicious activity=LOW,
+                                                               Harassment or theft=MED,
+                                                               Violence or active threat=HIGH
 
-If the question is skipped, a per-type default is used: open manhole and flooding
-default to HIGH, poor lighting to LOW, and everything else to MEDIUM. This rule
+If the question is skipped, a per-type default is used: open manhole, flooding and
+traffic signal outage default to HIGH, poor lighting to LOW, and everything else to
+MEDIUM. This rule
 table is easy to explain and defend, and it yields structured data. It sits behind
 a HazardClassifier interface, so a smarter classifier could replace it later.
 
@@ -349,6 +364,12 @@ time-to-live counted from its last confirmation:
   Poor lighting          30 days
   Broken sidewalk        45 days
   Accessibility barrier  90 days
+  Vehicle on sidewalk     6 hours
+  Traffic signal outage  12 hours
+  Road debris or spill   12 hours
+  Crime/harassment       12 hours
+  Fallen tree/branches    2 days
+  Crosswalk issue        30 days
 
 Every VERIFY (including a repeated one) or "still present" vote pushes the expiry
 forward. Freshness is measured from when a hazard was actually seen: a report

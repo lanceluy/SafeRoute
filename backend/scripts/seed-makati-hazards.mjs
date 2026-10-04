@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Resets the dev database's hazards to two weeks of believable reports, all on Makati streets.
 //
-//   node backend/scripts/seed-makati-hazards.mjs [--seed 2026] [--days 14] [--reports 200] > seed.sql
+//   node backend/scripts/seed-makati-hazards.mjs [--seed 2026] [--days 14 | --hours 1] [--reports 200] [--only-new-types] > seed.sql
+//   (--only-new-types generates just the six newer hazard types, no flooding or admin reports: for topping up)
 //   docker exec -i saferoute-postgres psql -U saferoute -d saferoute -v ON_ERROR_STOP=1 < seed.sql
 //
 // Every report is played through the backend's own rules (HazardLifecycle thresholds, ExpiryPolicy TTLs,
@@ -23,14 +24,16 @@ const arg = (name, fallback) => {
   return i > 0 ? Number(process.argv[i + 1]) : fallback;
 };
 const SEED = arg('seed', 2026);
-const DAYS = arg('days', 14);
+const HOURS = arg('hours', 0); // a short window (e.g. --hours 1) instead of --days
+const DAYS = HOURS ? Math.ceil(HOURS / 24) : arg('days', 14);
 const TARGET_REPORTS = arg('reports', 200);
+const ONLY_NEW_TYPES = process.argv.includes('--only-new-types');
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const MIN = 60_000;
 const NOW = Date.now();
-const START = NOW - DAYS * DAY;
+const START = HOURS ? NOW - HOURS * HOUR : NOW - DAYS * DAY;
 
 // ------------------------------------------------------------------ randomness (deterministic per seed)
 
@@ -65,10 +68,14 @@ function uuid() {
 const TTL = { // ExpiryPolicy
   FLOODING: 12 * HOUR, PATH_OBSTRUCTION: 24 * HOUR, CONSTRUCTION: 3 * DAY, OPEN_MANHOLE: 7 * DAY,
   POOR_LIGHTING: 30 * DAY, BROKEN_SIDEWALK: 45 * DAY, ACCESSIBILITY_BARRIER: 90 * DAY,
+  VEHICLE_BLOCKING_SIDEWALK: 6 * HOUR, TRAFFIC_SIGNAL_OUTAGE: 12 * HOUR, ROAD_DEBRIS: 12 * HOUR, SAFETY_CONCERN: 12 * HOUR,
+  FALLEN_TREE: 2 * DAY, CROSSWALK_ISSUE: 30 * DAY,
 };
 const DEFAULT_SEVERITY = { // SimpleRuleBasedClassifier
   OPEN_MANHOLE: 'HIGH', FLOODING: 'HIGH', ACCESSIBILITY_BARRIER: 'MEDIUM', BROKEN_SIDEWALK: 'MEDIUM',
   CONSTRUCTION: 'MEDIUM', PATH_OBSTRUCTION: 'MEDIUM', POOR_LIGHTING: 'LOW',
+  TRAFFIC_SIGNAL_OUTAGE: 'HIGH', FALLEN_TREE: 'MEDIUM', VEHICLE_BLOCKING_SIDEWALK: 'MEDIUM', ROAD_DEBRIS: 'MEDIUM',
+  CROSSWALK_ISSUE: 'MEDIUM', SAFETY_CONCERN: 'MEDIUM',
 };
 const PASSABILITY = [['PASSABLE', 'LOW', 3], ['DIFFICULT', 'MEDIUM', 5], ['BLOCKED', 'HIGH', 2]];
 const ANSWERS = { // [answer, severity, how often reporters pick it]
@@ -79,6 +86,12 @@ const ANSWERS = { // [answer, severity, how often reporters pick it]
   ACCESSIBILITY_BARRIER: PASSABILITY,
   CONSTRUCTION: [['SIDEWALK_OPEN', 'LOW', 2], ['SIDEWALK_NARROWED', 'MEDIUM', 5], ['SIDEWALK_CLOSED', 'HIGH', 3]],
   PATH_OBSTRUCTION: PASSABILITY,
+  TRAFFIC_SIGNAL_OUTAGE: [['PEDESTRIAN_SIGNAL_ONLY', 'MEDIUM', 3], ['FLASHING_OR_STUCK', 'MEDIUM', 3], ['COMPLETELY_OUT', 'HIGH', 4]],
+  FALLEN_TREE: PASSABILITY,
+  VEHICLE_BLOCKING_SIDEWALK: PASSABILITY,
+  ROAD_DEBRIS: [['SMALL_DEBRIS', 'LOW', 4], ['SPILL_OR_SLICK', 'MEDIUM', 4], ['LARGE_OR_HAZARDOUS', 'HIGH', 2]],
+  CROSSWALK_ISSUE: [['FADED_MARKINGS', 'LOW', 5], ['PARTLY_BLOCKED', 'MEDIUM', 3], ['MISSING_OR_BLOCKED', 'HIGH', 2]],
+  SAFETY_CONCERN: [['SUSPICIOUS_ACTIVITY', 'LOW', 5], ['HARASSMENT_OR_THEFT', 'MEDIUM', 4], ['ACTIVE_THREAT', 'HIGH', 1]],
 };
 const VERIFY_THRESHOLD = 2;
 const DISPUTE_THRESHOLD = 2;
@@ -219,9 +232,13 @@ const reporterWeights = RESIDENTS.map((r, i) => [r.email, i < 5 ? 3 : i < 12 ? 1
 
 // ------------------------------------------------------------------ what gets reported
 
-const TYPE_WEIGHT = [
+const NEW_TYPE_WEIGHT = [
+  ['VEHICLE_BLOCKING_SIDEWALK', 8], ['TRAFFIC_SIGNAL_OUTAGE', 6], ['ROAD_DEBRIS', 5], ['CROSSWALK_ISSUE', 5],
+  ['FALLEN_TREE', 4], ['SAFETY_CONCERN', 4],
+];
+const TYPE_WEIGHT = ONLY_NEW_TYPES ? NEW_TYPE_WEIGHT : [
   ['BROKEN_SIDEWALK', 22], ['PATH_OBSTRUCTION', 19], ['CONSTRUCTION', 15], ['OPEN_MANHOLE', 13],
-  ['POOR_LIGHTING', 12], ['ACCESSIBILITY_BARRIER', 9],
+  ['POOR_LIGHTING', 12], ['ACCESSIBILITY_BARRIER', 9], ...NEW_TYPE_WEIGHT,
 ];
 /** How long the real thing lasts before someone fixes it or it clears (independent of the app's TTL). */
 const LIFESPAN = {
@@ -232,11 +249,19 @@ const LIFESPAN = {
   POOR_LIGHTING: () => between(1, 14) * DAY,
   BROKEN_SIDEWALK: () => between(2, 30) * DAY,
   ACCESSIBILITY_BARRIER: () => between(5, 90) * DAY,
+  VEHICLE_BLOCKING_SIDEWALK: () => between(0.5, 7) * HOUR,
+  TRAFFIC_SIGNAL_OUTAGE: () => between(2, 30) * HOUR,
+  ROAD_DEBRIS: () => between(1, 20) * HOUR,
+  FALLEN_TREE: () => between(4, 40) * HOUR,
+  CROSSWALK_ISSUE: () => between(3, 60) * DAY,
+  SAFETY_CONCERN: () => between(0.5, 10) * HOUR,
 };
 const DEPARTMENT = {
   FLOODING: 'DRAINAGE_FLOOD_CONTROL', OPEN_MANHOLE: 'ENGINEERING', BROKEN_SIDEWALK: 'ENGINEERING',
   CONSTRUCTION: 'ENGINEERING', POOR_LIGHTING: 'ENGINEERING', PATH_OBSTRUCTION: 'TRAFFIC_MANAGEMENT',
   ACCESSIBILITY_BARRIER: 'ENGINEERING',
+  TRAFFIC_SIGNAL_OUTAGE: 'TRAFFIC_MANAGEMENT', FALLEN_TREE: 'BARANGAY_OFFICE', VEHICLE_BLOCKING_SIDEWALK: 'TRAFFIC_MANAGEMENT',
+  ROAD_DEBRIS: 'ENGINEERING', CROSSWALK_ISSUE: 'TRAFFIC_MANAGEMENT', SAFETY_CONCERN: 'PUBLIC_SAFETY',
 };
 const DESCRIPTIONS = {
   FLOODING: {
@@ -280,6 +305,42 @@ const DESCRIPTIONS = {
     DIFFICULT: ['Cars parked on the sidewalk', 'Fallen tree branch across the walkway', 'Delivery trucks unloading on the sidewalk'],
     BLOCKED: ['Sidewalk fully blocked by parked vehicles', 'Fallen tree blocking the whole sidewalk', 'Tricycles parked across the walkway'],
     null: ['Sidewalk obstructed', 'Something blocking the walkway'],
+  },
+  TRAFFIC_SIGNAL_OUTAGE: {
+    PEDESTRIAN_SIGNAL_ONLY: ['Walk signal is dead, only the car lights work', 'No pedestrian countdown at the crossing'],
+    FLASHING_OR_STUCK: ['Signal stuck on red for minutes', 'Lights flashing yellow, nobody knows who goes first'],
+    COMPLETELY_OUT: ['Traffic lights completely out at the intersection', 'Blackout at the signal, cars and people just pushing through'],
+    null: ['Traffic signal not working', 'Signal out at the crossing'],
+  },
+  FALLEN_TREE: {
+    PASSABLE: ['Small branches down on the sidewalk', 'Fallen leaves and twigs after the wind'],
+    DIFFICULT: ['Large branch across half the walkway', 'Fallen tree limb leaning on the railing'],
+    BLOCKED: ['Whole tree down across the sidewalk', 'Fallen tree blocking the walkway and part of the road'],
+    null: ['Fallen branches', 'Tree down on the walkway'],
+  },
+  VEHICLE_BLOCKING_SIDEWALK: {
+    PASSABLE: ['Motorcycle parked on the edge of the sidewalk', 'Car with two wheels on the walkway'],
+    DIFFICULT: ['Parked car taking most of the sidewalk', 'Delivery van stopped on the walkway'],
+    BLOCKED: ['Cars parked bumper to bumper across the sidewalk', 'Truck blocking the whole sidewalk, people walking on the road'],
+    null: ['Vehicle on the sidewalk', 'Parked on the walkway'],
+  },
+  ROAD_DEBRIS: {
+    SMALL_DEBRIS: ['Broken glass and small debris on the shoulder', 'Gravel spilled near the crossing'],
+    SPILL_OR_SLICK: ['Oil spill on the pavement, very slippery', 'Water and mud from a leaking truck across the lane'],
+    LARGE_OR_HAZARDOUS: ['Large debris from a collision across the road', 'Spilled construction material blocking the lane'],
+    null: ['Debris on the road', 'Something spilled on the pavement'],
+  },
+  CROSSWALK_ISSUE: {
+    FADED_MARKINGS: ['Pedestrian lane markings almost gone', 'Crosswalk paint faded, drivers do not stop'],
+    PARTLY_BLOCKED: ['Parked motorcycles blocking half the crosswalk', 'Vendor cart standing on the crossing'],
+    MISSING_OR_BLOCKED: ['No crosswalk markings at a busy crossing', 'Crosswalk completely blocked by parked cars'],
+    null: ['Crosswalk problem', 'Pedestrian crossing in bad shape'],
+  },
+  SAFETY_CONCERN: {
+    SUSPICIOUS_ACTIVITY: ['Group loitering at the corner late at night', 'Unfamiliar people following commuters near the stairs'],
+    HARASSMENT_OR_THEFT: ['Catcalling and harassment reported along this stretch', 'Phone snatching incidents near the crossing'],
+    ACTIVE_THREAT: ['A fight broke out near the terminal, avoid the area'],
+    null: ['Safety concern in this area', 'Does not feel safe here'],
   },
 };
 const RESOLVE_NOTES = {
@@ -601,7 +662,7 @@ const rainTotal = rain.reduce((s, h) => s + h.mm, 0);
 
 // About 15% of reports end up merged into an existing hazard, so ~85% of the target are new hazards.
 const hazardTarget = Math.round(TARGET_REPORTS * 0.8);
-const floodTarget = Math.min(Math.round(wetHours.length * 0.9), Math.round(hazardTarget * 0.14));
+const floodTarget = ONLY_NEW_TYPES ? 0 : Math.min(Math.round(wetHours.length * 0.9), Math.round(hazardTarget * 0.14));
 
 // Yours: a mix of outcomes near Mapúa so the app's My Reports and Nearby both have something.
 const YOURS = [
@@ -614,7 +675,7 @@ const YOURS = [
   { type: 'BROKEN_SIDEWALK', daysAgo: 10.7, lifespan: 4 * DAY },
   { type: 'PATH_OBSTRUCTION', daysAgo: 12.9, bogus: true },
 ];
-for (const y of YOURS) {
+for (const y of ONLY_NEW_TYPES ? [] : YOURS) {
   const at = NOW - y.daysAgo * DAY;
   const local = new Date(at + 8 * HOUR).getUTCHours();
   const shifted = local < 6 ? at + (7 - local) * HOUR : at; // nobody reports at 3am

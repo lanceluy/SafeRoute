@@ -10,6 +10,12 @@ export const TYPE_LABEL: Record<HazardType, string> = {
   ACCESSIBILITY_BARRIER: 'Accessibility barrier',
   CONSTRUCTION: 'Construction',
   PATH_OBSTRUCTION: 'Path obstruction',
+  TRAFFIC_SIGNAL_OUTAGE: 'Traffic signal outage',
+  FALLEN_TREE: 'Fallen tree or branches',
+  VEHICLE_BLOCKING_SIDEWALK: 'Vehicle blocking sidewalk',
+  ROAD_DEBRIS: 'Road debris or spill',
+  CROSSWALK_ISSUE: 'Missing or blocked crosswalk',
+  SAFETY_CONCERN: 'Crime or harassment concern',
 };
 
 /** 24×24 glyphs drawn in currentColor. */
@@ -21,6 +27,18 @@ export const TYPE_GLYPH: Record<HazardType, string> = {
   ACCESSIBILITY_BARRIER: '<circle cx="11" cy="3.8" r="2.1"/><path d="M9.3 7.2h3.2v4.3h4.3l2.4 6.3h-2.3l-1.8-4.4H9.3z"/><path d="M8 10.3v2A4.4 4.4 0 1 0 14.3 18h2.1A6.4 6.4 0 1 1 8 10.3z"/>',
   CONSTRUCTION: '<path d="M10.2 2.5h3.6l1.2 4H9zM8.4 8.5h7.2l1.2 4H7.2zM6.6 14.5h10.8l1.4 4.5H5.2z"/><path d="M3 20h18v2H3z"/>',
   PATH_OBSTRUCTION: '<path d="M2 7h20v6H2z"/><path d="M5 13h2.2v8H5zM16.8 13H19v8h-2.2z"/><path d="M5 7l4 6h3L8 7zM13 7l4 6h3l-4-6z" fill="#fff" opacity=".85"/>',
+  // A signal head with three lamps.
+  TRAFFIC_SIGNAL_OUTAGE: '<path fill-rule="evenodd" d="M8.5 2h7A2.5 2.5 0 0 1 18 4.5v15a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 6 19.5v-15A2.5 2.5 0 0 1 8.5 2zM12 4.8a1.9 1.9 0 1 0 0 3.800 1.9 1.9 0 0 0 0-3.800zm0 5.300a1.9 1.9 0 1 0 0 3.800 1.900 1.900 0 0 0 0-3.800zm0 5.300a1.900 1.900 0 1 0 0 3.800 1.900 1.900 0 0 0 0-3.800z"/>',
+  // A fallen trunk with leafy branches: a log on the ground with its end ring showing.
+  FALLEN_TREE: '<path fill-rule="evenodd" d="M6 13h14a3.500 3.500 0 0 1 0 7H6a3.500 3.500 0 0 1 0-7zm0 2.200a1.300 1.300 0 1 0 0 2.600 1.300 1.300 0 0 0 0-2.600z"/><path d="M11.500 12.200C11 8 13.800 5 18.500 4.800c.4 4.200-2.300 7.300-7 7.400z"/><path d="M9.200 12.200C9.700 8.800 7.700 6.200 3.800 6.200 3.500 9.600 5.600 12.100 9.200 12.200z"/>',
+  // A car side-on, parked across the walkway.
+  VEHICLE_BLOCKING_SIDEWALK: '<path d="M2.500 14 4.400 8.800a2.200 2.200 0 0 1 2.100-1.500h11a2.200 2.200 0 0 1 2.100 1.500L21.500 14v3.500h-19z"/><path d="M6.300 9.200h11.400l1.200 3.100H5.100z" fill="#fff" opacity=".85"/><circle cx="7.300" cy="17.500" r="2.200"/><circle cx="16.700" cy="17.500" r="2.200"/>',
+  // Rubble with a spill drop above it.
+  ROAD_DEBRIS: '<path d="M12 2.200c1.800 2.400 3.100 3.900 3.100 5.500a3.100 3.100 0 0 1-6.200 0c0-1.600 1.300-3.100 3.100-5.500z"/><path d="M2.500 21l3.700-6.300L9.900 21zM9.500 21l3.200-8.200L16.500 21zM15.800 21l2.400-4.500 3.300 4.500z"/>',
+  // Zebra stripes.
+  CROSSWALK_ISSUE: '<path d="M2.500 5h4.200v14H2.500zM8.900 5h4.200v14H8.900zM15.300 5h4.200v14h-4.200z"/><path d="M21.100 5h.9v14h-.9z" opacity=".7"/>',
+  // A shield with an alert mark.
+  SAFETY_CONCERN: '<path fill-rule="evenodd" d="M12 2.200 4.500 5.200v5.800c0 4.700 3.100 8.700 7.500 10.800 4.400-2.100 7.500-6.100 7.500-10.800V5.200zM11 7.200h2v6.300h-2zm0 8.200h2v2.100h-2z"/>',
 };
 
 export function typeIcon(type: HazardType, size = 18) {

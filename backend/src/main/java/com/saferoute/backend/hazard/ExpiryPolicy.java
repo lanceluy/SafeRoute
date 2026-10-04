@@ -14,14 +14,22 @@ import java.util.Map;
 @ConfigurationProperties(prefix = "saferoute.hazard.expiry")
 public class ExpiryPolicy {
 
-    private Map<HazardType, Duration> ttl = new EnumMap<>(Map.of(
-            HazardType.FLOODING, Duration.ofHours(12),
-            HazardType.PATH_OBSTRUCTION, Duration.ofHours(24),
-            HazardType.CONSTRUCTION, Duration.ofDays(3),
-            HazardType.OPEN_MANHOLE, Duration.ofDays(7),
-            HazardType.POOR_LIGHTING, Duration.ofDays(30),
-            HazardType.BROKEN_SIDEWALK, Duration.ofDays(45),
-            HazardType.ACCESSIBILITY_BARRIER, Duration.ofDays(90)
+    private Map<HazardType, Duration> ttl = new EnumMap<>(Map.ofEntries(
+            Map.entry(HazardType.FLOODING, Duration.ofHours(12)),
+            Map.entry(HazardType.PATH_OBSTRUCTION, Duration.ofHours(24)),
+            Map.entry(HazardType.CONSTRUCTION, Duration.ofDays(3)),
+            Map.entry(HazardType.OPEN_MANHOLE, Duration.ofDays(7)),
+            Map.entry(HazardType.POOR_LIGHTING, Duration.ofDays(30)),
+            Map.entry(HazardType.BROKEN_SIDEWALK, Duration.ofDays(45)),
+            Map.entry(HazardType.ACCESSIBILITY_BARRIER, Duration.ofDays(90)),
+            // Short-lived, situational: a parked car or a spill is gone within hours.
+            Map.entry(HazardType.VEHICLE_BLOCKING_SIDEWALK, Duration.ofHours(6)),
+            Map.entry(HazardType.TRAFFIC_SIGNAL_OUTAGE, Duration.ofHours(12)),
+            Map.entry(HazardType.ROAD_DEBRIS, Duration.ofHours(12)),
+            Map.entry(HazardType.SAFETY_CONCERN, Duration.ofHours(12)),
+            Map.entry(HazardType.FALLEN_TREE, Duration.ofDays(2)),
+            // Faded or missing markings stay until the city repaints them.
+            Map.entry(HazardType.CROSSWALK_ISSUE, Duration.ofDays(30))
     ));
 
     public Map<HazardType, Duration> getTtl() {

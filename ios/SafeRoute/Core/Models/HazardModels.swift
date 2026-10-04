@@ -22,6 +22,12 @@ enum HazardType: String, Codable, CaseIterable, Identifiable, TolerantDecodableE
     case accessibilityBarrier = "ACCESSIBILITY_BARRIER"
     case construction = "CONSTRUCTION"
     case pathObstruction = "PATH_OBSTRUCTION"
+    case trafficSignalOutage = "TRAFFIC_SIGNAL_OUTAGE"
+    case fallenTree = "FALLEN_TREE"
+    case vehicleBlockingSidewalk = "VEHICLE_BLOCKING_SIDEWALK"
+    case roadDebris = "ROAD_DEBRIS"
+    case crosswalkIssue = "CROSSWALK_ISSUE"
+    case safetyConcern = "SAFETY_CONCERN"
     case unknown = "UNKNOWN"
 
     static var unknownCase: HazardType { .unknown }
@@ -38,6 +44,12 @@ enum HazardType: String, Codable, CaseIterable, Identifiable, TolerantDecodableE
         case .accessibilityBarrier: return "Accessibility Barrier"
         case .construction: return "Construction"
         case .pathObstruction: return "Path Obstruction"
+        case .trafficSignalOutage: return "Traffic Signal Outage"
+        case .fallenTree: return "Fallen Tree or Branches"
+        case .vehicleBlockingSidewalk: return "Vehicle Blocking Sidewalk"
+        case .roadDebris: return "Road Debris or Spill"
+        case .crosswalkIssue: return "Missing or Blocked Crosswalk"
+        case .safetyConcern: return "Crime or Harassment Concern"
         case .unknown: return "Hazard"
         }
     }
@@ -52,6 +64,12 @@ enum HazardType: String, Codable, CaseIterable, Identifiable, TolerantDecodableE
         case .accessibilityBarrier: return "figure.roll"
         case .construction: return "cone.fill"
         case .pathObstruction: return "xmark.octagon.fill"
+        case .trafficSignalOutage: return "light.beacon.max.fill"
+        case .fallenTree: return "tree.fill"
+        case .vehicleBlockingSidewalk: return "car.side.fill"
+        case .roadDebris: return "drop.triangle.fill"
+        case .crosswalkIssue: return "road.lanes"
+        case .safetyConcern: return "exclamationmark.shield.fill"
         case .unknown: return "exclamationmark.triangle.fill"
         }
     }
@@ -65,6 +83,12 @@ enum HazardType: String, Codable, CaseIterable, Identifiable, TolerantDecodableE
         case .accessibilityBarrier: return "Blocks wheelchairs, strollers or canes"
         case .construction: return "Works narrowing or closing the path"
         case .pathObstruction: return "Vehicles, vendors or debris in the way"
+        case .trafficSignalOutage: return "A signal that is out, flashing or stuck"
+        case .fallenTree: return "A tree or branches across the path"
+        case .vehicleBlockingSidewalk: return "A parked or stopped vehicle on the walkway"
+        case .roadDebris: return "Debris, a spill or a slippery patch"
+        case .crosswalkIssue: return "Faded, missing or blocked crossing"
+        case .safetyConcern: return "Suspicious activity, harassment or theft"
         case .unknown: return ""
         }
     }

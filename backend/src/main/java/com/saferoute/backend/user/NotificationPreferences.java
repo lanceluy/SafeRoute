@@ -40,6 +40,12 @@ public class NotificationPreferences {
     @Column(name = "accessibility_barrier_enabled", nullable = false) @Builder.Default private boolean accessibilityBarrierEnabled = true;
     @Column(name = "construction_enabled", nullable = false) @Builder.Default private boolean constructionEnabled = true;
     @Column(name = "path_obstruction_enabled", nullable = false) @Builder.Default private boolean pathObstructionEnabled = true;
+    @Column(name = "traffic_signal_outage_enabled", nullable = false) @Builder.Default private boolean trafficSignalOutageEnabled = true;
+    @Column(name = "fallen_tree_enabled", nullable = false) @Builder.Default private boolean fallenTreeEnabled = true;
+    @Column(name = "vehicle_blocking_sidewalk_enabled", nullable = false) @Builder.Default private boolean vehicleBlockingSidewalkEnabled = true;
+    @Column(name = "road_debris_enabled", nullable = false) @Builder.Default private boolean roadDebrisEnabled = true;
+    @Column(name = "crosswalk_issue_enabled", nullable = false) @Builder.Default private boolean crosswalkIssueEnabled = true;
+    @Column(name = "safety_concern_enabled", nullable = false) @Builder.Default private boolean safetyConcernEnabled = true;
 
     /** Tell the user what happens to hazards they reported. */
     @Column(name = "report_updates_enabled", nullable = false)
@@ -71,6 +77,12 @@ public class NotificationPreferences {
             case ACCESSIBILITY_BARRIER -> accessibilityBarrierEnabled;
             case CONSTRUCTION -> constructionEnabled;
             case PATH_OBSTRUCTION -> pathObstructionEnabled;
+            case TRAFFIC_SIGNAL_OUTAGE -> trafficSignalOutageEnabled;
+            case FALLEN_TREE -> fallenTreeEnabled;
+            case VEHICLE_BLOCKING_SIDEWALK -> vehicleBlockingSidewalkEnabled;
+            case ROAD_DEBRIS -> roadDebrisEnabled;
+            case CROSSWALK_ISSUE -> crosswalkIssueEnabled;
+            case SAFETY_CONCERN -> safetyConcernEnabled;
         };
     }
 
@@ -82,5 +94,11 @@ public class NotificationPreferences {
         accessibilityBarrierEnabled = types.contains(HazardType.ACCESSIBILITY_BARRIER);
         constructionEnabled = types.contains(HazardType.CONSTRUCTION);
         pathObstructionEnabled = types.contains(HazardType.PATH_OBSTRUCTION);
+        trafficSignalOutageEnabled = types.contains(HazardType.TRAFFIC_SIGNAL_OUTAGE);
+        fallenTreeEnabled = types.contains(HazardType.FALLEN_TREE);
+        vehicleBlockingSidewalkEnabled = types.contains(HazardType.VEHICLE_BLOCKING_SIDEWALK);
+        roadDebrisEnabled = types.contains(HazardType.ROAD_DEBRIS);
+        crosswalkIssueEnabled = types.contains(HazardType.CROSSWALK_ISSUE);
+        safetyConcernEnabled = types.contains(HazardType.SAFETY_CONCERN);
     }
 }
