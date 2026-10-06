@@ -34,3 +34,13 @@ references/
 /*.pdf
 /*.txt
 /memory/
+
+# Local-only media and working material (large or not part of the product)
+docs/assets/Inspo/
+docs/assets/ad-screenshots/
+docs/assets/SafeRoute-30s-Ad-Pack/
+docs/30 sec AD/
+docs/*.mov
+docs/*.txt
+output/
+presentation-screenshots/

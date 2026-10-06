@@ -31,7 +31,8 @@ was slow. Consumers are idempotent, so the at-least-once relay never double-appl
 The processing and notification modules are **modules inside one Spring Boot application**
 (a modular monolith), decoupled through Kafka and separate consumer groups — not separately
 deployed microservices. There is no separate API gateway. The municipal web portal from the
-paper is future work (see [`docs/PAPER_ALIGNMENT.md`](docs/PAPER_ALIGNMENT.md)).
+paper is implemented as `portal/`, a React app served by the same backend's read-only endpoints
+(see [`docs/PAPER_ALIGNMENT.md`](docs/PAPER_ALIGNMENT.md)).
 
 ### Hazard lifecycle
 
@@ -57,6 +58,7 @@ ios/         SwiftUI + MapKit app (the Xcode project is generated from ios/proje
 portal/      Municipal portal: React + Vite + TypeScript
 benchmark/   Event simulator, polling comparison and k6 load tests (results are git-ignored)
 docs/        Metrics definitions, benchmark results, paper alignment, logo (docs/assets/)
+             Design inspiration, ad media and working notes are kept locally and git-ignored
 docker-compose.yml   Postgres + PostGIS, Kafka and Kafka UI for local development
 ```
 
@@ -84,7 +86,7 @@ The **`dev` profile is for a local machine only**: it accepts the public develop
 it the backend refuses to start unless `JWT_SECRET` is a private secret (≥ 32 bytes), and
 moderators are provisioned by account id (`SAFEROUTE_MODERATOR_USER_IDS`).
 
-Flyway migrates the schema on startup (V1–V11). The API is at `http://localhost:8080`:
+Flyway migrates the schema on startup (V1–V17). The API is at `http://localhost:8080`:
 
 - **Swagger UI:** http://localhost:8080/swagger-ui.html · OpenAPI: `/v3/api-docs`
 - **Health / metrics:** `/actuator/health`, `/actuator/metrics`, `/actuator/prometheus`
@@ -151,6 +153,8 @@ wscat -H "Authorization: Bearer $TOKEN" -c ws://localhost:8080/ws/notifications
 | `PATCH /api/hazards/{id}` | Reporter/moderator edits (audited) |
 | `POST /api/hazards/{id}/resolve · reopen`, `DELETE /api/hazards/{id}`, `GET /api/moderation/hazards` | Moderator / municipal official only |
 | `POST /api/uploads/hazard-image` | JPEG/PNG ≤5 MB, re-encoded, metadata stripped; only the uploader can attach it |
+| `GET /api/closures/active · in-bbox` | Active road closures (any signed-in user) |
+| `POST /api/closures`, `PATCH/DELETE /api/closures/{id}` | Create, edit, lift a road closure (moderator / municipal official only) |
 | `GET /api/meta/coverage · severity-questions · routing` | Client configuration (pilot area, severity questions, route corridor) |
 | `GET /api/me/reports · profile`, `GET/PUT /api/me/notification-preferences` | My Reports, profile, alert preferences |
 
@@ -160,7 +164,7 @@ wscat -H "Authorization: Bearer $TOKEN" -c ws://localhost:8080/ws/notifications
 cd backend && JAVA_HOME=/opt/homebrew/opt/openjdk@21 ./mvnw test
 ```
 
-88 tests: unit tests plus Testcontainers integration tests against real PostGIS and Kafka
+120+ tests: unit tests plus Testcontainers integration tests against real PostGIS and Kafka
 (auth, token rotation and concurrent refresh, moderator provisioning, role enforcement, rate
 limiting, dedup merge paths, confirmation rules and vote provenance, lifecycle/expiry, idempotent
 submissions, outbox crash recovery, Kafka redelivery idempotency, dead-letter handling, route
@@ -172,7 +176,7 @@ hazard store, per-account offline queue and alerts, versioned map state):
 
 ```bash
 cd ios && xcodegen generate
-xcodebuild test -project SafeRoute.xcodeproj -scheme SafeRoute -destination 'platform=iOS Simulator,name=iPhone 17'
+xcodebuild test -project SafeRoute.xcodeproj -scheme SafeRoute -destination 'platform=iOS Simulator,name=iPhone 18 Pro'
 ```
 
 Benchmark instrument self-tests: `node --test benchmark/simulator/`.
@@ -219,7 +223,7 @@ preview, the safer-route comparison or navigation) · **Reports** (My Reports wi
 
 ## Municipal portal
 
-`portal/` is a React + Vite app for moderators and municipal officials, in five sections:
+`portal/` is a React + Vite app for moderators and municipal officials, in these sections:
 
 - **Overview:** today's numbers, the weekly trend, and the barangays with the most hazards.
 - **Hazard Map:** clustered markers (color = severity, symbol = type), heatmap layers, and a
@@ -243,6 +247,9 @@ Across the queues:
 - **Saved views:** save the current tab, filters, sort and search under a name. Views are kept per
   official on the server.
 - **Export:** a CSV of the hazards in view, or a printable PDF report with a summary.
+- **Road closures:** officials draw a closure (construction, flooding, event, other) on the map.
+  Closures show live in the portal and on the iOS map, and the app's route planner avoids them or
+  warns when a route crosses one. Lifted or expired closures drop off automatically.
 - **Select area:** draw a box on the map to filter the queue to that area.
 
 With the backend running:
