@@ -74,6 +74,9 @@ struct APIEndpoint {
                                                                  corridorMeters: corridorMeters))
     }
 
+    /// Every active road closure (the server caps it at 200, newest first).
+    static let activeClosures = APIEndpoint(path: "/closures/active")
+
     static func hazard(id: UUID) -> APIEndpoint { APIEndpoint(path: "/hazards/\(id.uuidString)") }
     static func history(id: UUID) -> APIEndpoint { APIEndpoint(path: "/hazards/\(id.uuidString)/history") }
 

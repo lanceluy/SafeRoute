@@ -3,6 +3,7 @@ package com.saferoute.backend.event.producer;
 import com.saferoute.backend.event.KafkaTopics;
 import com.saferoute.backend.event.dto.*;
 import com.saferoute.backend.event.outbox.OutboxWriter;
+import com.saferoute.backend.closure.RoadClosure;
 import com.saferoute.backend.hazard.Hazard;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Service;
@@ -52,6 +53,12 @@ public class HazardEventProducer {
 
     public void publishUpdated(Hazard hazard, HazardChange change, UUID actorUserId) {
         publishSnapshot(KafkaTopics.HAZARD_UPDATED, hazard, change, actorUserId);
+    }
+
+    public void publishClosureChanged(RoadClosure closure, ClosureChangedEvent.Change change, UUID actorUserId) {
+        entityManager.flush(); // so the snapshot carries the version this transaction will commit
+        ClosureChangedEvent event = ClosureChangedEvent.of(KafkaTopics.CLOSURE_CHANGED, closure, change, actorUserId);
+        outbox.enqueue(KafkaTopics.CLOSURE_CHANGED, closure.getId(), event.metadata().eventId(), event);
     }
 
     public void publishSubmissionProcessed(SubmissionProcessedEvent event) {

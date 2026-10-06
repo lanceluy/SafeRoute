@@ -15,6 +15,7 @@ final class WebSocketClient: NSObject, ObservableObject {
     var onHazardFrame: ((HazardEventFrame) -> Void)?
     var onSubmissionFrame: ((SubmissionProcessedFrame) -> Void)?
     var onReportUpdate: ((ReportUpdateFrame) -> Void)?
+    var onClosureFrame: ((ClosureEventFrame) -> Void)?
     /// Called when a connection opens after a drop. Frames sent while disconnected are lost, so
     /// the owner re-fetches authoritative state.
     var onReconnected: (() -> Void)?
@@ -112,6 +113,7 @@ final class WebSocketClient: NSObject, ObservableObject {
                         case .hazard(let f): self.onHazardFrame?(f)
                         case .submission(let f): self.onSubmissionFrame?(f)
                         case .reportUpdate(let f): self.onReportUpdate?(f)
+                        case .closure(let f): self.onClosureFrame?(f)
                         }
                     }
                     self.listen(on: task)

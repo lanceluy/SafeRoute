@@ -35,9 +35,16 @@ enum Fixtures {
     }
 
     static func response(_ hazards: [Hazard], complete: Bool = true, truncated: Bool = false,
-                         leavesCoverageArea: Bool = false) -> RouteHazardsResponse {
+                         leavesCoverageArea: Bool = false, closures: [RoadClosure]? = nil) -> RouteHazardsResponse {
         RouteHazardsResponse(hazards: hazards, complete: complete, truncated: truncated,
-                             leavesCoverageArea: leavesCoverageArea, corridorMeters: 60)
+                             leavesCoverageArea: leavesCoverageArea, corridorMeters: 60, closures: closures)
+    }
+
+    /// A closed road along the given points.
+    static func closure(_ points: [CLLocationCoordinate2D], status: String = "ACTIVE", buffer: Int = 15,
+                        version: Int64? = 0, id: UUID = UUID()) -> RoadClosure {
+        RoadClosure(id: id, name: "Pasong Tamo repair", reason: "Road works", category: "CONSTRUCTION", status: status,
+                    bufferMeters: buffer, endsAt: nil, version: version, coordinates: points.map { [$0.latitude, $0.longitude] })
     }
 
     static func plan(route: [CLLocationCoordinate2D], assessedHazards: [Hazard] = [],

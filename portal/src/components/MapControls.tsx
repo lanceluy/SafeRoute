@@ -35,7 +35,7 @@ export function LayersButton({ layer, onChange, rain, onRain }: {
  * The severity key as one small strip; the full explanation opens from ⓘ. Experienced users
  * need the colours, not the paragraph.
  */
-export function MapLegend({ layer, rain = false }: { layer: MapLayer; rain?: boolean }) {
+export function MapLegend({ layer, rain = false, closures = 0 }: { layer: MapLayer; rain?: boolean; closures?: number }) {
   const [open, setOpen] = useState(false);
   const heat = layer !== 'markers';
   return (
@@ -76,6 +76,7 @@ export function MapLegend({ layer, rain = false }: { layer: MapLayer; rain?: boo
             <span><i className="sev-bg-low" />Low</span>
           </>
         )}
+        {closures > 0 && <span><i className="closure-key" />Closed road{closures > 1 ? ` (${closures})` : ''}</span>}
         {rain && <span className="legend-strip-ramp"><span className="legend-ramp" style={{ background: `linear-gradient(90deg, ${RAIN_KEY.join(', ')})` }} />Rain</span>}
         <button type="button" className="legend-info" aria-expanded={open} onClick={() => setOpen((o) => !o)} aria-label="Explain the map" title="Legend">
           <Info size={15} aria-hidden="true" />

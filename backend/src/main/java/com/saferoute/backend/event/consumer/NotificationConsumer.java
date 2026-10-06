@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.saferoute.backend.event.EventContext;
 import com.saferoute.backend.event.KafkaTopics;
+import com.saferoute.backend.event.dto.ClosureChangedEvent;
 import com.saferoute.backend.event.dto.HazardChange;
 import com.saferoute.backend.event.dto.HazardUpdatedEvent;
 import com.saferoute.backend.event.dto.SubmissionProcessedEvent;
@@ -11,6 +12,7 @@ import com.saferoute.backend.metrics.SafeRouteMetrics;
 import com.saferoute.backend.push.PushNotificationService;
 import com.saferoute.backend.spatial.GeoUtils;
 import com.saferoute.backend.submission.SubmissionStatus;
+import com.saferoute.backend.websocket.ClosureEventFrame;
 import com.saferoute.backend.websocket.HazardEventFrame;
 import com.saferoute.backend.websocket.RouteCorridor;
 import com.saferoute.backend.websocket.SubmissionProcessedFrame;
@@ -133,6 +135,51 @@ public class NotificationConsumer {
                 }
             }
         }
+    }
+
+    /**
+     * Closures change what a route may do, so they are not preference-gated: staff maps watching the
+     * area, and every commuter within the map-update radius of any vertex or whose active route
+     * passes the closure, get the frame (and so can reroute).
+     */
+    @KafkaListener(topics = KafkaTopics.CLOSURE_CHANGED, groupId = GROUP_ID)
+    public void onClosureChanged(ClosureChangedEvent event) {
+        try (var ignored = EventContext.enter(event.metadata())) {
+            ClosureEventFrame frame = ClosureEventFrame.of(event);
+            int sent = 0;
+            for (WebSocketSessionRegistry.SessionInfo info : registry.activeSessions()) {
+                boolean relevant;
+                if (info.watch() != null) {
+                    relevant = touchesWatch(info.watch(), event.coordinates());
+                } else if (info.hasLocation()) {
+                    relevant = nearAnyVertex(info.lat(), info.lon(), event.coordinates(), mapUpdateRadiusMeters)
+                            || passesRoute(info.route(), event.coordinates(), routeCorridorMeters + event.bufferMeters());
+                } else {
+                    relevant = false;
+                }
+                if (relevant && send(info, frame)) {
+                    metrics.recordNotificationLatency(event.metadata().occurredAt());
+                    sent++;
+                }
+            }
+            log.debug("closure_changed {} for {} delivered to {} session(s)", event.change(), event.closureId(), sent);
+        }
+    }
+
+    private static boolean touchesWatch(WebSocketSessionRegistry.WatchArea watch, double[][] coordinates) {
+        for (double[] p : coordinates) if (watch.contains(p[0], p[1])) return true;
+        return false;
+    }
+
+    private static boolean nearAnyVertex(double lat, double lon, double[][] coordinates, double radiusMeters) {
+        for (double[] p : coordinates) if (GeoUtils.distanceMeters(lat, lon, p[0], p[1]) <= radiusMeters) return true;
+        return false;
+    }
+
+    private static boolean passesRoute(RouteCorridor route, double[][] coordinates, double corridorMeters) {
+        if (route == null) return false;
+        for (double[] p : coordinates) if (route.project(p[0], p[1]).distanceFromRouteMeters() <= corridorMeters) return true;
+        return false;
     }
 
     @KafkaListener(topics = KafkaTopics.SUBMISSION_PROCESSED, groupId = GROUP_ID)

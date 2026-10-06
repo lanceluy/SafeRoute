@@ -2,6 +2,7 @@ package com.saferoute.backend.spatial;
 
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.LineString;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.PrecisionModel;
 
@@ -16,6 +17,13 @@ public final class GeoUtils {
     public static Point point(double latitude, double longitude) {
         // JTS Coordinate is (x=lon, y=lat) to match PostGIS's ST_MakePoint(lon, lat) convention.
         return GEOMETRY_FACTORY.createPoint(new Coordinate(longitude, latitude));
+    }
+
+    /** @param latLon [latitude, longitude] pairs, at least 2 */
+    public static LineString lineString(java.util.List<double[]> latLon) {
+        Coordinate[] cs = new Coordinate[latLon.size()];
+        for (int i = 0; i < cs.length; i++) cs[i] = new Coordinate(latLon.get(i)[1], latLon.get(i)[0]);
+        return GEOMETRY_FACTORY.createLineString(cs);
     }
 
     /** Haversine distance in meters — used for in-memory proximity checks against connected WebSocket sessions. */

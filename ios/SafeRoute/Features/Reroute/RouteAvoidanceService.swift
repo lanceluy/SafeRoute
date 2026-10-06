@@ -45,6 +45,13 @@ struct RouteHazard: Identifiable, Hashable, Sendable {
 struct RouteOption: Sendable {
     let legs: [WalkingLeg]
     let hazards: [RouteHazard]
+    /// Active closed roads this route runs through. A closure outweighs any amount of hazard
+    /// exposure, so a route without one always scores better than a route with one.
+    var closures: [RoadClosure] = []
+
+    static let closurePenalty = 1000.0
+
+    var hasClosure: Bool { !closures.isEmpty }
 
     var expectedTravelTime: TimeInterval { legs.reduce(0) { $0 + $1.expectedTravelTime } }
     var distance: CLLocationDistance { legs.reduce(0) { $0 + $1.distance } }
@@ -54,7 +61,7 @@ struct RouteOption: Sendable {
     /// Weighted hazard exposure: high-severity hazards dominate; disputed ones count half. A
     /// transparent heuristic, not a validated safety measure — the card always lists what remains.
     var riskScore: Double {
-        hazards.reduce(0) { total, rh in
+        Double(closures.count) * Self.closurePenalty + hazards.reduce(0) { total, rh in
             let weight: Double = switch rh.hazard.severity {
             case .high: 10
             case .medium: 3
@@ -103,6 +110,15 @@ struct RoutePlan: Identifiable, @unchecked Sendable {
     /// Every hazard the assessment found along any candidate — seeds navigation so guidance
     /// knows everything the comparison card knew.
     let assessedHazards: [Hazard]
+    /// Every closed road the assessment found near any candidate.
+    var assessedClosures: [RoadClosure] = []
+
+    /// Closed roads the original passes through that the safer route stays off.
+    var avoidedClosures: [RoadClosure] {
+        guard let safer else { return [] }
+        let remaining = Set(safer.closures.map(\.id))
+        return original.closures.filter { !remaining.contains($0.id) }
+    }
 
     /// Hazards near the original path that the safer route stays clear of — the "why".
     var avoided: [RouteHazard] {
@@ -192,9 +208,11 @@ struct RouteAvoidanceService {
         let legs = try await directions(source, target, true)
         guard !legs.isEmpty else { throw RouteAvoidanceError.noRouteFound }
 
-        func makePlan(original: RouteOption, safer: RouteOption?, assessment: HazardAssessment, hazards: [Hazard]) -> RoutePlan {
+        func makePlan(original: RouteOption, safer: RouteOption?, assessment: HazardAssessment, hazards: [Hazard],
+                      closures: [RoadClosure] = []) -> RoutePlan {
             RoutePlan(destinationName: destinationName, destination: destination, destinationItem: destinationItem,
-                      original: original, safer: safer, assessment: assessment, assessedHazards: hazards)
+                      original: original, safer: safer, assessment: assessment, assessedHazards: hazards,
+                      assessedClosures: closures)
         }
 
         let response: RouteHazardsResponse
@@ -208,42 +226,59 @@ struct RouteAvoidanceService {
         }
         let assessment = Self.assessment(of: response)
         var known = response.hazards
-        let options = legs.map { option(legs: [$0], hazards: known, corridorMeters: corridorMeters) }
+        var knownClosures = response.closures ?? []
+        let options = legs.map { option(legs: [$0], hazards: known, closures: knownClosures, corridorMeters: corridorMeters) }
         let original = options[0]
-        guard original.riskScore > 0, assessment.isComplete else {
-            return makePlan(original: original, safer: nil, assessment: assessment, hazards: known)
+        // A closed road is a fact, not an estimate: avoiding it doesn't depend on the hazard data being complete.
+        let blockedByClosure = original.hasClosure
+        guard original.riskScore > 0, assessment.isComplete || blockedByClosure else {
+            return makePlan(original: original, safer: nil, assessment: assessment, hazards: known, closures: knownClosures)
         }
 
         // MapKit's alternates follow real walkways; prefer them whenever one lowers the risk.
         if let alternate = safest(Array(options.dropFirst()), than: original) {
-            return makePlan(original: original, safer: alternate, assessment: assessment, hazards: known)
+            return makePlan(original: original, safer: alternate, assessment: assessment, hazards: known, closures: knownClosures)
         }
 
         let base = options.min { ($0.riskScore, $0.expectedTravelTime) < ($1.riskScore, $1.expectedTravelTime) } ?? original
-        let worst = base.hazards
-            .filter { $0.hazard.severity >= minDetourSeverity }
-            .sorted { ($0.hazard.severity, -$0.distanceFromPath) > ($1.hazard.severity, -$1.distanceFromPath) }
-            .prefix(maxHazardsToDetourAround)
-        var detourLegs: [[WalkingLeg]] = []
-        for routeHazard in worst {
-            for side in [1.0, -1.0] {
-                let waypoint = detourWaypoint(around: routeHazard.hazard.coordinate, on: base, side: side)
-                if let legs = try? await detour(from: source, via: waypoint, to: target) {
-                    detourLegs.append(legs)
+        // Which waypoints to try: around a closed road if the route is blocked by one (the request
+        // budget goes to that, since it is the bigger problem), otherwise around the worst hazards.
+        var waypoints: [CLLocationCoordinate2D] = []
+        if let closure = base.closures.first {
+            waypoints = closureWaypoints(around: closure, on: base)
+        } else {
+            let worst = base.hazards
+                .filter { $0.hazard.severity >= minDetourSeverity }
+                .sorted { ($0.hazard.severity, -$0.distanceFromPath) > ($1.hazard.severity, -$1.distanceFromPath) }
+                .prefix(maxHazardsToDetourAround)
+            for routeHazard in worst {
+                for side in [1.0, -1.0] {
+                    waypoints.append(detourWaypoint(around: routeHazard.hazard.coordinate, on: base, side: side))
                 }
             }
         }
-        guard !detourLegs.isEmpty else { return makePlan(original: original, safer: nil, assessment: assessment, hazards: known) }
+        var detourLegs: [[WalkingLeg]] = []
+        for waypoint in waypoints {
+            if let legs = try? await detour(from: source, via: waypoint, to: target) {
+                detourLegs.append(legs)
+            }
+        }
+        guard !detourLegs.isEmpty else {
+            return makePlan(original: original, safer: nil, assessment: assessment, hazards: known, closures: knownClosures)
+        }
 
         // Detours can leave the area assessed above: assess their own geometry before scoring them.
         guard let detourResponse = try? await assess(detourLegs.map { $0.flatMap(\.coordinates) }, corridorMeters: corridorMeters),
-              detourResponse.complete else {
-            return makePlan(original: original, safer: nil, assessment: assessment, hazards: known)
+              detourResponse.complete || blockedByClosure else {
+            return makePlan(original: original, safer: nil, assessment: assessment, hazards: known, closures: knownClosures)
         }
         let knownIds = Set(known.map(\.id))
         known += detourResponse.hazards.filter { !knownIds.contains($0.id) }
-        let detours = detourLegs.map { option(legs: $0, hazards: known, corridorMeters: corridorMeters) }
-        return makePlan(original: original, safer: safest(detours, than: original), assessment: assessment, hazards: known)
+        let knownClosureIds = Set(knownClosures.map(\.id))
+        knownClosures += (detourResponse.closures ?? []).filter { !knownClosureIds.contains($0.id) }
+        let detours = detourLegs.map { option(legs: $0, hazards: known, closures: knownClosures, corridorMeters: corridorMeters) }
+        return makePlan(original: original, safer: safest(detours, than: original), assessment: assessment,
+                        hazards: known, closures: knownClosures)
     }
 
     static func assessment(of response: RouteHazardsResponse) -> HazardAssessment {
@@ -261,7 +296,11 @@ struct RouteAvoidanceService {
 
     private func safest(_ candidates: [RouteOption], than original: RouteOption) -> RouteOption? {
         candidates
-            .filter { $0.riskScore < original.riskScore && $0.expectedTravelTime <= original.expectedTravelTime * maxSlowdownFactor }
+            .filter {
+                // Getting off a closed road is worth any extra walking; hazards only justify up to 2x.
+                $0.riskScore < original.riskScore
+                    && ($0.expectedTravelTime <= original.expectedTravelTime * maxSlowdownFactor || original.hasClosure)
+            }
             .min { ($0.riskScore, $0.expectedTravelTime) < ($1.riskScore, $1.expectedTravelTime) }
     }
 
@@ -275,17 +314,32 @@ struct RouteAvoidanceService {
     }
 
     /// Hazards within the corridor of the exact leg geometry.
-    private func option(legs: [WalkingLeg], hazards: [Hazard], corridorMeters: Double) -> RouteOption {
+    private func option(legs: [WalkingLeg], hazards: [Hazard], closures: [RoadClosure] = [], corridorMeters: Double) -> RouteOption {
         let onRoute = hazards.compactMap { hazard -> RouteHazard? in
             guard hazard.status.isActive else { return nil }
             let d = legs.map { Self.distance(from: hazard.coordinate, to: $0.polyline) }.min() ?? .greatestFiniteMagnitude
             return d <= corridorMeters ? RouteHazard(hazard: hazard, distanceFromPath: d) : nil
         }
-        return RouteOption(legs: legs, hazards: onRoute.sorted { $0.hazard.severity > $1.hazard.severity })
+        let blocked = closures.filter { closure in legs.contains { ClosureGeometry.blocks(closure, route: $0.polyline) } }
+        return RouteOption(legs: legs, hazards: onRoute.sorted { $0.hazard.severity > $1.hazard.severity }, closures: blocked)
+    }
+
+    /// Four ways round a closed road: off to either side of its middle, and just past either end.
+    private func closureWaypoints(around closure: RoadClosure, on option: RouteOption) -> [CLLocationCoordinate2D] {
+        let path = closure.path
+        guard let first = path.first, let last = path.last else { return [] }
+        let clearance = Double(closure.bufferMeters) + 45
+        let middle = CLLocationCoordinate2D(latitude: (first.latitude + last.latitude) / 2,
+                                            longitude: (first.longitude + last.longitude) / 2)
+        var points = [1.0, -1.0].map { detourWaypoint(around: middle, on: option, side: $0, offsetMeters: max(detourOffsetMeters, clearance)) }
+        points.append(last.offset(distanceMeters: clearance, bearingRadians: first.bearing(to: last)))
+        points.append(first.offset(distanceMeters: clearance, bearingRadians: last.bearing(to: first)))
+        return points
     }
 
     /// Offsets a point perpendicular to the route's *local* direction at the hazard.
-    private func detourWaypoint(around hazard: CLLocationCoordinate2D, on option: RouteOption, side: Double) -> CLLocationCoordinate2D {
+    private func detourWaypoint(around hazard: CLLocationCoordinate2D, on option: RouteOption, side: Double,
+                                offsetMeters: Double? = nil) -> CLLocationCoordinate2D {
         let coords = option.coordinates
         let target = MKMapPoint(hazard)
         var bestIndex = 0
@@ -295,7 +349,7 @@ struct RouteAvoidanceService {
             if d < bestDistance { bestDistance = d; bestIndex = i }
         }
         let bearing = coords.count > 1 ? coords[bestIndex].bearing(to: coords[bestIndex + 1]) : 0
-        return hazard.offset(distanceMeters: detourOffsetMeters, bearingRadians: bearing + side * .pi / 2)
+        return hazard.offset(distanceMeters: offsetMeters ?? detourOffsetMeters, bearingRadians: bearing + side * .pi / 2)
     }
 
     nonisolated static func downsample(_ points: [CLLocationCoordinate2D], maxPoints: Int) -> [CLLocationCoordinate2D] {
@@ -333,7 +387,7 @@ enum MapKitDirections {
     }
 }
 
-private extension MKMapPoint {
+extension MKMapPoint {
     /// Distance in meters from this point to the closest point on segment [a, b].
     func distance(toSegmentFrom a: MKMapPoint, to b: MKMapPoint) -> Double {
         let dx = b.x - a.x

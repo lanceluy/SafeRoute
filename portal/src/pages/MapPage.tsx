@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { useSearchParams } from 'react-router';
-import { ArrowRight, BoxSelect, ChevronDown, ChevronUp, List, Map as MapIcon, PanelRight, X } from 'lucide-react';
+import { ArrowRight, BoxSelect, ChevronDown, ChevronUp, Construction, List, Map as MapIcon, PanelRight, X } from 'lucide-react';
 import { api } from '../api/client';
-import type { Hazard, HazardType } from '../api/types';
+import type { Hazard, HazardType, RoadClosure } from '../api/types';
 import { TypeIcon } from '../components/Badges';
+import { ClosureDialog, CLOSURE_LABEL, LiftClosureDialog } from '../components/ClosureDialog';
 import { HazardDrawer } from '../components/HazardDrawer';
 import { LayersButton, MapLegend } from '../components/MapControls';
 import { MapView, type MapLayer } from '../components/MapView';
@@ -13,6 +14,7 @@ import { TYPE_LABEL, SEVERITY_LABEL } from '../lib/hazards';
 import { MAP_CHIPS, MAP_TABS } from '../lib/queue';
 import { useShortcuts } from '../lib/shortcuts';
 import { useBarangays, usePlace } from '../state/places';
+import { useClosures } from '../state/useClosures';
 import { useStats } from '../state/useStats';
 import { useToast } from '../state/toast';
 import { useRadar } from '../state/useWeather';
@@ -54,6 +56,12 @@ export function MapPage() {
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [layer, setLayer] = useState<MapLayer>('markers');
   const [drawing, setDrawing] = useState(false);
+  const { closures, reload: reloadClosures } = useClosures();
+  const [blocking, setBlocking] = useState(false);
+  const [roadPoints, setRoadPoints] = useState<[number, number][] | null>(null);
+  const [closureId, setClosureId] = useState<string | null>(null);
+  const [lifting, setLifting] = useState<RoadClosure | null>(null);
+  const openClosure = closures.find((c) => c.id === closureId);
   const [mode, setModeState] = useState<Mode>(() => stored(MODE_KEY, (v) => (v === 'map' || v === 'list' ? v : 'split')));
   const [width, setWidth] = useState(() => stored(WIDTH_KEY, (v) => {
     const n = Number(v);
@@ -150,11 +158,20 @@ export function MapPage() {
           barangays={barangays} highlightArea={c.area} pulseIds={c.queue.newIds} fitKey={c.filterKey}
           loading={c.queue.loading} insetRight={panelOpen ? width + GUTTER * 2 : 0}
           region={c.filters.region} drawing={drawing} controls weatherOverlay={weatherOverlay}
+          closures={closures} selectedClosureId={closureId}
+          onClosureSelect={(id) => { setPreviewId(null); setClosureId(id); }}
+          blocking={blocking}
+          onRoadDrawn={(pts) => { setBlocking(false); if (pts) setRoadPoints(pts); }}
           onDrawn={(box) => { setDrawing(false); if (box) c.setFilters({ ...c.filters, region: box }); }}
           toolbar={<>
             <button type="button" className={drawing ? 'on' : undefined} aria-pressed={drawing} onClick={() => setDrawing((d) => !d)}
               aria-label={drawing ? 'Cancel area selection' : 'Select an area'} title={drawing ? 'Cancel (Esc)' : 'Select an area'}>
               <BoxSelect size={18} aria-hidden="true" />
+            </button>
+            <button type="button" className={blocking ? 'on' : undefined} aria-pressed={blocking}
+              onClick={() => { setDrawing(false); setClosureId(null); setBlocking((b) => !b); }}
+              aria-label={blocking ? 'Cancel blocking a road' : 'Block a road'} title={blocking ? 'Cancel (Esc)' : 'Block a road'}>
+              <Construction size={18} aria-hidden="true" />
             </button>
             <LayersButton layer={layer} onChange={setLayer} rain={rain} onRain={setRain} />
           </>} />
@@ -165,6 +182,12 @@ export function MapPage() {
           { value: 'list', title: 'List only', label: <><List size={16} aria-hidden="true" /><span>List</span></> },
         ]} />
 
+        {blocking && (
+          <div className="map-hint" role="status">
+            Click along the road to trace it · Double-click or Enter to finish · Backspace undoes · Esc cancels
+          </div>
+        )}
+
         {(drawing || c.filters.region) && (
           <div className="map-hint" role="status">
             {drawing
@@ -173,7 +196,7 @@ export function MapPage() {
           </div>
         )}
 
-        <MapLegend layer={layer} rain={rain} />
+        <MapLegend layer={layer} rain={rain} closures={closures.length} />
 
         {mode !== 'list' && (
           <HazardSummary hazards={mapHazards} shown={c.shown} area={c.filters.area} needsReview={stats?.totals.needsReview}
@@ -182,11 +205,34 @@ export function MapPage() {
         )}
 
         {/* The card fades down on close (a CSS exit; Motion's transforms would fight its centring). */}
+        {openClosure && !shownPreview && (
+          <div className="preview-card" role="dialog" aria-label={`${openClosure.name} closure`}>
+            <span className="row-icon closure-icon"><Construction size={18} aria-hidden="true" /></span>
+            <div className="preview-main">
+              <strong>{openClosure.name}</strong>
+              <span className="muted">
+                {CLOSURE_LABEL[openClosure.category]} · {openClosure.reason}
+                {openClosure.endsAt ? ` · until ${new Date(openClosure.endsAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}` : ' · until lifted'}
+              </span>
+            </div>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setLifting(openClosure)} autoFocus>Reopen road</button>
+            <button type="button" className="icon-btn" onClick={() => setClosureId(null)} aria-label="Close"><X size={16} aria-hidden="true" /></button>
+          </div>
+        )}
+
         {shownPreview && (
           <PreviewCard hazard={shownPreview} leaving={previewLeaving} barangays={barangays}
             onOpen={() => open(shownPreview.id)} onClose={() => setPreviewId(null)} />
         )}
       </section>
+
+      {roadPoints && (
+        <ClosureDialog points={roadPoints} onClose={() => setRoadPoints(null)} onDone={() => reloadClosures()} />
+      )}
+      {lifting && (
+        <LiftClosureDialog id={lifting.id} name={lifting.name} onClose={() => setLifting(null)}
+          onDone={() => { setClosureId(null); reloadClosures(); }} />
+      )}
 
       {/* The panel slides 12 px and fades as it opens or closes; between Map + list and List it
           glides to its new edge (CSS). The list and a report's details crossfade inside it. */}

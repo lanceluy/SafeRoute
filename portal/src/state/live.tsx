@@ -2,7 +2,7 @@
 // moderator session (a "watch" frame), so every report and status change arrives here.
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { API_ORIGIN, refreshToken } from '../api/client';
-import type { HazardFrame } from '../api/types';
+import type { ClosureFrame, HazardFrame } from '../api/types';
 import { useSession } from './session';
 
 /** Metro Manila pilot area (saferoute.coverage in the backend's application.yml). */
@@ -34,10 +34,11 @@ interface LiveState {
   /** Bumps on every hazard change, so pages can refetch. */
   version: number;
   subscribe(listener: (frame: HazardFrame) => void): () => void;
+  subscribeClosures(listener: (frame: ClosureFrame) => void): () => void;
 }
 
 const LiveContext = createContext<LiveState>({
-  status: 'offline', updatedAt: null, version: 0, subscribe: () => () => {},
+  status: 'offline', updatedAt: null, version: 0, subscribe: () => () => {}, subscribeClosures: () => () => {},
 });
 
 export function useLive() {
@@ -52,6 +53,14 @@ export function useHazardFrames(listener: (frame: HazardFrame) => void) {
   useEffect(() => subscribe((f) => ref.current(f)), [subscribe]);
 }
 
+/** Calls `listener` for every road-closure frame while mounted. */
+export function useClosureFrames(listener: (frame: ClosureFrame) => void) {
+  const { subscribeClosures } = useLive();
+  const ref = useRef(listener);
+  useEffect(() => { ref.current = listener; });
+  useEffect(() => subscribeClosures((f) => ref.current(f)), [subscribeClosures]);
+}
+
 export function LiveProvider({ children }: { children: ReactNode }) {
   const session = useSession();
   const token = session?.token;
@@ -64,6 +73,11 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   const [subscribe] = useState(() => (listener: (f: HazardFrame) => void) => {
     listeners.current.add(listener);
     return () => { listeners.current.delete(listener); };
+  });
+  const closureListeners = useRef(new Set<(f: ClosureFrame) => void>());
+  const [subscribeClosures] = useState(() => (listener: (f: ClosureFrame) => void) => {
+    closureListeners.current.add(listener);
+    return () => { closureListeners.current.delete(listener); };
   });
 
   useEffect(() => {
@@ -100,16 +114,22 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         connectedBefore.current = true;
       };
       socket.onmessage = (event) => {
-        let frame: HazardFrame;
+        let frame: HazardFrame | ClosureFrame;
         try {
           frame = JSON.parse(event.data);
         } catch {
           return;
         }
+        if (frame.type === 'closure_changed') {
+          // Closures have their own listeners; they don't make every page refetch its hazards.
+          setUpdatedAt(Date.now());
+          closureListeners.current.forEach((l) => l(frame as ClosureFrame));
+          return;
+        }
         if (!frame.type?.startsWith('hazard_')) return;
         setUpdatedAt(Date.now());
         setVersion((v) => v + 1);
-        listeners.current.forEach((l) => l(frame));
+        listeners.current.forEach((l) => l(frame as HazardFrame));
       };
       socket.onclose = async (event) => {
         if (stopped) return;
@@ -129,7 +149,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   }, [token]);
 
   return (
-    <LiveContext.Provider value={{ status: token ? status : 'offline', updatedAt, version, subscribe }}>
+    <LiveContext.Provider value={{ status: token ? status : 'offline', updatedAt, version, subscribe, subscribeClosures }}>
       {children}
     </LiveContext.Provider>
   );

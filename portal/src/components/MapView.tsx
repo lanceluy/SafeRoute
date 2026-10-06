@@ -5,7 +5,7 @@ import { useThemeColors } from '../lib/theme';
 import 'leaflet.markercluster';
 import 'leaflet.heat';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
-import type { Hazard, Severity } from '../api/types';
+import type { Hazard, RoadClosure, Severity } from '../api/types';
 import type { Barangay } from '../lib/geo';
 import { STATUS_LABEL, TYPE_LABEL, typeIcon } from '../lib/hazards';
 
@@ -18,6 +18,7 @@ const FOCUS_ZOOM = 16;
 const HEAT_WEIGHT: Record<Severity, number> = { HIGH: 1, MEDIUM: 0.6, LOW: 0.3 };
 /** In the age layer a hazard reaches full weight after two weeks unresolved. */
 const AGE_FULL_DAYS = 14;
+const CLOSURE_COLOR = '#D92D20';
 
 function heatWeight(h: Hazard, layer: MapLayer, now: number) {
   if (layer === 'severity') return HEAT_WEIGHT[h.severity];
@@ -63,7 +64,8 @@ function clusterIcon(cluster: L.MarkerCluster) {
  * status) or a heatmap, plus barangay outlines. Selecting reveals and enlarges the marker.
  */
 export function MapView({ hazards, selectedId, highlightId, onSelect, layer, barangays, highlightArea, pulseIds, fitKey, loading, insetRight = 0,
-  region, drawing = false, onDrawn, toolbar, controls = false, weatherOverlay }: {
+  region, drawing = false, onDrawn, toolbar, controls = false, weatherOverlay,
+  closures, selectedClosureId, onClosureSelect, blocking = false, onRoadDrawn }: {
   hazards: Hazard[];
   selectedId?: string | null;
   /** Shown like the selection (bigger, others dimmed) without moving the map: a marker preview. */
@@ -89,6 +91,13 @@ export function MapView({ hazards, selectedId, highlightId, onSelect, layer, bar
   /** While true, dragging draws a box instead of panning; onDrawn gets the box. */
   drawing?: boolean;
   onDrawn?: (box: [number, number, number, number] | null) => void;
+  /** Active road closures, drawn as a red dashed band above the streets and below the markers. */
+  closures?: RoadClosure[];
+  selectedClosureId?: string | null;
+  onClosureSelect?: (id: string) => void;
+  /** While true, clicks trace a road to block; onRoadDrawn gets its points ([lat, lon]) or null if cancelled. */
+  blocking?: boolean;
+  onRoadDrawn?: (points: [number, number][] | null) => void;
 }) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
@@ -115,6 +124,7 @@ export function MapView({ hazards, selectedId, highlightId, onSelect, layer, bar
     // Rain radar sits above the tiles and outlines (400 is the overlay pane) but below the markers (600).
     m.createPane('weather').style.zIndex = '450';
     m.getPane('weather')!.style.pointerEvents = 'none';
+    m.createPane('closures').style.zIndex = '480';
     map.current = m;
     const resize = new ResizeObserver(() => m.invalidateSize());
     resize.observe(el.current!);
@@ -311,6 +321,80 @@ export function MapView({ hazards, selectedId, highlightId, onSelect, layer, bar
       m.dragging.enable();
     };
   }, [drawing]);
+
+  // Closed roads: a wide translucent band (the blocked width, and the click target) under a dashed line.
+  const closureGroup = useRef<L.LayerGroup | null>(null);
+  const onClosureSelectRef = useRef(onClosureSelect);
+  useEffect(() => { onClosureSelectRef.current = onClosureSelect; });
+  const blockingRef = useRef(blocking);
+  useEffect(() => { blockingRef.current = blocking; });
+  useEffect(() => {
+    const m = map.current;
+    closureGroup.current?.remove();
+    closureGroup.current = null;
+    if (!m || !closures?.length) return;
+    const group = L.layerGroup();
+    for (const c of closures) {
+      const latlngs = c.coordinates as L.LatLngTuple[];
+      const selected = c.id === selectedClosureId;
+      L.polyline(latlngs, { pane: 'closures', color: CLOSURE_COLOR, weight: selected ? 18 : 13, opacity: selected ? 0.4 : 0.24, lineCap: 'round', lineJoin: 'round' })
+        .on('click', () => { if (!blockingRef.current) onClosureSelectRef.current?.(c.id); })
+        .bindTooltip(`${c.name}: closed`, { sticky: true })
+        .addTo(group);
+      L.polyline(latlngs, { pane: 'closures', color: CLOSURE_COLOR, weight: 4, opacity: 0.95, dashArray: '9 7', interactive: false }).addTo(group);
+    }
+    closureGroup.current = group.addTo(m);
+  }, [closures, selectedClosureId]);
+
+  // Tracing a road to block: click each bend, double-click or Enter to finish, Backspace undoes, Esc cancels.
+  const onRoadDrawnRef = useRef(onRoadDrawn);
+  useEffect(() => { onRoadDrawnRef.current = onRoadDrawn; });
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !blocking) return;
+    const container = m.getContainer();
+    container.classList.add('drawing');
+    m.doubleClickZoom.disable();
+    const points: L.LatLng[] = [];
+    const line = L.polyline([], { pane: 'closures', color: CLOSURE_COLOR, weight: 4, dashArray: '9 7', interactive: false }).addTo(m);
+    const dots = L.layerGroup().addTo(m);
+    const redraw = (hover?: L.LatLng) => line.setLatLngs(hover ? [...points, hover] : points);
+    const click = (e: L.LeafletMouseEvent) => {
+      const last = points[points.length - 1];
+      // A double-click delivers two clicks first; don't add the same bend twice.
+      if (last && m.latLngToContainerPoint(last).distanceTo(e.containerPoint) < 4) return;
+      points.push(e.latlng);
+      dots.addLayer(L.circleMarker(e.latlng, { radius: 5, color: '#fff', weight: 2, fillColor: CLOSURE_COLOR, fillOpacity: 1, interactive: false }));
+      redraw();
+    };
+    const move = (e: L.LeafletMouseEvent) => { if (points.length) redraw(e.latlng); };
+    const finish = () => { if (points.length >= 2) onRoadDrawnRef.current?.(points.map((p) => [p.lat, p.lng])); };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onRoadDrawnRef.current?.(null);
+      else if (e.key === 'Enter') finish();
+      else if (e.key === 'Backspace' && points.length) {
+        e.preventDefault();
+        points.pop();
+        const layers = dots.getLayers();
+        if (layers.length) dots.removeLayer(layers[layers.length - 1]);
+        redraw();
+      }
+    };
+    m.on('click', click);
+    m.on('mousemove', move);
+    m.on('dblclick', finish);
+    document.addEventListener('keydown', key);
+    return () => {
+      m.off('click', click);
+      m.off('mousemove', move);
+      m.off('dblclick', finish);
+      document.removeEventListener('keydown', key);
+      line.remove();
+      dots.remove();
+      container.classList.remove('drawing');
+      m.doubleClickZoom.enable();
+    };
+  }, [blocking]);
 
   // Fit to the hazards once per filter change, when they arrive (not on every live update).
   const fittedFor = useRef<string | null>(null);

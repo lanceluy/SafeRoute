@@ -199,6 +199,40 @@ export interface HazardFrame {
   version: number;
 }
 
+export type ClosureCategory = 'CONSTRUCTION' | 'FLOODING' | 'EVENT' | 'OTHER';
+
+/** A road or path a moderator has blocked; routing in the app avoids it while ACTIVE. */
+export interface RoadClosure {
+  id: string;
+  name: string;
+  reason: string;
+  category: ClosureCategory;
+  status: 'ACTIVE' | 'LIFTED' | 'EXPIRED';
+  bufferMeters: number;
+  startsAt: string;
+  endsAt: string | null;
+  createdAt: string;
+  version: number;
+  /** The blocked line as [latitude, longitude] points. */
+  coordinates: [number, number][];
+}
+
+/** A closure_changed frame from /ws/notifications. LIFTED / EXPIRED mean it is no longer blocked. */
+export interface ClosureFrame {
+  type: 'closure_changed';
+  change: 'CREATED' | 'UPDATED' | 'LIFTED' | 'EXPIRED';
+  closureId: string;
+  name: string;
+  reason: string;
+  category: ClosureCategory;
+  status: RoadClosure['status'];
+  bufferMeters: number;
+  endsAt?: string;
+  coordinates: [number, number][];
+  occurredAt: string;
+  version: number;
+}
+
 export interface Session {
   token: string;
   refreshToken: string;

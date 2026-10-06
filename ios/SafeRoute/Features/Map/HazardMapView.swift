@@ -6,6 +6,8 @@ import MapKit
 /// only hazards in view are fetched.
 struct HazardMapView: UIViewRepresentable {
     let hazards: [Hazard]
+    /// Closed roads, drawn as a red band with a marker that opens a callout.
+    var closures: [RoadClosure] = []
     let pending: [ReportsStore.PendingSubmission]
     let plan: RoutePlan?
     let useSaferRoute: Bool
@@ -33,14 +35,27 @@ struct HazardMapView: UIViewRepresentable {
         let map = MKMapView()
         map.delegate = context.coordinator
         map.showsUserLocation = true
+        // iOS dims the tint of whatever sits under a presented sheet (the Nearby panel), which turned the
+        // navy location dot gray. The map keeps its normal tint.
+        map.tintAdjustmentMode = .normal
         map.showsCompass = true
         map.pointOfInterestFilter = .excludingAll
         map.register(HazardPinView.self, forAnnotationViewWithReuseIdentifier: HazardPinView.reuseId)
         map.register(HazardClusterView.self, forAnnotationViewWithReuseIdentifier: MKMapViewDefaultClusterAnnotationViewReuseIdentifier)
         map.register(PendingPinView.self, forAnnotationViewWithReuseIdentifier: PendingPinView.reuseId)
+        map.register(ClosureMarkerView.self, forAnnotationViewWithReuseIdentifier: ClosureMarkerView.reuseId)
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleBackgroundTap(_:)))
         tap.delegate = context.coordinator
         map.addGestureRecognizer(tap)
+        // Following the user must stop the moment a finger touches the map. Watching gesture states
+        // in regionWillChange alone can miss the start of a pinch, and the next location update
+        // would then pull the map back mid-gesture.
+        for recognizer in [UIPanGestureRecognizer(), UIPinchGestureRecognizer(), UIRotationGestureRecognizer()] as [UIGestureRecognizer] {
+            recognizer.addTarget(context.coordinator, action: #selector(Coordinator.handleUserGesture(_:)))
+            recognizer.delegate = context.coordinator
+            recognizer.cancelsTouchesInView = false
+            map.addGestureRecognizer(recognizer)
+        }
         let start = LocationManager.shared.currentLocation ?? LocationManager.defaultCoordinate
         map.setRegion(MKCoordinateRegion(center: start, latitudinalMeters: 1500, longitudinalMeters: 1500), animated: false)
         return map
@@ -49,6 +64,7 @@ struct HazardMapView: UIViewRepresentable {
     func updateUIView(_ map: MKMapView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.syncAnnotations(on: map)
+        context.coordinator.syncClosureAnnotations(on: map)
         context.coordinator.syncSelection(on: map)
         context.coordinator.syncNavigation(on: map)
         context.coordinator.syncOverlays(on: map)
@@ -60,6 +76,7 @@ struct HazardMapView: UIViewRepresentable {
         var parent: HazardMapView
         private var hazardAnnotations: [UUID: HazardAnnotation] = [:]
         private var pendingAnnotations: [UUID: PendingAnnotation] = [:]
+        private var closureAnnotations: [UUID: ClosureAnnotation] = [:]
         private var renderedPlanKey: String?
         private var lastCommandId: UUID?
         private var regionDebounce: Task<Void, Never>?
@@ -72,6 +89,8 @@ struct HazardMapView: UIViewRepresentable {
         /// While browsing, the map stays centered on the user as they move (at the zoom they
         /// chose) until they pan it themselves.
         private var isBrowseFollowing = true
+        /// A finger is on the map; nothing may move the camera until it lifts.
+        private var userIsTouching = false
         private var lastBrowseCenter: CLLocation?
         private var lastFollowCoordinate: CLLocationCoordinate2D?
         private var renderedLabelled: Set<UUID> = []
@@ -218,10 +237,16 @@ struct HazardMapView: UIViewRepresentable {
 
         /// Keeps the browsing map centered on the user. Moves under a few meters are GPS jitter.
         private func followWhileBrowsing(_ location: CLLocation, on map: MKMapView) {
-            guard !parent.isNavigating, isBrowseFollowing else { return }
+            guard !parent.isNavigating, isBrowseFollowing, !userIsTouching else { return }
             if let last = lastBrowseCenter, location.distance(from: last) < 5 { return }
             lastBrowseCenter = location
             map.setCenter(location.coordinate, animated: animate)
+        }
+
+        @objc func handleUserGesture(_ recognizer: UIGestureRecognizer) {
+            guard recognizer.state == .began else { return }
+            userIsTouching = true
+            if parent.isNavigating ? isFollowing : isBrowseFollowing { pauseFollowing() }
         }
 
         @objc func handleBackgroundTap(_ recognizer: UITapGestureRecognizer) {
@@ -242,11 +267,40 @@ struct HazardMapView: UIViewRepresentable {
 
         // MARK: Route overlays
 
+        func syncClosureAnnotations(on map: MKMapView) {
+            let wanted = Dictionary(parent.closures.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
+            var toRemove: [MKAnnotation] = []
+            var toAdd: [MKAnnotation] = []
+            for (id, annotation) in closureAnnotations where wanted[id] != annotation.closure {
+                toRemove.append(annotation)
+                closureAnnotations[id] = nil
+            }
+            for (id, closure) in wanted where closureAnnotations[id] == nil {
+                guard closure.midpoint != nil else { continue }
+                let annotation = ClosureAnnotation(closure: closure)
+                closureAnnotations[id] = annotation
+                toAdd.append(annotation)
+            }
+            if !toRemove.isEmpty { map.removeAnnotations(toRemove) }
+            if !toAdd.isEmpty { map.addAnnotations(toAdd) }
+        }
+
         func syncOverlays(on map: MKMapView) {
-            let key = parent.plan.map { "\($0.id)-\(parent.useSaferRoute)" }
+            let closureKey = parent.closures.map { "\($0.id)\($0.version ?? 0)" }.sorted().joined(separator: ",")
+            let key = "\(parent.plan.map { "\($0.id)-\(parent.useSaferRoute)" } ?? "none")|\(closureKey)"
             guard key != renderedPlanKey else { return }
             renderedPlanKey = key
             map.removeOverlays(map.overlays)
+            // Closed roads first, so a route drawn through one still sits on top of the band.
+            for closure in parent.closures {
+                var path = closure.path
+                guard path.count > 1 else { continue }
+                for isBand in [true, false] {
+                    let line = ClosureLine(coordinates: &path, count: path.count)
+                    line.isBand = isBand
+                    map.addOverlay(line, level: .aboveRoads)
+                }
+            }
             guard let plan = parent.plan else { return }
 
             let activeIsSafer = parent.useSaferRoute && plan.safer != nil
@@ -293,6 +347,20 @@ struct HazardMapView: UIViewRepresentable {
                 }
                 return renderer
             }
+            if let line = overlay as? ClosureLine {
+                let renderer = MKPolylineRenderer(polyline: line)
+                renderer.lineCap = .round
+                renderer.lineJoin = .round
+                if line.isBand {
+                    renderer.strokeColor = UIColor.systemRed.withAlphaComponent(0.25)
+                    renderer.lineWidth = 16
+                } else {
+                    renderer.strokeColor = .systemRed
+                    renderer.lineWidth = 4
+                    renderer.lineDashPattern = [8, 6]
+                }
+                return renderer
+            }
             if let ring = overlay as? HazardRing {
                 let renderer = MKCircleRenderer(circle: ring)
                 renderer.strokeColor = .systemRed
@@ -333,7 +401,8 @@ struct HazardMapView: UIViewRepresentable {
                 followUser(on: map)
             case .showRoute:
                 if !parent.isNavigating, isBrowseFollowing { pauseFollowing() }
-                let rect = map.overlays.reduce(MKMapRect.null) { $0.union($1.boundingMapRect) }
+                // Closed roads elsewhere in the city must not stretch the route view.
+                let rect = map.overlays.filter { !($0 is ClosureLine) }.reduce(MKMapRect.null) { $0.union($1.boundingMapRect) }
                 if !rect.isNull {
                     map.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 140, left: 40, bottom: 320, right: 40), animated: animate)
                 }
@@ -364,11 +433,15 @@ struct HazardMapView: UIViewRepresentable {
                 return view
             case is PendingAnnotation:
                 return mapView.dequeueReusableAnnotationView(withIdentifier: PendingPinView.reuseId, for: annotation)
+            case is ClosureAnnotation:
+                return mapView.dequeueReusableAnnotationView(withIdentifier: ClosureMarkerView.reuseId, for: annotation)
             default: return nil
             }
         }
 
         func mapView(_ mapView: MKMapView, didSelect annotation: MKAnnotation) {
+            // A closure's callout stays open: it is the only place its reason and end time show.
+            if annotation is ClosureAnnotation { return }
             if let cluster = annotation as? MKClusterAnnotation {
                 mapView.showAnnotations(cluster.memberAnnotations, animated: animate)
             } else if let hazard = annotation as? HazardAnnotation {
@@ -405,6 +478,7 @@ struct HazardMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            userIsTouching = false
             updateLabels(on: mapView)
             let region = mapView.region
             regionDebounce?.cancel()
@@ -451,6 +525,46 @@ final class RouteLine: MKPolyline {
 }
 
 final class HazardRing: MKCircle {}
+
+/// A closed road: drawn twice, as a wide translucent band (the blocked width) and a dashed line.
+final class ClosureLine: MKPolyline {
+    var isBand = false
+}
+
+final class ClosureAnnotation: NSObject, MKAnnotation {
+    let closure: RoadClosure
+    var coordinate: CLLocationCoordinate2D { closure.midpoint ?? kCLLocationCoordinate2DInvalid }
+    var title: String? { "\(closure.name) · closed" }
+    var subtitle: String? { "\(closure.summary). \(closure.reason)" }
+
+    init(closure: RoadClosure) {
+        self.closure = closure
+    }
+}
+
+final class ClosureMarkerView: MKMarkerAnnotationView {
+    static let reuseId = "closure"
+
+    override var annotation: MKAnnotation? {
+        didSet { configure() }
+    }
+
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        configure()
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    private func configure() {
+        markerTintColor = .systemRed
+        glyphImage = UIImage(systemName: "exclamationmark.octagon.fill")
+        canShowCallout = true
+        displayPriority = .defaultHigh
+        clusteringIdentifier = nil
+        accessibilityLabel = (annotation as? ClosureAnnotation).map { "Closed road, \($0.closure.name)" }
+    }
+}
 
 /// 38 pt severity disc with the type glyph (46 pt when selected), a light shadow and the calmer
 /// marker palette. The type name is shown as a small label only when it helps: selected, or

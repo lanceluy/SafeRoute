@@ -9,6 +9,9 @@ struct RouteHazardsResponse: Codable {
     let truncated: Bool
     let leavesCoverageArea: Bool
     let corridorMeters: Double
+    /// Active road closures whose blocked band touches the corridor of any candidate. Absent from
+    /// servers that predate closures.
+    var closures: [RoadClosure]? = nil
 }
 
 struct RouteHazardsRequest: Codable {

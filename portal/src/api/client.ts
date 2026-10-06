@@ -1,7 +1,7 @@
 // Authenticated access to the SafeRoute backend. Access tokens last 30 minutes: on a 401 the
 // client refreshes once and retries; if that fails the session ends.
 import type {
-  ActivityEntry, Department, Hazard, HazardDetail, MunicipalPriority, Page, QueueQuery, SavedView, Session, StaffMember, Stats,
+  ActivityEntry, ClosureCategory, Department, Hazard, HazardDetail, MunicipalPriority, Page, QueueQuery, RoadClosure, SavedView, Session, StaffMember, Stats,
   TimelineEntry,
 } from './types';
 
@@ -149,6 +149,10 @@ function friendlyError(status: number, code?: string) {
   if (code === 'HAZARD_ALREADY_REMOVED') return 'This report was already removed.';
   if (code === 'HAZARD_NOT_ACTIVE') return 'This hazard is no longer active.';
   if (code === 'HAZARD_ALREADY_ACTIVE') return 'This hazard is already active.';
+  if (code === 'OUTSIDE_COVERAGE_AREA') return 'That road is outside the SafeRoute pilot area.';
+  if (code === 'CLOSURE_NOT_ACTIVE') return 'That closure was already lifted.';
+  if (code === 'CLOSURE_NOT_FOUND') return 'That closure no longer exists.';
+  if (code === 'VALIDATION_FAILED' && status === 400) return 'Check the details: draw along the road, and an end time must be in the future.';
   if (code === 'UNKNOWN_DEPARTMENT') return 'That department isn’t on the city’s list. Refresh and try again.';
   if (code === 'TOO_MANY_SAVED_VIEWS') return 'You have 50 saved views. Delete one before saving another.';
   if (status === 403) return 'Your account isn’t allowed to do that.';
@@ -231,6 +235,19 @@ export const api = {
 
   async remove(id: string, reason: string) {
     await request(`/hazards/${id}?${new URLSearchParams({ reason })}`, { method: 'DELETE' });
+  },
+
+  closures(signal?: AbortSignal) {
+    return getJson<RoadClosure[]>('/closures/active', signal);
+  },
+
+  async createClosure(body: { name: string; reason: string; category: ClosureCategory; coordinates: [number, number][]; endsAt?: string | null }) {
+    const res = await request('/closures', { method: 'POST', json: body });
+    return res.json() as Promise<RoadClosure>;
+  },
+
+  async liftClosure(id: string, reason: string) {
+    await request(`/closures/${id}${reason ? `?${new URLSearchParams({ reason })}` : ''}`, { method: 'DELETE' });
   },
 
   departments(signal?: AbortSignal) {

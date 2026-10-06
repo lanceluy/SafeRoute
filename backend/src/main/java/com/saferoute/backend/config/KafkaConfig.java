@@ -46,6 +46,7 @@ public class KafkaConfig {
     @Bean public NewTopic hazardResolvedTopic() { return topic(KafkaTopics.HAZARD_RESOLVED); }
     @Bean public NewTopic hazardCreatedTopic() { return topic(KafkaTopics.HAZARD_CREATED); }
     @Bean public NewTopic hazardUpdatedTopic() { return topic(KafkaTopics.HAZARD_UPDATED); }
+    @Bean public NewTopic closureChangedTopic() { return topic(KafkaTopics.CLOSURE_CHANGED); }
     @Bean public NewTopic submissionProcessedTopic() { return topic(KafkaTopics.SUBMISSION_PROCESSED); }
 
     // Dead-letter topics mirror their source's partitioning (the recoverer keeps the partition).
@@ -55,6 +56,7 @@ public class KafkaConfig {
     @Bean public NewTopic hazardResolvedDlq() { return topic(KafkaTopics.HAZARD_RESOLVED + KafkaTopics.DLQ_SUFFIX); }
     @Bean public NewTopic hazardCreatedDlq() { return topic(KafkaTopics.HAZARD_CREATED + KafkaTopics.DLQ_SUFFIX); }
     @Bean public NewTopic hazardUpdatedDlq() { return topic(KafkaTopics.HAZARD_UPDATED + KafkaTopics.DLQ_SUFFIX); }
+    @Bean public NewTopic closureChangedDlq() { return topic(KafkaTopics.CLOSURE_CHANGED + KafkaTopics.DLQ_SUFFIX); }
     @Bean public NewTopic submissionProcessedDlq() { return topic(KafkaTopics.SUBMISSION_PROCESSED + KafkaTopics.DLQ_SUFFIX); }
 
     private static NewTopic topic(String name) {

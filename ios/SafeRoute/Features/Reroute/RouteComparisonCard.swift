@@ -64,17 +64,23 @@ struct RouteComparisonCard: View {
                     .font(SR.Font.metaStrong)
                     .foregroundStyle(SR.Palette.warning)
                 hazardList(plan.original)
-            } else if plan.original.hazards.isEmpty {
+            } else if plan.original.hazards.isEmpty && plan.original.closures.isEmpty {
                 Label("No reported hazards on this route · \(Format.duration(plan.original.expectedTravelTime))",
                       systemImage: "checkmark.shield.fill")
                     .font(SR.Font.secondary.weight(.medium))
                     .foregroundStyle(SR.Palette.safe)
+            } else if plan.original.hazards.isEmpty {
+                // Only a closed road is wrong with it; the closure notice below says so.
+                Text("\(Format.duration(plan.original.expectedTravelTime)) · \(Format.distance(plan.original.distance))")
+                    .font(SR.Font.secondary).foregroundStyle(SR.Palette.textSecondary)
             } else {
                 Text("\(Format.duration(plan.original.expectedTravelTime)) · \(Format.distance(plan.original.distance))")
                     .font(SR.Font.secondary).foregroundStyle(SR.Palette.textSecondary)
                 warning("No lower-risk alternative was found for \(hazardCount(plan.original).lowercased()) on this route. Take care.")
                 hazardList(plan.original)
             }
+
+            closureNotice
 
             if let onStart {
                 Button(action: onStart) {
@@ -83,6 +89,23 @@ struct RouteComparisonCard: View {
                 .buttonStyle(.srPrimary)
                 .accessibilityHint("Starts walking navigation with hazard warnings")
             }
+        }
+    }
+
+    /// Closed roads: which ones the chosen route avoids, and a red warning if it still runs through one.
+    @ViewBuilder
+    private var closureNotice: some View {
+        let chosen = (useSafer ? plan.safer : nil) ?? plan.original
+        if !chosen.closures.isEmpty {
+            Label("Passes a closed road: \(chosen.closures.map(\.name).joined(separator: ", ")). No open route was found, so don't rely on this one.",
+                  systemImage: "exclamationmark.octagon.fill")
+                .font(SR.Font.metaStrong)
+                .foregroundStyle(Color.red)
+        } else if useSafer, !plan.avoidedClosures.isEmpty {
+            Label("Avoids closed road: \(plan.avoidedClosures.map(\.name).joined(separator: ", "))",
+                  systemImage: "exclamationmark.octagon.fill")
+                .font(SR.Font.metaStrong)
+                .foregroundStyle(SR.Palette.safe)
         }
     }
 

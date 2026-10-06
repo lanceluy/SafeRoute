@@ -28,6 +28,7 @@ struct MapScreen: View {
     var body: some View {
         HazardMapView(
             hazards: model.isNavigating ? model.navigationHazards : model.visibleHazards,
+            closures: model.activeClosures,
             pending: Array(appState.reports.pending.values),
             plan: model.plan,
             useSaferRoute: model.useSaferRoute,

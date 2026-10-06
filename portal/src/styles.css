@@ -2123,3 +2123,7 @@ html.theme-changing *, html.theme-changing *::before, html.theme-changing *::aft
 [data-reveal-wait], [data-reveal-wait] * { animation-play-state: paused !important; }
 [data-late] { animation-delay: 0s !important; }
 @media print { [data-reveal-wait], [data-reveal-wait] * { animation-play-state: running !important; } }
+
+/* Road closures */
+.map-legend-strip i.closure-key { width: 18px; height: 0; border-radius: 0; border-top: 3px dashed #D92D20; }
+.row-icon.closure-icon { background: var(--sev-high-bg); color: var(--danger); }

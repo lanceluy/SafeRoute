@@ -32,6 +32,29 @@ final class ServerFrameTests: XCTestCase {
         XCTAssertEqual(MunicipalPriority(serverValue: frame.municipalPriority), .urgent)
     }
 
+    func testClosureFrameDecodesIntoAClosure() throws {
+        let json = """
+        {"type":"closure_changed","change":"CREATED","closureId":"3727d7bf-61bf-4708-8548-c381bc608d02",
+         "name":"Pasong Tamo Ext.","reason":"Road widening","category":"CONSTRUCTION","status":"ACTIVE",
+         "bufferMeters":15,"endsAt":"2026-10-09T09:00:00Z","coordinates":[[14.5547,121.0244],[14.5551,121.0260]],
+         "occurredAt":"2026-10-05T07:50:00Z","version":0}
+        """
+        guard case .closure(let frame)? = ServerFrame.decode(Data(json.utf8)) else {
+            return XCTFail("Expected a closure frame")
+        }
+        let closure = frame.closure
+        XCTAssertTrue(closure.isActive)
+        XCTAssertEqual(closure.path.count, 2)
+        XCTAssertEqual(closure.name, "Pasong Tamo Ext.")
+        XCTAssertNotNil(closure.endsAt)
+    }
+
+    func testARouteResponseFromAnOlderServerHasNoClosures() throws {
+        let json = #"{"hazards":[],"complete":true,"truncated":false,"leavesCoverageArea":false,"corridorMeters":40}"#
+        let response = try JSONDecoder.api.decode(RouteHazardsResponse.self, from: Data(json.utf8))
+        XCTAssertNil(response.closures)
+    }
+
     func testUnknownPriorityDoesNotBreakAHazard() throws {
         let data = Data(#""CRITICAL""#.utf8)
         XCTAssertEqual(try JSONDecoder().decode(MunicipalPriority.self, from: data), .normal)

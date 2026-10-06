@@ -1,5 +1,7 @@
 package com.saferoute.backend.hazard.dto;
 
+import com.saferoute.backend.closure.dto.ClosureResponse;
+
 import java.util.List;
 
 /**
@@ -8,12 +10,15 @@ import java.util.List;
  *                           area; clients must not present an incomplete assessment as "no hazards"
  * @param truncated          more hazards matched than were returned
  * @param leavesCoverageArea part of a route is outside the area where hazards are collected
+ * @param closures           active road closures whose blocked band touches the corridor of any route;
+ *                           clients treat a route that crosses one as blocked
  */
 public record RouteHazardsResponse(
         List<HazardResponse> hazards,
         boolean complete,
         boolean truncated,
         boolean leavesCoverageArea,
-        double corridorMeters
+        double corridorMeters,
+        List<ClosureResponse> closures
 ) {
 }

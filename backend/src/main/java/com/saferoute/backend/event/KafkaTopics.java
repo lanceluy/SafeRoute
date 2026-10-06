@@ -18,6 +18,8 @@ public final class KafkaTopics {
     public static final String HAZARD_CREATED = "hazard_created";
     /** Any state change of an existing hazard; the payload's {@code change} says which. */
     public static final String HAZARD_UPDATED = "hazard_updated";
+    /** A road closure was created, edited, lifted or expired; the payload's {@code change} says which. */
+    public static final String CLOSURE_CHANGED = "closure_changed";
     public static final String SUBMISSION_PROCESSED = "submission_processed";
 
     public static final String DLQ_SUFFIX = ".dlq";

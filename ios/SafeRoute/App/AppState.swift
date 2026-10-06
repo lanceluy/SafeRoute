@@ -32,6 +32,7 @@ final class AppState: ObservableObject {
         socket.onHazardFrame = { [weak self] frame in self?.handle(frame) }
         socket.onSubmissionFrame = { [weak self] frame in self?.reports.handle(frame) }
         socket.onReportUpdate = { [weak self] frame in self?.handle(frame) }
+        socket.onClosureFrame = { [weak self] frame in self?.handle(frame) }
         // Frames sent while the socket was down are lost: re-fetch what they would have changed.
         socket.onReconnected = { [weak self] in
             guard let self, self.currentUser != nil else { return }
@@ -224,6 +225,21 @@ final class AppState: ObservableObject {
                    style: frame.change == "REMOVED" ? .warning : .success))
         Task { await map.fetchAndUpsert(frame.hazardId) }
         Task { await reports.load(reset: true) }
+    }
+
+    /// A road was blocked or reopened. If it lands on the route being walked or planned, say so, and
+    /// while navigating plan again from here so guidance never leads into a closed road.
+    private func handle(_ frame: ClosureEventFrame) {
+        let affectsRoute = map.applyClosure(frame)
+        guard affectsRoute else { return }
+        if map.isNavigating {
+            show(Toast(message: "\(frame.name) was just closed ahead. Finding another way.",
+                       systemImage: "exclamationmark.triangle.fill", style: .warning))
+            Task { await map.reroute() }
+        } else {
+            show(Toast(message: "\(frame.name) was just closed on your route. Plan the route again.",
+                       systemImage: "exclamationmark.triangle.fill", style: .warning))
+        }
     }
 
     private func handle(_ frame: HazardEventFrame) {

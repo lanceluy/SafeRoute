@@ -113,6 +113,91 @@ final class RouteAvoidanceServiceTests: XCTestCase {
         XCTAssertEqual(plan.assessment, .complete, "the original route's own assessment is still valid")
     }
 
+    // MARK: Closed roads
+
+    /// Crosses the straight route at 400 m east, from 40 m south to 40 m north.
+    private lazy var closedAcross = Fixtures.closure([Fixtures.point(north: -40, east: 400), Fixtures.point(north: 40, east: 400)])
+
+    func testARouteThroughAClosedRoadLosesToAnyCleanAlternateEvenAThirdAsLongAgain() async throws {
+        let closure = closedAcross
+        // The long way round is ~2.4x the time of the straight route: more than hazards would justify.
+        let longWay = [start, Fixtures.point(north: 300, east: 0), Fixtures.point(north: 300, east: 800), end]
+        let planner = service(routes: [straight, longWay]) { routes in
+            Fixtures.response([], closures: [closure])
+        }
+
+        let plan = try await planner.plan(from: start, to: end, destinationName: "Office")
+
+        XCTAssertEqual(plan.original.closures.map(\.id), [closure.id])
+        XCTAssertNotNil(plan.safer)
+        XCTAssertTrue(plan.safer?.closures.isEmpty ?? false)
+        XCTAssertEqual(plan.avoidedClosures.map(\.id), [closure.id])
+        XCTAssertGreaterThan(plan.extraTime, 0)
+    }
+
+    func testAClosedRoadStillCountsWhenTheHazardAssessmentIsIncomplete() async throws {
+        let closure = closedAcross
+        let planner = service(routes: [straight, around]) { _ in
+            Fixtures.response([], complete: false, leavesCoverageArea: true, closures: [closure])
+        }
+
+        let plan = try await planner.plan(from: start, to: end, destinationName: "Office")
+
+        XCTAssertNotNil(plan.safer, "a closed road is avoided even when hazard data is incomplete")
+        XCTAssertTrue(plan.safer?.closures.isEmpty ?? false)
+    }
+
+    func testWhenEveryRouteCrossesAClosureTheRouteIsStillReturnedAndFlagged() async throws {
+        // Closed for the whole corridor: neither candidate, nor any detour, can avoid it.
+        let wall = Fixtures.closure([Fixtures.point(north: -500, east: 400), Fixtures.point(north: 500, east: 400)])
+        let planner = service(routes: [straight, around]) { _ in Fixtures.response([], closures: [wall]) }
+
+        let plan = try await planner.plan(from: start, to: end, destinationName: "Office")
+
+        XCTAssertNil(plan.safer)
+        XCTAssertEqual(plan.original.closures.map(\.id), [wall.id])
+    }
+
+    func testALiftedClosureIsIgnored() async throws {
+        let lifted = Fixtures.closure([Fixtures.point(north: -40, east: 400), Fixtures.point(north: 40, east: 400)], status: "LIFTED")
+        let planner = service(routes: [straight]) { _ in Fixtures.response([], closures: [lifted]) }
+
+        let plan = try await planner.plan(from: start, to: end, destinationName: "Office")
+
+        XCTAssertTrue(plan.original.closures.isEmpty)
+    }
+
+    func testAClosureBesideTheRouteWithinItsBufferBlocksButOneFurtherOffDoesNot() {
+        let leg = Fixtures.leg(straight)
+        let beside = Fixtures.closure([Fixtures.point(north: 10, east: 100), Fixtures.point(north: 10, east: 300)], buffer: 15)
+        let further = Fixtures.closure([Fixtures.point(north: 60, east: 100), Fixtures.point(north: 60, east: 300)], buffer: 15)
+
+        XCTAssertTrue(ClosureGeometry.blocks(beside, route: leg.polyline))
+        XCTAssertFalse(ClosureGeometry.blocks(further, route: leg.polyline))
+    }
+
+    func testADetourAroundAClosedRoadIsProposedWhenNoAlternateExists() async throws {
+        let closure = closedAcross
+        var queries = 0
+        let planner = service(
+            routes: [straight],
+            detour: { source, destination in
+                // Waypoint legs bend 150 m north of the closure; the straight run to the end is not used.
+                if case .coordinate(let waypoint) = destination { return [source, Fixtures.point(north: 150, east: 100), waypoint] }
+                return [Fixtures.point(north: 150, east: 700), self.end]
+            },
+            hazards: { _ in
+                queries += 1
+                return Fixtures.response([], closures: [closure])
+            })
+
+        let plan = try await planner.plan(from: start, to: end, destinationName: "Office")
+
+        XCTAssertEqual(queries, 2)
+        XCTAssertNotNil(plan.safer, "a detour that clears the closure should be offered")
+        XCTAssertTrue(plan.safer?.closures.isEmpty ?? false)
+    }
+
     func testLowSeverityHazardsDoNotTriggerStreetDetours() async throws {
         let dimLight = Fixtures.hazard(at: Fixtures.point(north: 0, east: 400), type: .poorLighting, severity: .low)
         var detourRequests = 0

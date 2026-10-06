@@ -1,6 +1,7 @@
 package com.saferoute.backend.hazard;
 
 import com.saferoute.backend.auth.AuthenticatedUser;
+import com.saferoute.backend.closure.RoadClosureService;
 import com.saferoute.backend.common.ApiException;
 import com.saferoute.backend.common.PageResponse;
 import com.saferoute.backend.confirmation.*;
@@ -69,6 +70,7 @@ public class HazardService {
     private final ReputationService reputationService;
     private final CoverageArea coverageArea;
     private final ImageUploadService imageUploadService;
+    private final RoadClosureService closureService;
     private final int resolutionThreshold;
     private final double routeCorridorMeters;
 
@@ -86,6 +88,7 @@ public class HazardService {
                          ReputationService reputationService,
                          CoverageArea coverageArea,
                          ImageUploadService imageUploadService,
+                         RoadClosureService closureService,
                          @Value("${saferoute.hazard.resolution-threshold}") int resolutionThreshold,
                          @Value("${saferoute.notification.route-corridor-meters}") double routeCorridorMeters) {
         this.hazardRepository = hazardRepository;
@@ -102,6 +105,7 @@ public class HazardService {
         this.reputationService = reputationService;
         this.coverageArea = coverageArea;
         this.imageUploadService = imageUploadService;
+        this.closureService = closureService;
         this.resolutionThreshold = resolutionThreshold;
         this.routeCorridorMeters = routeCorridorMeters;
     }
@@ -176,7 +180,8 @@ public class HazardService {
         List<Hazard> found = hazardRepository.findAlongLines(wkt.toString(), corridor, MAX_ROUTE_HAZARDS + 1);
         boolean truncated = found.size() > MAX_ROUTE_HAZARDS;
         return new RouteHazardsResponse(found.stream().limit(MAX_ROUTE_HAZARDS).map(HazardResponse::from).toList(),
-                !truncated && !leavesCoverage, truncated, leavesCoverage, corridor);
+                !truncated && !leavesCoverage, truncated, leavesCoverage, corridor,
+                closureService.findAlongWkt(wkt.toString(), corridor));
     }
 
     public HazardDetailResponse getDetail(UUID id, AuthenticatedUser viewer) {

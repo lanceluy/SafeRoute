@@ -22,6 +22,41 @@ final class MapStateTests: XCTestCase {
         XCTAssertEqual(model.hazards[id]?.status, .resolved)
     }
 
+    private func closureFrame(id: UUID, status: String, version: Int64, change: String = "CREATED") -> ClosureEventFrame {
+        ClosureEventFrame(type: "closure_changed", change: change, closureId: id, name: "Pasong Tamo", reason: "Works",
+                          category: "CONSTRUCTION", status: status, bufferMeters: 15, endsAt: nil,
+                          coordinates: [[spot.latitude, spot.longitude], [spot.latitude, spot.longitude + 0.002]], version: version)
+    }
+
+    func testClosureFramesAddAndRemoveClosuresAndIgnoreStaleOnes() {
+        let model = MapViewModel()
+        let id = UUID()
+
+        model.applyClosure(closureFrame(id: id, status: "ACTIVE", version: 1))
+        XCTAssertEqual(model.activeClosures.map(\.id), [id])
+
+        // An older frame arriving late must not undo the newer state.
+        model.applyClosure(closureFrame(id: id, status: "ACTIVE", version: 0, change: "UPDATED"))
+        XCTAssertEqual(model.closures[id]?.version, 1)
+
+        model.applyClosure(closureFrame(id: id, status: "LIFTED", version: 2, change: "LIFTED"))
+        XCTAssertTrue(model.activeClosures.isEmpty)
+    }
+
+    func testANewClosureOnTheActiveRouteIsReportedSoTheUserCanBeTold() {
+        let model = MapViewModel()
+        let (plan, _) = Fixtures.plan(route: [spot, Fixtures.point(north: 0, east: 400)])
+        model.setPlan(plan)
+
+        let onRoute = model.applyClosure(closureFrame(id: UUID(), status: "ACTIVE", version: 0))
+        XCTAssertTrue(onRoute)
+
+        let far = ClosureEventFrame(type: "closure_changed", change: "CREATED", closureId: UUID(), name: "Elsewhere", reason: "x",
+                                    category: "OTHER", status: "ACTIVE", bufferMeters: 15, endsAt: nil,
+                                    coordinates: [[spot.latitude + 0.05, spot.longitude], [spot.latitude + 0.051, spot.longitude]], version: 0)
+        XCTAssertFalse(model.applyClosure(far))
+    }
+
     func testAnOlderRestSnapshotCannotOverwriteANewerOne() {
         let model = MapViewModel()
         let id = UUID()

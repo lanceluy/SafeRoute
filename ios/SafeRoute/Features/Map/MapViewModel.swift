@@ -46,6 +46,8 @@ final class MapViewModel: ObservableObject {
             if filters.statuses != oldValue.statuses { Task { await refresh() } }
         }
     }
+    /// Active road closures citywide (the list is small). Live frames patch it; a load replaces it.
+    @Published private(set) var closures: [UUID: RoadClosure] = [:]
     @Published private(set) var loadState: LoadState = .idle
     @Published private(set) var isZoomedOutTooFar = false
     @Published private(set) var latestAlert: HazardEventFrame?
@@ -76,6 +78,9 @@ final class MapViewModel: ObservableObject {
     /// flight can't remove a hazard that appeared or changed after it was taken.
     private(set) var liveSequence = 0
     private var lastLiveUpdate: [UUID: Int] = [:]
+    /// Bumped on every live closure frame, so a fetch that raced one is repeated rather than
+    /// overwriting it.
+    private var closureSequence = 0
 
     // Offline cache (Task 2, revision 1)
     private let cache: HazardCache
@@ -109,6 +114,10 @@ final class MapViewModel: ObservableObject {
             .compactMap { h in Format.distance(from: user, to: h.coordinate).map { (h, $0) } }
             .filter { $0.1 <= Self.nearbyRadiusMeters }
             .sorted { $0.1 < $1.1 }
+    }
+
+    var activeClosures: [RoadClosure] {
+        closures.values.filter(\.isActive).sorted { $0.name < $1.name }
     }
 
     var selectedHazard: Hazard? { selectedHazardId.flatMap { hazards[$0] } }
@@ -188,6 +197,7 @@ final class MapViewModel: ObservableObject {
             return
         }
         isZoomedOutTooFar = false
+        Task { await loadClosures() }
         loadState = .loading
         let generation = self.generation
         let sequenceAtStart = liveSequence
@@ -252,6 +262,35 @@ final class MapViewModel: ObservableObject {
            generation == self.generation {
             upsert(detail.hazard)
         }
+    }
+
+    func loadClosures() async {
+        let generation = self.generation
+        for _ in 0..<2 {
+            let sequence = closureSequence
+            guard let fresh = try? await APIClient.shared.send(.activeClosures, as: [RoadClosure].self),
+                  generation == self.generation else { return }
+            guard sequence == closureSequence else { continue } // a live frame landed meanwhile: ask again
+            closures = Dictionary(fresh.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
+            return
+        }
+    }
+
+    /// Patches a closure from a live frame. Returns true if a newly closed road lies on the route
+    /// being planned or walked, so the caller can tell the user.
+    @discardableResult
+    func applyClosure(_ frame: ClosureEventFrame) -> Bool {
+        closureSequence += 1
+        let incoming = frame.closure
+        if let known = closures[incoming.id]?.version, let version = incoming.version, version < known { return false }
+        guard incoming.isActive else {
+            closures[incoming.id] = nil
+            return false
+        }
+        let isNew = closures[incoming.id] == nil
+        closures[incoming.id] = incoming
+        guard isNew, let route = activeRoute else { return false }
+        return route.legs.contains { ClosureGeometry.blocks(incoming, route: $0.polyline) }
     }
 
     /// Stores a snapshot unless a newer version of the hazard is already known.
@@ -435,6 +474,7 @@ final class MapViewModel: ObservableObject {
         cacheSaveTask?.cancel()
         cacheSaveTask = nil
         cache.clear()
+        closures = [:]
         showingSavedSince = nil
         generation += 1
         loadTask?.cancel()

@@ -39,6 +39,27 @@ struct HazardEventFrame: Codable, Identifiable, Hashable {
     }
 }
 
+/// closure_changed: a road was blocked, edited, reopened or its end time passed. `status` ACTIVE means
+/// draw it; anything else means it is no longer blocked.
+struct ClosureEventFrame: Codable {
+    let type: String
+    let change: String
+    let closureId: UUID
+    let name: String
+    let reason: String
+    let category: String
+    let status: String
+    let bufferMeters: Int
+    let endsAt: Date?
+    let coordinates: [[Double]]
+    let version: Int64?
+
+    var closure: RoadClosure {
+        RoadClosure(id: closureId, name: name, reason: reason, category: category, status: status,
+                    bufferMeters: bufferMeters, endsAt: endsAt, version: version, coordinates: coordinates)
+    }
+}
+
 struct SubmissionProcessedFrame: Codable {
     let type: String
     let submissionId: UUID
@@ -64,6 +85,7 @@ enum ServerFrame {
     case hazard(HazardEventFrame)
     case submission(SubmissionProcessedFrame)
     case reportUpdate(ReportUpdateFrame)
+    case closure(ClosureEventFrame)
 
     private struct Envelope: Decodable { let type: String }
 
@@ -74,6 +96,9 @@ enum ServerFrame {
         }
         if envelope.type == "report_update" {
             return (try? JSONDecoder.api.decode(ReportUpdateFrame.self, from: data)).map(ServerFrame.reportUpdate)
+        }
+        if envelope.type == "closure_changed" {
+            return (try? JSONDecoder.api.decode(ClosureEventFrame.self, from: data)).map(ServerFrame.closure)
         }
         if envelope.type.hasPrefix("hazard_") {
             return (try? JSONDecoder.api.decode(HazardEventFrame.self, from: data)).map(ServerFrame.hazard)

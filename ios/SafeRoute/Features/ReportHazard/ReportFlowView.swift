@@ -33,6 +33,7 @@ struct ReportFlowView: View {
     @State private var severityAnswer: String?
     @State private var descriptionText = ""
     @State private var duplicate: Hazard?
+    @State private var duplicateSheetHeight: CGFloat = 420
     @State private var isBusy = false
     @State private var errorMessage: String?
 
@@ -132,7 +133,9 @@ struct ReportFlowView: View {
         VStack(spacing: 12) {
             ZStack {
                 Map(position: $camera) { UserAnnotation() }
-                    .onMapCameraChange(frequency: .continuous) { context in coordinate = context.region.center }
+                    // The pin is fixed at the center, so only where the map comes to rest matters. Writing
+                    // state on every frame re-rendered this whole screen mid-drag and made panning and zooming stutter.
+                    .onMapCameraChange(frequency: .onEnd) { context in coordinate = context.region.center }
                     .mapControls { MapCompass() }
                 // The pin stays centered; the user drags the map underneath it.
                 Image(systemName: "mappin")
@@ -342,8 +345,10 @@ struct ReportFlowView: View {
         let isMine = match.reporterId == appState.currentUser?.id
         return VStack(alignment: .leading, spacing: SR.Space.md) {
             VStack(alignment: .leading, spacing: SR.Space.xxs) {
-                Text("Someone may have already reported this").font(SR.Font.cardTitle).foregroundStyle(SR.Palette.textPrimary)
-                Text("If it's the same hazard, your confirmation helps others trust it.")
+                Text(isMine ? "You already reported this" : "Someone may have already reported this")
+                    .font(SR.Font.cardTitle).foregroundStyle(SR.Palette.textPrimary)
+                Text(isMine ? "Your report is still on the map. If it's the same hazard and it's still there, let us know and it stays up longer."
+                            : "If it's the same hazard, your confirmation helps others trust it.")
                     .font(SR.Font.secondary).foregroundStyle(SR.Palette.textSecondary)
             }
             SRCard(padding: SR.Space.md) {
@@ -362,7 +367,7 @@ struct ReportFlowView: View {
             Button {
                 Task { await confirmExisting(match, isMine: isMine) }
             } label: {
-                Text("Yes, this is the same hazard")
+                Text(isMine ? "Yes, it's still there" : "Yes, this is the same hazard")
             }
             .buttonStyle(.srPrimary)
             Button {
@@ -373,9 +378,16 @@ struct ReportFlowView: View {
             }
             .buttonStyle(.srSecondary)
         }
-        .padding(SR.Space.screenMargin)
+        .padding(.horizontal, SR.Space.screenMargin)
+        .padding(.vertical, SR.Space.lg)
+        .frame(maxWidth: .infinity)
+        // Measure the content so the sheet is exactly as tall as it needs: equal space above and below.
+        .background(GeometryReader { Color.clear.preference(key: SheetHeightKey.self, value: $0.size.height) })
+        .onPreferenceChange(SheetHeightKey.self) { duplicateSheetHeight = $0 }
         .srPageBackground()
-        .presentationDetents([.medium])
+        // Solid, not the system's glass material, which showed above and below the content.
+        .presentationBackground(SR.Palette.background)
+        .presentationDetents([.height(duplicateSheetHeight)])
     }
 
     private func confirmExisting(_ match: Hazard, isMine: Bool) async {
@@ -407,4 +419,9 @@ struct ReportFlowView: View {
             dismiss()
         }
     }
+}
+
+private struct SheetHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
