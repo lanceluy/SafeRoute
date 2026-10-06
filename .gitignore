@@ -28,19 +28,10 @@ node_modules/
 portal/dist/
 portal/*.tsbuildinfo
 
-# Kept local: course material, reviews and working notes live in references/
+# Kept local: course material, reviews, media and working notes live in references/
 references/
 # ...and stay unpublished if one lands in the root again
 /*.pdf
 /*.txt
 /memory/
 
-# Local-only media and working material (large or not part of the product)
-docs/assets/Inspo/
-docs/assets/ad-screenshots/
-docs/assets/SafeRoute-30s-Ad-Pack/
-docs/30 sec AD/
-docs/*.mov
-docs/*.txt
-output/
-presentation-screenshots/

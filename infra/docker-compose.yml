@@ -1,3 +1,7 @@
+# Local development stack. Run from the repo root:  docker compose -f infra/docker-compose.yml up -d postgres kafka kafka-ui
+# `name` is pinned to the original project name so the existing Postgres volume keeps being used.
+name: css123pproj
+
 services:
   postgres:
     image: postgis/postgis:16-3.4
@@ -52,10 +56,10 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
 
   # Not started by a plain `docker compose up` — run during development via `./mvnw spring-boot:run`
-  # for fast iteration. Use `docker compose --profile with-backend up --build` to containerize it
+  # for fast iteration. Use `docker compose -f infra/docker-compose.yml --profile with-backend up --build` to containerize it
   # for an end-to-end demo instead.
   backend:
-    build: ./backend
+    build: ../backend
     container_name: saferoute-backend
     profiles: ["with-backend"]
     depends_on:

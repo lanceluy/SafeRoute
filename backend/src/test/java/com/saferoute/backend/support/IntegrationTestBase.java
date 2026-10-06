@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 
 /**
  * Real PostGIS + real Kafka (Testcontainers), shared by every integration test class through
- * Spring's context cache. Uses the same images as docker-compose.yml.
+ * Spring's context cache. Uses the same images as infra/docker-compose.yml.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc

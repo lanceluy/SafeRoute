@@ -58,8 +58,8 @@ ios/         SwiftUI + MapKit app (the Xcode project is generated from ios/proje
 portal/      Municipal portal: React + Vite + TypeScript
 benchmark/   Event simulator, polling comparison and k6 load tests (results are git-ignored)
 docs/        Metrics definitions, benchmark results, paper alignment, logo (docs/assets/)
-             Design inspiration, ad media and working notes are kept locally and git-ignored
-docker-compose.yml   Postgres + PostGIS, Kafka and Kafka UI for local development
+             Ad media, design inspiration and notes live in the git-ignored references/
+infra/       docker-compose.yml (Postgres + PostGIS, Kafka, Kafka UI) and .env.example
 ```
 
 ## Prerequisites
@@ -72,8 +72,8 @@ docker-compose.yml   Postgres + PostGIS, Kafka and Kafka UI for local developmen
 ## Running the backend
 
 ```bash
-cp .env.example .env    # edit if you want non-default credentials — never commit .env
-docker compose up -d postgres kafka kafka-ui
+cp infra/.env.example infra/.env    # edit if you want non-default credentials — never commit .env
+docker compose -f infra/docker-compose.yml up -d postgres kafka kafka-ui
 backend/run-dev.sh      # dev profile on port 8080; finds Java 21 itself
 ```
 
@@ -93,7 +93,7 @@ Flyway migrates the schema on startup (V1–V17). The API is at `http://localhos
 - **WebSocket:** `ws://localhost:8080/ws/notifications` (`Authorization: Bearer` header)
 - **Kafka UI:** http://localhost:8081
 
-Containerized alternative: `docker compose --profile with-backend up --build`.
+Containerized alternative: `docker compose -f infra/docker-compose.yml --profile with-backend up --build`.
 
 Useful settings (environment variables):
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Start the backend on the dev profile (port 8080) with Java 21, from any terminal.
-# Needs Postgres and Kafka running: `docker compose up -d` in the project root.
+# Needs Postgres and Kafka running: `docker compose -f infra/docker-compose.yml up -d` in the project root.
 set -e
 cd "$(dirname "$0")"
 
