@@ -15,8 +15,8 @@ import java.util.UUID;
 @Service
 public class NotificationPreferencesService {
 
-    /** {@code reportUpdates} null on update means "leave as is" (older app versions don't send it). */
-    public record PreferencesDto(int radiusMeters, Set<HazardType> enabledTypes, Boolean reportUpdates) {
+    /** {@code reportUpdates} and {@code quietHours} null on update mean "leave as is" (older app versions don't send them). */
+    public record PreferencesDto(int radiusMeters, Set<HazardType> enabledTypes, Boolean reportUpdates, QuietHours quietHours) {
     }
 
     private final NotificationPreferencesRepository repository;
@@ -37,12 +37,18 @@ public class NotificationPreferencesService {
         return load(userId).isReportUpdatesEnabled();
     }
 
+    /** Whether background push alerts to this user are on hold right now. */
+    public boolean isQuietNow(UUID userId) {
+        return load(userId).quietHours().isQuietAt(Instant.now());
+    }
+
     @Transactional
     public PreferencesDto update(UUID userId, PreferencesDto dto) {
         NotificationPreferences prefs = load(userId);
         prefs.setRadiusMeters(dto.radiusMeters());
         prefs.setEnabledTypes(dto.enabledTypes() != null ? dto.enabledTypes() : EnumSet.noneOf(HazardType.class));
         if (dto.reportUpdates() != null) prefs.setReportUpdatesEnabled(dto.reportUpdates());
+        if (dto.quietHours() != null) prefs.setQuietHours(dto.quietHours());
         prefs.setUpdatedAt(Instant.now());
         repository.save(prefs);
         // Live sessions pick the change up immediately, without reconnecting.
@@ -51,7 +57,7 @@ public class NotificationPreferencesService {
     }
 
     private static PreferencesDto toDto(NotificationPreferences prefs) {
-        return new PreferencesDto(prefs.getRadiusMeters(), prefs.enabledTypes(), prefs.isReportUpdatesEnabled());
+        return new PreferencesDto(prefs.getRadiusMeters(), prefs.enabledTypes(), prefs.isReportUpdatesEnabled(), prefs.quietHours());
     }
 
     public AlertPreferences alertPreferences(UUID userId) {
@@ -63,6 +69,6 @@ public class NotificationPreferencesService {
     }
 
     private static AlertPreferences toAlertPreferences(NotificationPreferences prefs) {
-        return new AlertPreferences(prefs.getRadiusMeters(), Set.copyOf(prefs.enabledTypes()));
+        return new AlertPreferences(prefs.getRadiusMeters(), Set.copyOf(prefs.enabledTypes()), prefs.quietHours());
     }
 }

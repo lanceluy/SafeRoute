@@ -66,6 +66,7 @@ public class PushNotificationService {
                     event.latitude(), event.longitude());
             AlertPreferences prefs = prefsByUser.computeIfAbsent(device.getUserId(), preferences::alertPreferences);
             if (distance > prefs.radiusMeters() || !prefs.enabledTypes().contains(event.type())) continue;
+            if (prefs.quietHours().isQuietAt(now)) continue;
             if (hasLiveSession(device.getUserId(), now)) continue;
 
             String token = device.getDeviceToken();

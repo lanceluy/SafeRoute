@@ -142,6 +142,8 @@ public class ReportFollowUpConsumer {
     }
 
     private boolean push(UUID userId, PushMessage message) {
+        // Held back, not queued: My Reports still shows the new state when they next open the app.
+        if (preferences.isQuietNow(userId)) return false;
         List<PushDevice> userDevices = devices.findByUserId(userId);
         for (PushDevice device : userDevices) {
             String token = device.getDeviceToken();

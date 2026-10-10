@@ -285,6 +285,7 @@ struct NotificationPreferencesView: View {
                             .foregroundStyle(SR.Palette.textSecondary)
                     }
                 }
+                quietHoursSection(prefs.quietHours ?? .overnight)
                 backgroundAlertsSection
             } else if let errorMessage {
                 SREmptyState(systemImage: "exclamationmark.triangle", title: "Couldn't load preferences", message: errorMessage)
@@ -300,6 +301,44 @@ struct NotificationPreferencesView: View {
             } catch {
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    private func quietHoursSection(_ quiet: QuietHours) -> some View {
+        VStack(alignment: .leading, spacing: SR.Space.sectionTitleToCard) {
+            SRSectionHeader(title: "Quiet hours")
+            SRCard {
+                Toggle("Pause background alerts", isOn: Binding(
+                    get: { quiet.enabled },
+                    set: { on in updateQuiet { $0.enabled = on } }))
+                    .font(SR.Font.body)
+                if quiet.enabled {
+                    DatePicker("From", selection: Binding(
+                        get: { QuietHours.date(for: quiet.startMinute) },
+                        set: { date in updateQuiet { $0.startMinute = QuietHours.minute(of: date) } }),
+                        displayedComponents: .hourAndMinute)
+                        .font(SR.Font.body)
+                    DatePicker("Until", selection: Binding(
+                        get: { QuietHours.date(for: quiet.endMinute) },
+                        set: { date in updateQuiet { $0.endMinute = QuietHours.minute(of: date) } }),
+                        displayedComponents: .hourAndMinute)
+                        .font(SR.Font.body)
+                }
+                Text(quiet.enabled
+                     ? "No notifications from \(quiet.summary) while SafeRoute is closed. Alerts inside the open app and on a route you're following still appear."
+                     : "Choose hours when you don't want a notification about a new hazard or an update on your report.")
+                    .font(SR.Font.meta)
+                    .foregroundStyle(SR.Palette.textSecondary)
+            }
+        }
+    }
+
+    private func updateQuiet(_ change: (inout QuietHours) -> Void) {
+        update {
+            var quiet = $0.quietHours ?? .overnight
+            change(&quiet)
+            quiet.zone = TimeZone.current.identifier
+            $0.quietHours = quiet
         }
     }
 

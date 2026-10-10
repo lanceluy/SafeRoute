@@ -27,7 +27,9 @@ public class MeController {
     public record PreferencesRequest(@Min(100) @Max(5000) int radiusMeters,
                                      java.util.Set<com.saferoute.backend.hazard.HazardType> enabledTypes,
                                      /** Optional: updates about the user's own reports. */
-                                     Boolean reportUpdates) {
+                                     Boolean reportUpdates,
+                                     /** Optional: no push alerts in this daily window. */
+                                     @Valid QuietHours quietHours) {
     }
 
     public record PushDeviceRequest(@NotNull @Pattern(regexp = "^[0-9a-fA-F]{64,200}$") String deviceToken) {
@@ -77,7 +79,7 @@ public class MeController {
     public NotificationPreferencesService.PreferencesDto updatePreferences(@AuthenticationPrincipal AuthenticatedUser principal,
                                                                            @Valid @RequestBody PreferencesRequest request) {
         return preferencesService.update(principal.id(),
-                new NotificationPreferencesService.PreferencesDto(request.radiusMeters(), request.enabledTypes(), request.reportUpdates()));
+                new NotificationPreferencesService.PreferencesDto(request.radiusMeters(), request.enabledTypes(), request.reportUpdates(), request.quietHours()));
     }
 
     @PutMapping("/push-device")

@@ -568,8 +568,44 @@ struct NotificationPreferences: Codable, Equatable {
     var enabledTypes: Set<HazardType>
     /// Updates about the user's own reports (assigned, resolved, removed, expired). Older servers omit it.
     var reportUpdates: Bool? = true
+    /// No background (push) alerts in this daily window. Nil is omitted when saving, which leaves the server's setting alone.
+    var quietHours: QuietHours? = nil
 
     static let `default` = NotificationPreferences(radiusMeters: 400, enabledTypes: Set(HazardType.reportable))
+}
+
+/// A daily window with no push alerts. Minutes are since local midnight in `zone`; it may wrap past midnight.
+struct QuietHours: Codable, Equatable {
+    var enabled: Bool
+    var startMinute: Int
+    var endMinute: Int
+    var zone: String
+
+    static let overnight = QuietHours(enabled: false, startMinute: 22 * 60, endMinute: 7 * 60,
+                                      zone: TimeZone.current.identifier)
+
+    /// "10:00 PM to 7:00 AM", for the summary under the pickers.
+    var summary: String {
+        "\(Self.clock(startMinute)) to \(Self.clock(endMinute))"
+    }
+
+    static func clock(_ minute: Int) -> String {
+        var parts = DateComponents()
+        parts.hour = minute / 60
+        parts.minute = minute % 60
+        let date = Calendar.current.date(from: parts) ?? Date()
+        return date.formatted(date: .omitted, time: .shortened)
+    }
+
+    /// A `Date` today at this time, for DatePicker bindings.
+    static func date(for minute: Int) -> Date {
+        Calendar.current.date(bySettingHour: minute / 60, minute: minute % 60, second: 0, of: Date()) ?? Date()
+    }
+
+    static func minute(of date: Date) -> Int {
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+    }
 }
 
 struct Profile: Codable {

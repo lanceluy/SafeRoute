@@ -52,9 +52,26 @@ public class NotificationPreferences {
     @Builder.Default
     private boolean reportUpdatesEnabled = true;
 
+    /** No push alerts inside this window; see {@link QuietHours}. */
+    @Column(name = "quiet_hours_enabled", nullable = false) @Builder.Default private boolean quietHoursEnabled = false;
+    @Column(name = "quiet_hours_start_minute", nullable = false) @Builder.Default private int quietHoursStartMinute = QuietHours.OFF.startMinute();
+    @Column(name = "quiet_hours_end_minute", nullable = false) @Builder.Default private int quietHoursEndMinute = QuietHours.OFF.endMinute();
+    @Column(name = "quiet_hours_zone", nullable = false) @Builder.Default private String quietHoursZone = QuietHours.DEFAULT_ZONE;
+
     @Column(name = "updated_at", nullable = false)
     @Builder.Default
     private Instant updatedAt = Instant.now();
+
+    public QuietHours quietHours() {
+        return new QuietHours(quietHoursEnabled, quietHoursStartMinute, quietHoursEndMinute, quietHoursZone);
+    }
+
+    public void setQuietHours(QuietHours quietHours) {
+        quietHoursEnabled = quietHours.enabled();
+        quietHoursStartMinute = quietHours.startMinute();
+        quietHoursEndMinute = quietHours.endMinute();
+        quietHoursZone = quietHours.zone();
+    }
 
     public static NotificationPreferences defaultsFor(UUID userId) {
         return NotificationPreferences.builder().userId(userId).build();
