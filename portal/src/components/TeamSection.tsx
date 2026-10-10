@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Users } from 'lucide-react';
 import { api, ApiError } from '../api/client';
 import type { StaffMember } from '../api/types';
 import { ago, shortDate } from '../lib/format';
@@ -30,7 +31,7 @@ export function TeamSection() {
     <section className="card">
       <div className="card-head">
         <div className="freq-head">
-          <h2>Team</h2>
+          <h2><span className="title-icon"><Users aria-hidden="true" />Team</span></h2>
           <span className="muted">Makati City staff who can sign in to the portal and review reports</span>
         </div>
         {isOfficial && <button type="button" className="btn btn-primary btn-sm" onClick={() => setAdding(true)}>Add staff account</button>}

@@ -10,6 +10,8 @@ import { DEFAULT_NOTES, HIDDEN_FIELDS, TYPE_LABEL, fieldLabel, shortId, valueLab
 import { useLiveTick } from '../state/useQueue';
 import { Segmented } from '../components/Segmented';
 import { AnimatePresence, motion } from 'motion/react';
+import { CheckCircle2, ChevronRight, History, Trash2, X } from 'lucide-react';
+import { PageHeader, StatCard } from '../components/ui';
 
 type Scope = 'staff' | 'status' | 'all';
 const SCOPES: { value: Scope; label: string; hint: string }[] = [
@@ -121,18 +123,37 @@ export function ActivityPage() {
     return [...byDay.entries()];
   }, [shown]);
 
+  // Today's tiles count what is loaded in the current view. Each underlying event is counted once: the
+  // "Status changes" view has no staff-action rows, so there a status change to RESOLVED/REMOVED stands in.
+  const today = useMemo(() => {
+    const key = new Date().toDateString();
+    const todays = shown.filter((e) => new Date(e.at).toDateString() === key);
+    const isStatusTo = (e: ActivityEntry, status: string) => scope === 'status' && e.action === 'STATUS_CHANGED' && e.newValue === status;
+    return {
+      all: todays.length,
+      resolved: todays.filter((e) => e.action === 'MODERATOR_RESOLVED' || isStatusTo(e, 'RESOLVED')).length,
+      removed: todays.filter((e) => e.action === 'MODERATOR_REMOVED' || isStatusTo(e, 'REMOVED')).length,
+      // Newest first, so if the oldest loaded entry is still today, more of today may be on the next page.
+      capped: hasMore && todays.length === shown.length && shown.length > 0,
+    };
+  }, [shown, scope, hasMore]);
+  const count = (n: number) => `${n}${today.capped ? '+' : ''}`;
+  const tilesLoading = loading && !items.length;
+
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Activity</h1>
-          <p className="muted">Municipal actions, status changes and the audit trail. Newest first.</p>
-        </div>
-        <Segmented label="Show" value={scope} options={SCOPES.map((s) => ({ value: s.value, label: s.label, title: s.hint }))}
+      <PageHeader title="Activity" subtitle="Municipal actions, status changes and the audit trail. Newest first."
+        actions={<Segmented label="Show" value={scope} options={SCOPES.map((s) => ({ value: s.value, label: s.label, title: s.hint }))}
           onChange={(v) => {
             if (v === scope) return;
             setScope(v); setSelected(null); setItems([]); load(0);
-          }} />
+          }} />} />
+
+      <div className="stat-row">
+        <StatCard label="Today" icon={<History aria-hidden="true" size={16} />} value={count(today.all)} unit={today.all === 1 ? 'entry' : 'entries'}
+          loading={tilesLoading} foot={SCOPES.find((s) => s.value === scope)?.label} />
+        <StatCard label="Resolved today" icon={<CheckCircle2 aria-hidden="true" size={16} />} value={count(today.resolved)} loading={tilesLoading} />
+        <StatCard label="Removed today" icon={<Trash2 aria-hidden="true" size={16} />} value={count(today.removed)} loading={tilesLoading} />
       </div>
 
       <div className={`activity-layout${selected ? ' has-detail' : ''}`}>
@@ -140,7 +161,7 @@ export function ActivityPage() {
           {loading && page === 0 && !items.length && <SkeletonRows count={8} />}
           {error && !items.length && <ErrorState title="We couldn’t load the activity log." message={error} onRetry={() => load(0)} />}
           {!loading && !error && !shown.length && (
-            <EmptyState title="No activity yet">
+            <EmptyState title="No activity yet" icon="search">
               {scope === 'staff' ? 'When staff resolve, reopen or remove hazards, it shows up here.' : 'Nothing has happened in this view yet.'}
             </EmptyState>
           )}
@@ -160,7 +181,7 @@ export function ActivityPage() {
                         <span>{sentence(e, departments)}</span>
                         {visibleNote(e) && <span className="activity-note">{e.action === 'MODERATOR_REMOVED' ? 'Reason: ' : ''}{visibleNote(e)}</span>}
                       </span>
-                      <span className="row-chevron" aria-hidden="true">›</span>
+                      <ChevronRight className="row-chevron" size={16} aria-hidden="true" />
                     </button>
                   </li>
                 ))}
@@ -200,7 +221,7 @@ function AuditDetail({ entry: e, onClose }: { entry: ActivityEntry; onClose: () 
       transition={{ duration: 0.22 }}>
       <div className="drawer-header">
         <h2>Audit entry</h2>
-        <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">×</button>
+        <button type="button" className="icon-btn" onClick={onClose} aria-label="Close"><X size={16} aria-hidden="true" /></button>
       </div>
       <dl className="audit-fields">
         <dt>Action</dt><dd>{sentence(e, departments)}</dd>

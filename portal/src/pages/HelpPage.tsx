@@ -4,18 +4,9 @@ import { ConfidenceBadge, SeverityBadge, StatusBadge } from '../components/Badge
 import { Card, PageHeader } from '../components/ui';
 import { CONFIDENCE_HINT, STATUS_HINT } from '../lib/hazards';
 import { MAP_CHIPS, MAP_TABS, MODERATION_CHIPS, MODERATION_TABS } from '../lib/queue';
+import { SHORTCUTS } from '../lib/shortcutList';
 
 const MANUAL_URL = 'https://claude.ai/code/artifact/5724a8ba-0a0e-4e21-b171-2c02e899fc69';
-
-const SHORTCUTS: [string, string][] = [
-  ['⌘K', 'Search places and reports, from any page'],
-  ['/', 'Search the hazard queue (Map, Moderation)'],
-  ['↑ ↓', 'Move through the queue'],
-  ['Enter', 'Open the focused hazard'],
-  ['F', 'Show or hide filters'],
-  ['M', 'Go to the map'],
-  ['Esc', 'Close a drawer, dialog or menu'],
-];
 
 const TAB_HELP: Record<string, string> = {
   new: 'Reports from the last 24 hours, newest first. The map opens on it; on Moderation it is under More, and new reports also appear at the top of Active.',
