@@ -53,6 +53,28 @@ Each run records events submitted / accounted for / **lost**, created vs merged,
 hazards (duplicate side effects), HTTP error rate, throughput, processing latency percentiles,
 and (failure_recovery) the recovery time.
 
+### Road closures and the archive job
+
+```bash
+node simulator/closure-fanout.mjs --closures 20 --near 50 --far 20
+```
+
+A moderator blocks and lifts roads while 50 nearby and 20 distant (~11 km) commuter sockets listen.
+Reports create/lift → frame latency (median/p95/p99/max), and checks delivery both ways: every
+nearby socket gets each frame exactly once and no distant socket gets any.
+
+```bash
+# Start the backend with a short archive window (real defaults: 7 days, every 10 minutes):
+SAFEROUTE_HAZARD_ARCHIVE_AFTER=PT60S SAFEROUTE_HAZARD_ARCHIVE_CHECK_INTERVAL=PT5S \
+  DB_NAME=saferoute_bench SPRING_PROFILES_ACTIVE=benchmark ./mvnw spring-boot:run
+node simulator/archive-job.mjs --after 60 --hazards 400 --rate 20
+```
+
+Creates hazards, then measures how long each waits past its deadline before `HazardArchiveService`
+archives it, the archiving speed (the job takes at most 200 hazards per run), and the latency of
+commuter reads (`GET /hazards/nearby`) before, during and after. `--after` must match the backend's
+archive-after in seconds. Archive times are read from the benchmark database with `docker exec`.
+
 ### Fault-tolerance test
 
 `failure_recovery` automates the paper's procedure: stop the Hazard Processing consumer

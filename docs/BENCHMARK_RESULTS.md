@@ -99,6 +99,75 @@ stopped. Accepting reports faster than that grows a backlog. Nothing is lost, bu
 reach the map late. This is the decoupling working as designed, and the processing rate is the
 number to size a deployment by.
 
+## 4. Re-check after later changes (10 October 2026)
+
+Source revision `d35d78c` (the 27–28 September measurements above are unchanged). Same laptop and
+Docker setup, an empty `saferoute_bench` database, rate limiting off. Chrome and the Docker VM were
+busy on the laptop (load average 4–5; the 15-minute average had been 14 after an iOS build and test
+runs just before), so this was **not** an idle system.
+
+### 4.1 Latency comparison, 3 more runs (50 events each)
+
+| Client | Median (3 runs) | p95 (3 runs) |
+|---|---|---|
+| WebSocket (event-driven) | **60–68 ms** | 88–106 ms |
+| Polling every 1 s | 541–621 ms | 951–1,037 ms |
+| Polling every 3 s | 1,217–1,330 ms | 2,838–2,904 ms |
+| Polling every 5 s | 2,277–2,959 ms | 4,550–4,922 ms |
+
+Every client detected all 150 hazards; none were missed. The WebSocket median is higher than the
+26 ms in section 1. To find out whether code changes caused that, the same benchmark was run on two
+earlier revisions, each on its own fresh database:
+
+| Revision | WebSocket median, 2 runs |
+|---|---|
+| `45cecef` (28 Sept, when 26 ms was measured) | 64 ms and 39 ms |
+| `edc09c2` (start of this session) | 55 ms and 61 ms |
+| `d35d78c` (current) | 68, 61 and 60 ms |
+
+The old code is just as slow today, so the difference is the machine's state and not a regression.
+Run-to-run spread on identical code is also large (39 to 64 ms), and the first run after a backend
+start tends to be the slowest. **For the paper, quote a range (about 25–70 ms median depending on
+laptop load) or these runs, not the 26 ms figure alone.** The comparison with polling holds either
+way: the event-driven path is about 8–10× faster than 1 s polling and about 19–22× faster than 3 s
+polling at the median (it was 17× and 55× against the 26 ms figure).
+
+### 4.2 Road-closure fan-out (`closure-fanout.mjs`, 3 rounds)
+
+A moderator blocks and then lifts 20 short roads per round. 50 commuter sockets sit within about
+150 m of the road and 20 sit about 11 km away. Latency is measured from just before the HTTP call
+to the frame's arrival at the socket.
+
+| | Result |
+|---|---|
+| Frames delivered to nearby sockets | **6,000 of 6,000** (3 rounds × 20 closures × 50 sockets × create and lift), 0 missed, 0 duplicated |
+| Frames delivered to distant sockets | **0** |
+| Create → frame, median | 27.0–28.3 ms (p95 38–48 ms) |
+| Lift → frame, median | 29.6–36.4 ms (p95 38–46 ms) |
+| Slowest frames | 476–483 ms: the first closure of round 1, to all 50 of its sockets (one slow event, not 50 independent delays). Every other frame in all 3 rounds was under 64 ms |
+| HTTP call itself (round 1) | create median 18 ms, lift 23 ms |
+
+So a closure reaches every commuter within range in tens of milliseconds, and reaches nobody
+outside it.
+
+### 4.3 Archive job under load (`archive-job.mjs`, 3 rounds)
+
+The backend was started with `SAFEROUTE_HAZARD_ARCHIVE_AFTER=PT60S` and
+`SAFEROUTE_HAZARD_ARCHIVE_CHECK_INTERVAL=PT5S` (the real defaults are 7 days and 10 minutes).
+Each round created 400 hazards at 20 per second, so the job needed two of its 200-hazard batches.
+
+| | Result (3 rounds) |
+|---|---|
+| Hazards archived | **400 of 400** every round, none missed |
+| Wait past the deadline, median | 2.6–2.9 s (p95 about 5.0 s, max 5.3 s), bounded by the 5 s check interval |
+| Archiving speed | 19–25 hazards per second (the run takes 16–21 s end to end) |
+| Commuter read (`GET /hazards/nearby`), p95 | 35–37 ms while archiving; no errors in any phase |
+
+Read latency was 9–11 ms median before any load, then 25–31 ms in every later phase: while
+creating, while archiving and after. The archiving phase is no slower than the phases without it,
+so the step up is consistent with the 1 km result growing to its 250-hazard cap and not with
+archiving itself. The measurement does not isolate that cause, though.
+
 ## How to reproduce
 
 ```bash

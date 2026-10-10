@@ -68,6 +68,8 @@ The proposal still contains template scaffolding that must be replaced before su
     Measured numbers are now in [`BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md). Suggested wording:
     > "In our local test environment (one laptop, single Kafka broker), median WebSocket notification latency was 26 ms (p95 56 ms, n = 100 over 2 clean runs), versus 1,441 ms (p95 2,883 ms) for clients polling every 3 seconds. With the processing consumer stopped, 100 of 100 reports were retained and processed after restart (3 runs, 0 lost, backlog drained in 1–3 s). The backend processed about 125 reports/s; faster intake queued without loss."
 
+    **Re-check, 10 Oct 2026:** three more runs on the current code, on a busier laptop, gave a WebSocket median of 60–68 ms (p95 88–106 ms) and 1,217–1,330 ms for 3 s polling. The same benchmark on the 28 Sept code gave 39–64 ms that day, so the difference is the machine's load, not the code (see [`BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md) section 4). Quote a range ("about 25–70 ms median, depending on laptop load") or a single named run, and say what else was running. The speed-up over polling is about 8–10× at 1 s and 19–22× at 3 s in the re-check. Section 4 also has measured results for road-closure delivery (6,000 of 6,000 frames delivered to nearby sockets, none to distant ones, median about 30 ms) and the archive job (400 of 400 archived in each of 3 rounds).
+
     The earlier sample numbers in `benchmark/README.md` came from instruments that have since been corrected (confirmations were never generated; polling detections depended on the WebSocket client; failed reports counted as throughput). Re-run the experiments and quote only new, saved results.
 
 13. **Evidence per objective.**
@@ -85,6 +87,7 @@ The proposal still contains template scaffolding that must be replaced before su
 |---|---|
 | "With rate limiting" (p. 6) | Implemented (Bucket4j): login 5 failures/10 min/IP, register 3/h/IP, reports 10/h/user, confirmations 60/h, resolution votes 20/h, uploads 10/h; HTTP 429 + `Retry-After`. The benchmark profile disables it on purpose — report that. |
 | Comparison against polling (p. 6, 15) | `benchmark/simulator/latency-compare.mjs` and `k6/polling-baseline.js`. |
+| Road closures and the archive job (added after the paper) | `benchmark/simulator/closure-fanout.mjs` and `archive-job.mjs`; results in `BENCHMARK_RESULTS.md` section 4. |
 | Synthetic hazard and user activity (p. 14) | `benchmark/simulator/simulate.mjs` (normal, rush hour, severe weather, duplicate burst, failure recovery). |
 | Disabling a consumer to test recovery (p. 15) | `simulate.mjs failure_recovery` stops the report listener only — not the whole application, database or broker. Say so. |
 | Municipal officials resolving hazards | A `MUNICIPAL_OFFICIAL` role can resolve/reopen/remove, assign departments and set priorities in the web portal; every action is audited. |
