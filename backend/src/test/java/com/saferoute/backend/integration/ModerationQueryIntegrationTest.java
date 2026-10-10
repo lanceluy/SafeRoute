@@ -3,6 +3,7 @@ package com.saferoute.backend.integration;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.saferoute.backend.hazard.HazardLifecycle;
 import com.saferoute.backend.hazard.HazardStatus;
+import com.saferoute.backend.hazard.HazardType;
 import com.saferoute.backend.support.IntegrationTestBase;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -100,7 +101,7 @@ class ModerationQueryIntegrationTest extends IntegrationTestBase {
         assertThat(after.at("/totals/highSeverity").asLong()).isEqualTo(before.at("/totals/highSeverity").asLong() + 1);
         assertThat(after.at("/totals/resolvedInRange").asLong()).isEqualTo(before.at("/totals/resolvedInRange").asLong() + 1);
         assertThat(after.at("/queueCounts/high").asLong()).isEqualTo(after.at("/totals/highSeverity").asLong());
-        assertThat(after.get("activeByType").findValuesAsText("key")).hasSize(7);
+        assertThat(after.get("activeByType").findValuesAsText("key")).hasSize(HazardType.values().length);
         assertThat(after.get("daily")).hasSizeBetween(7, 8);
         JsonNode today = after.get("daily").get(after.get("daily").size() - 1);
         assertThat(today.get("resolved").asLong()).isGreaterThanOrEqualTo(1);
