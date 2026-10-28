@@ -3,6 +3,7 @@ package com.saferoute.backend.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.saferoute.backend.auth.JwtAuthFilter;
 import com.saferoute.backend.common.ApiErrorResponse;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -48,6 +49,9 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // A long poll completes on an ASYNC re-dispatch, which the JWT filter skips. The
+                        // original REQUEST dispatch was already authenticated and authorized.
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login",
                                 "/api/auth/refresh", "/api/auth/logout").permitAll()
                         // Local research prototype: metrics are readable without auth so the benchmark

@@ -1,7 +1,9 @@
 package com.saferoute.backend.hazard;
 
 import com.saferoute.backend.auth.AuthenticatedUser;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.saferoute.backend.common.ApiException;
+import com.saferoute.backend.delivery.ConditionalResponses;
 import com.saferoute.backend.hazard.dto.*;
 import com.saferoute.backend.ratelimit.RateLimitPolicy;
 import com.saferoute.backend.ratelimit.RateLimitService;
@@ -10,6 +12,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -30,23 +33,28 @@ public class HazardController {
 
     private final HazardService hazardService;
     private final RateLimitService rateLimitService;
+    private final ObjectMapper objectMapper;
 
-    public HazardController(HazardService hazardService, RateLimitService rateLimitService) {
+    public HazardController(HazardService hazardService, RateLimitService rateLimitService, ObjectMapper objectMapper) {
         this.hazardService = hazardService;
         this.rateLimitService = rateLimitService;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping("/nearby")
     @Operation(summary = "Hazards within a radius, nearest first",
             description = "radiusMeters 50–5000 (default 1000); limit 1–250 (default 100). statuses defaults to the "
-                    + "active set REPORTED,VERIFIED,DISPUTED. types/statuses are comma-separated enum names.")
-    public List<HazardResponse> nearby(@RequestParam double lat,
+                    + "active set REPORTED,VERIFIED,DISPUTED. types/statuses are comma-separated enum names. "
+                    + "Sends an ETag; a matching If-None-Match gets a body-less 304.")
+    public ResponseEntity<List<HazardResponse>> nearby(@RequestParam double lat,
                                        @RequestParam double lon,
                                        @RequestParam(required = false) Double radiusMeters,
                                        @RequestParam(required = false) String types,
                                        @RequestParam(required = false) String statuses,
-                                       @RequestParam(required = false) Integer limit) {
-        return hazardService.findNearby(lat, lon, radiusMeters, types, statuses, limit);
+                                       @RequestParam(required = false) Integer limit,
+                                       @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
+        return ConditionalResponses.respond(ifNoneMatch,
+                hazardService.findNearby(lat, lon, radiusMeters, types, statuses, limit), objectMapper, new HttpHeaders());
     }
 
     @GetMapping("/in-bbox")
@@ -60,11 +68,12 @@ public class HazardController {
                                                        @RequestParam double maxLon,
                                                        @RequestParam(required = false) String types,
                                                        @RequestParam(required = false) String statuses,
-                                                       @RequestParam(required = false) Integer limit) {
+                                                       @RequestParam(required = false) Integer limit,
+                                                       @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
         HazardService.HazardPage page = hazardService.findInBbox(minLat, minLon, maxLat, maxLon, types, statuses, limit);
-        return ResponseEntity.ok()
-                .header(TRUNCATED_HEADER, Boolean.toString(page.truncated()))
-                .body(page.hazards());
+        HttpHeaders extra = new HttpHeaders();
+        extra.add(TRUNCATED_HEADER, Boolean.toString(page.truncated()));
+        return ConditionalResponses.respond(ifNoneMatch, page.hazards(), objectMapper, extra);
     }
 
     @PostMapping("/along-route")

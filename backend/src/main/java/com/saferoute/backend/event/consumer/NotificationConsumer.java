@@ -2,6 +2,7 @@ package com.saferoute.backend.event.consumer;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.saferoute.backend.delivery.HazardChangeBroker;
 import com.saferoute.backend.event.EventContext;
 import com.saferoute.backend.event.KafkaTopics;
 import com.saferoute.backend.event.dto.ClosureChangedEvent;
@@ -54,12 +55,25 @@ import java.util.Set;
 @Component
 public class NotificationConsumer {
 
+    /**
+     * Every backend instance owns the WebSocket sessions connected to it, so each must see every
+     * event: with {@code saferoute.notification.per-instance-group=true} the group id gets a
+     * per-process suffix and Kafka broadcasts to all instances instead of splitting partitions.
+     * See {@link com.saferoute.backend.config.NotificationGroupConfig}.
+     */
+    private static final String GROUP_ID = "#{@notificationGroupId}";
+    /**
+     * Default earliest keeps the single-instance behaviour. A per-instance group is new on every
+     * start, so multi-instance deployments set SAFEROUTE_NOTIFICATION_OFFSET_RESET=latest to avoid
+     * replaying the whole topic to sessions that did not exist when those events happened.
+     */
+    private static final String LIVE_ONLY = "auto.offset.reset=${saferoute.notification.offset-reset}";
     private static final Logger log = LoggerFactory.getLogger(NotificationConsumer.class);
-    private static final String GROUP_ID = "notification-service-group";
     private static final Set<HazardChange> ALERTABLE =
             EnumSet.of(HazardChange.CREATED, HazardChange.VERIFIED, HazardChange.REINSTATED);
 
     private final WebSocketSessionRegistry registry;
+    private final HazardChangeBroker broker;
     private final ObjectMapper objectMapper;
     private final SafeRouteMetrics metrics;
     private final PushNotificationService pushNotifications;
@@ -67,12 +81,14 @@ public class NotificationConsumer {
     private final double routeCorridorMeters;
 
     public NotificationConsumer(WebSocketSessionRegistry registry,
+                                HazardChangeBroker broker,
                                 ObjectMapper objectMapper,
                                 SafeRouteMetrics metrics,
                                 PushNotificationService pushNotifications,
                                 @Value("${saferoute.notification.map-update-radius-meters}") double mapUpdateRadiusMeters,
                                 @Value("${saferoute.notification.route-corridor-meters}") double routeCorridorMeters) {
         this.registry = registry;
+        this.broker = broker;
         this.objectMapper = objectMapper;
         this.metrics = metrics;
         this.pushNotifications = pushNotifications;
@@ -80,10 +96,12 @@ public class NotificationConsumer {
         this.routeCorridorMeters = routeCorridorMeters;
     }
 
-    @KafkaListener(topics = {KafkaTopics.HAZARD_CREATED, KafkaTopics.HAZARD_UPDATED}, groupId = GROUP_ID)
+    @KafkaListener(topics = {KafkaTopics.HAZARD_CREATED, KafkaTopics.HAZARD_UPDATED}, groupId = GROUP_ID, properties = LIVE_ONLY)
     public void onHazardChanged(HazardUpdatedEvent event) {
         try (var ignored = EventContext.enter(event.metadata())) {
             String frameType = frameType(event.change());
+            // Long-poll and SSE clients are fed from the same event as the WebSocket sessions.
+            broker.publish(frame(frameType, event, 0, false, false, null));
             Instant now = Instant.now();
             int sent = 0, alerts = 0;
             for (WebSocketSessionRegistry.SessionInfo info : registry.activeSessions()) {
@@ -142,7 +160,7 @@ public class NotificationConsumer {
      * area, and every commuter within the map-update radius of any vertex or whose active route
      * passes the closure, get the frame (and so can reroute).
      */
-    @KafkaListener(topics = KafkaTopics.CLOSURE_CHANGED, groupId = GROUP_ID)
+    @KafkaListener(topics = KafkaTopics.CLOSURE_CHANGED, groupId = GROUP_ID, properties = LIVE_ONLY)
     public void onClosureChanged(ClosureChangedEvent event) {
         try (var ignored = EventContext.enter(event.metadata())) {
             ClosureEventFrame frame = ClosureEventFrame.of(event);
@@ -182,7 +200,7 @@ public class NotificationConsumer {
         return false;
     }
 
-    @KafkaListener(topics = KafkaTopics.SUBMISSION_PROCESSED, groupId = GROUP_ID)
+    @KafkaListener(topics = KafkaTopics.SUBMISSION_PROCESSED, groupId = GROUP_ID, properties = LIVE_ONLY)
     public void onSubmissionProcessed(SubmissionProcessedEvent event) {
         try (var ignored = EventContext.enter(event.metadata())) {
             String message = switch (event.status()) {

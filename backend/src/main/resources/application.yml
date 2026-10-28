@@ -86,6 +86,10 @@ saferoute:
     # Tokens in URLs end up in access logs; clients should send the Authorization header.
     allow-query-token: ${WS_ALLOW_QUERY_TOKEN:false}
   notification:
+    group-id: ${SAFEROUTE_NOTIFICATION_GROUP_ID:notification-service-group}
+    # true when several backend instances run: each gets its own group so all see every event.
+    per-instance-group: ${SAFEROUTE_NOTIFICATION_PER_INSTANCE_GROUP:false}
+    offset-reset: ${SAFEROUTE_NOTIFICATION_OFFSET_RESET:earliest}
     # Sessions within this distance receive live map-state updates for every status change.
     map-update-radius-meters: 5000
     # A hazard within this distance of the commuter's active route (and ahead of them) is "on route".

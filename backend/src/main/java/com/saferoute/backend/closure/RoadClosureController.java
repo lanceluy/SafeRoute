@@ -1,14 +1,18 @@
 package com.saferoute.backend.closure;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.saferoute.backend.auth.AuthenticatedUser;
 import com.saferoute.backend.closure.dto.ClosureResponse;
 import com.saferoute.backend.closure.dto.CreateClosureRequest;
 import com.saferoute.backend.closure.dto.UpdateClosureRequest;
 import com.saferoute.backend.common.ApiException;
+import com.saferoute.backend.delivery.ConditionalResponses;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -25,22 +29,26 @@ public class RoadClosureController {
     static final int MAX_REASON = 500;
 
     private final RoadClosureService service;
+    private final ObjectMapper objectMapper;
 
-    public RoadClosureController(RoadClosureService service) {
+    public RoadClosureController(RoadClosureService service, ObjectMapper objectMapper) {
         this.service = service;
+        this.objectMapper = objectMapper;
     }
 
     @GetMapping("/active")
     @Operation(summary = "Every active road closure (newest first, at most 200)")
-    public List<ClosureResponse> active() {
-        return service.findActive();
+    public ResponseEntity<List<ClosureResponse>> active(
+            @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
+        return ConditionalResponses.respond(ifNoneMatch, service.findActive(), objectMapper, new HttpHeaders());
     }
 
     @GetMapping("/in-bbox")
     @Operation(summary = "Active road closures touching the visible map region (at most 0.5° per side)")
-    public List<ClosureResponse> inBbox(@RequestParam double minLat, @RequestParam double minLon,
-                                        @RequestParam double maxLat, @RequestParam double maxLon) {
-        return service.findInBbox(minLat, minLon, maxLat, maxLon);
+    public ResponseEntity<List<ClosureResponse>> inBbox(@RequestParam double minLat, @RequestParam double minLon,
+                                                        @RequestParam double maxLat, @RequestParam double maxLon,
+                                                        @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
+        return ConditionalResponses.respond(ifNoneMatch, service.findInBbox(minLat, minLon, maxLat, maxLon), objectMapper, new HttpHeaders());
     }
 
     @PostMapping
