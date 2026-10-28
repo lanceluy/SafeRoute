@@ -27,7 +27,7 @@ final class MetaStore: ObservableObject {
         }
         if let data = UserDefaults.standard.data(forKey: routingKey),
            let routing = try? JSONDecoder.api.decode(RoutingMeta.self, from: data) {
-            RoutingSettings.corridorMeters = routing.routeCorridorMeters
+            RoutingSettings.apply(routing)
         }
         if let data = UserDefaults.standard.data(forKey: departmentsKey),
            let list = try? JSONDecoder.api.decode([Department].self, from: data) {
@@ -45,7 +45,7 @@ final class MetaStore: ObservableObject {
             UserDefaults.standard.set(try? JSONEncoder.api.encode(list), forKey: questionsKey)
         }
         if let routing = try? await APIClient.shared.send(.routing, as: RoutingMeta.self) {
-            RoutingSettings.corridorMeters = routing.routeCorridorMeters
+            RoutingSettings.apply(routing)
             UserDefaults.standard.set(try? JSONEncoder.api.encode(routing), forKey: routingKey)
         }
         if let list = try? await APIClient.shared.send(.departments, as: [Department].self) {

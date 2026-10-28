@@ -49,7 +49,7 @@ struct RouteOption: Sendable {
     /// exposure, so a route without one always scores better than a route with one.
     var closures: [RoadClosure] = []
 
-    static let closurePenalty = 1000.0
+    static var closurePenalty: Double { RoutingSettings.closurePenalty }
 
     var hasClosure: Bool { !closures.isEmpty }
 
@@ -63,9 +63,9 @@ struct RouteOption: Sendable {
     var riskScore: Double {
         Double(closures.count) * Self.closurePenalty + hazards.reduce(0) { total, rh in
             let weight: Double = switch rh.hazard.severity {
-            case .high: 10
-            case .medium: 3
-            default: 1
+            case .high: RoutingSettings.weightHigh
+            case .medium: RoutingSettings.weightMedium
+            default: RoutingSettings.weightLow
             }
             return total + weight * (rh.hazard.status == .disputed ? 0.5 : 1)
         }
@@ -150,6 +150,20 @@ enum RoutingSettings {
     /// A hazard this close to the path is "on" the route — the same value the server uses for
     /// on-route alerts, so planning, navigation and alerts agree.
     static var corridorMeters: Double = 40
+    /// Per-hazard severity weights and the closure penalty, also from /api/meta/routing; the
+    /// defaults match the server's so scoring is unchanged if the call fails.
+    nonisolated(unsafe) static var weightHigh: Double = 10
+    nonisolated(unsafe) static var weightMedium: Double = 3
+    nonisolated(unsafe) static var weightLow: Double = 1
+    nonisolated(unsafe) static var closurePenalty: Double = 1000
+
+    static func apply(_ meta: RoutingMeta) {
+        corridorMeters = meta.routeCorridorMeters
+        weightHigh = meta.weightHigh ?? weightHigh
+        weightMedium = meta.weightMedium ?? weightMedium
+        weightLow = meta.weightLow ?? weightLow
+        closurePenalty = meta.closurePenalty ?? closurePenalty
+    }
 }
 
 /// MapKit has no native "avoid this point" API, so this scores MKDirections' alternates against

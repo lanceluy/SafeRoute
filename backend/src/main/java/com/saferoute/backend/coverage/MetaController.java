@@ -25,26 +25,39 @@ public class MetaController {
      * @param routeCorridorMeters a hazard this close to a route is "on" it — used for server-side
      *                            on-route alerts, route assessment and in-app navigation alike
      */
-    public record RoutingResponse(double routeCorridorMeters) {
+    public record RoutingResponse(double routeCorridorMeters, double weightHigh, double weightMedium,
+                                  double weightLow, double closurePenalty) {
     }
 
     private final CoverageArea coverageArea;
     private final HazardClassifier classifier;
     private final double routeCorridorMeters;
     private final MunicipalDepartments departments;
+    private final double weightHigh;
+    private final double weightMedium;
+    private final double weightLow;
+    private final double closurePenalty;
 
     public MetaController(CoverageArea coverageArea, HazardClassifier classifier, MunicipalDepartments departments,
-                          @Value("${saferoute.notification.route-corridor-meters}") double routeCorridorMeters) {
+                          @Value("${saferoute.notification.route-corridor-meters}") double routeCorridorMeters,
+                          @Value("${saferoute.routing.weight-high}") double weightHigh,
+                          @Value("${saferoute.routing.weight-medium}") double weightMedium,
+                          @Value("${saferoute.routing.weight-low}") double weightLow,
+                          @Value("${saferoute.routing.closure-penalty}") double closurePenalty) {
         this.departments = departments;
         this.coverageArea = coverageArea;
         this.classifier = classifier;
         this.routeCorridorMeters = routeCorridorMeters;
+        this.weightHigh = weightHigh;
+        this.weightMedium = weightMedium;
+        this.weightLow = weightLow;
+        this.closurePenalty = closurePenalty;
     }
 
     @GetMapping("/routing")
     @Operation(summary = "Shared routing parameters, so the client and server agree on what \"on the route\" means")
     public RoutingResponse routing() {
-        return new RoutingResponse(routeCorridorMeters);
+        return new RoutingResponse(routeCorridorMeters, weightHigh, weightMedium, weightLow, closurePenalty);
     }
 
     @GetMapping("/coverage")

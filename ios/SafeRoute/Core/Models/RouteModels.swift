@@ -25,4 +25,9 @@ struct RouteHazardsRequest: Codable {
 /// route assessment and in-app navigation.
 struct RoutingMeta: Codable {
     let routeCorridorMeters: Double
+    // Optional so a cached or older server response without scoring weights still decodes.
+    let weightHigh: Double?
+    let weightMedium: Double?
+    let weightLow: Double?
+    let closurePenalty: Double?
 }

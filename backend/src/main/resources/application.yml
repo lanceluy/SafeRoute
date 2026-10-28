@@ -89,7 +89,7 @@ saferoute:
     # Sessions within this distance receive live map-state updates for every status change.
     map-update-radius-meters: 5000
     # A hazard within this distance of the commuter's active route (and ahead of them) is "on route".
-    route-corridor-meters: 40
+    route-corridor-meters: ${SAFEROUTE_ROUTE_CORRIDOR_METERS:40}
   push:
     # Background alerts. A device's last background location triggers alerts only while it is
     # younger than this, and is deleted after it (significant-change updates can be far apart).
@@ -105,7 +105,7 @@ saferoute:
       # sandbox for Xcode/debug builds, production for TestFlight/App Store builds.
       environment: ${APNS_ENVIRONMENT:sandbox}
   hazard:
-    duplicate-radius-meters: 30
+    duplicate-radius-meters: ${SAFEROUTE_DUPLICATE_RADIUS_METERS:30}
     verification-threshold: 2
     dispute-threshold: 2
     resolution-threshold: 2
@@ -113,6 +113,13 @@ saferoute:
     # A report no staff member acts on within this long moves to the portal's Archived tab.
     archive-after: P7D
     archive-check-interval: PT10M
+  routing:
+    # Route risk score = sum of per-hazard weights (disputed hazards count half) plus a closure
+    # penalty. A transparent heuristic; benchmark/sensitivity sweeps these values.
+    weight-high: ${SAFEROUTE_WEIGHT_HIGH:10}
+    weight-medium: ${SAFEROUTE_WEIGHT_MEDIUM:3}
+    weight-low: ${SAFEROUTE_WEIGHT_LOW:1}
+    closure-penalty: ${SAFEROUTE_CLOSURE_PENALTY:1000}
   coverage:
     enabled: ${SAFEROUTE_COVERAGE_ENABLED:true}
     name: Metro Manila pilot area
