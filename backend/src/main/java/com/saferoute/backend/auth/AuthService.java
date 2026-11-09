@@ -13,6 +13,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -36,23 +38,26 @@ public class AuthService {
     private final JwtService jwtService;
     private final ModeratorBootstrap moderatorBootstrap;
     private final Duration refreshTokenTtl;
+    private final byte[] sourceKey;
 
     public AuthService(UserRepository userRepository,
                        RefreshTokenRepository refreshTokenRepository,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService,
                        ModeratorBootstrap moderatorBootstrap,
-                       @Value("${saferoute.jwt.refresh-token-ttl}") Duration refreshTokenTtl) {
+                       @Value("${saferoute.jwt.refresh-token-ttl}") Duration refreshTokenTtl,
+                       @Value("${saferoute.jwt.secret}") String secret) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.moderatorBootstrap = moderatorBootstrap;
         this.refreshTokenTtl = refreshTokenTtl;
+        this.sourceKey = secret.getBytes(StandardCharsets.UTF_8);
     }
 
     @Transactional
-    public AuthResponse register(RegisterRequest request) {
+    public AuthResponse register(RegisterRequest request, String sourceIp) {
         String email = request.email().trim().toLowerCase();
         if (userRepository.existsByEmailIgnoreCase(email)) {
             throw new ApiException(HttpStatus.CONFLICT, "EMAIL_TAKEN", "Email already registered");
@@ -62,6 +67,7 @@ public class AuthService {
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .displayName(request.displayName().trim())
                 .role(Role.USER)
+                .registrationSource(sourceOf(sourceIp))
                 .build();
         // Flushed so the row exists for ModeratorBootstrap's role_grants insert (plain JDBC, FK to users).
         user = userRepository.saveAndFlush(user);
@@ -122,6 +128,21 @@ public class AuthService {
         return userRepository.findById(userId)
                 .map(MeResponse::from)
                 .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Account no longer exists"));
+    }
+
+    /**
+     * A keyed hash of the registering IP, so accounts created from one connection can be recognised without
+     * storing the address. Null if the address is unknown.
+     */
+    private String sourceOf(String ip) {
+        if (ip == null || ip.isBlank()) return null;
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(sourceKey, "HmacSHA256"));
+            return HexFormat.of().formatHex(mac.doFinal(ip.getBytes(StandardCharsets.UTF_8))).substring(0, 32);
+        } catch (NoSuchAlgorithmException | java.security.InvalidKeyException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private AuthResponse issueTokens(User user) {

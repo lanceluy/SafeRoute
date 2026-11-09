@@ -1,7 +1,7 @@
 package com.saferoute.backend.submission;
 
 import com.saferoute.backend.auth.AuthenticatedUser;
-import com.saferoute.backend.ratelimit.RateLimitPolicy;
+import com.saferoute.backend.user.AccountStatusService;
 import com.saferoute.backend.ratelimit.RateLimitService;
 import com.saferoute.backend.submission.dto.HazardSubmissionRequest;
 import com.saferoute.backend.submission.dto.HazardSubmissionResponse;
@@ -24,10 +24,13 @@ public class HazardSubmissionController {
 
     private final HazardSubmissionService submissionService;
     private final RateLimitService rateLimitService;
+    private final AccountStatusService accountStatus;
 
-    public HazardSubmissionController(HazardSubmissionService submissionService, RateLimitService rateLimitService) {
+    public HazardSubmissionController(HazardSubmissionService submissionService, RateLimitService rateLimitService,
+                                      AccountStatusService accountStatus) {
         this.submissionService = submissionService;
         this.rateLimitService = rateLimitService;
+        this.accountStatus = accountStatus;
     }
 
     @PostMapping
@@ -39,7 +42,8 @@ public class HazardSubmissionController {
                     `submission_processed` WebSocket frame, or poll GET /api/hazard-submissions/{id}. \
                     Send a clientRequestId to make retries safe: repeating a request with the same key \
                     returns the original submission (200) without creating another or using up the rate \
-                    limit. Limited to 10 reports per hour per user.""")
+                    limit. Limited to 10 reports per hour per user, 2 until the account reaches the Regular tier. \
+                    Suspended accounts get 403 ACCOUNT_SUSPENDED.""")
     @ApiResponse(responseCode = "202", description = "Queued for processing")
     @ApiResponse(responseCode = "200", description = "Retry of an already accepted report (same clientRequestId)")
     @ApiResponse(responseCode = "409", description = "IDEMPOTENCY_KEY_REUSED")
@@ -49,7 +53,7 @@ public class HazardSubmissionController {
                                                            @AuthenticationPrincipal AuthenticatedUser principal) {
         var replay = submissionService.findReplay(request, principal.id());
         if (replay.isPresent()) return ResponseEntity.ok(replay.get());
-        rateLimitService.consume(RateLimitPolicy.HAZARD_REPORT, principal.id().toString());
+        rateLimitService.consume(accountStatus.admitReport(principal), principal.id().toString());
         try {
             return ResponseEntity.status(HttpStatus.ACCEPTED).body(submissionService.submit(request, principal.id()));
         } catch (DataIntegrityViolationException e) {

@@ -108,8 +108,17 @@ public abstract class IntegrationTestBase {
     }
 
     protected TestUser registerUser() throws Exception {
+        return registerUser(uniqueIp());
+    }
+
+    /** Registers from a chosen address, e.g. to create several accounts on one connection. */
+    protected TestUser registerUserFrom(String ip) throws Exception {
+        return registerUser(ip(ip));
+    }
+
+    private TestUser registerUser(RequestPostProcessor source) throws Exception {
         String email = "user-" + UUID.randomUUID() + "@test.local";
-        JsonNode body = json(mvc.perform(post("/api/auth/register").with(uniqueIp())
+        JsonNode body = json(mvc.perform(post("/api/auth/register").with(source)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(toJson(Map.of("email", email, "password", "password123", "displayName", "Tester"))))
                 .andReturn(), 201);

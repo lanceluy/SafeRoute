@@ -21,7 +21,9 @@ public class RateLimitProperties {
             RateLimitPolicy.HAZARD_REPORT, new Limit(10, Duration.ofHours(1)),
             RateLimitPolicy.CONFIRMATION, new Limit(60, Duration.ofHours(1)),
             RateLimitPolicy.RESOLUTION, new Limit(20, Duration.ofHours(1)),
-            RateLimitPolicy.IMAGE_UPLOAD, new Limit(10, Duration.ofHours(1))
+            RateLimitPolicy.IMAGE_UPLOAD, new Limit(10, Duration.ofHours(1)),
+            RateLimitPolicy.HAZARD_REPORT_NEW_ACCOUNT, new Limit(2, Duration.ofHours(1)),
+            RateLimitPolicy.CONFIRMATION_NEW_ACCOUNT, new Limit(10, Duration.ofHours(1))
     ));
 
     public boolean isEnabled() {

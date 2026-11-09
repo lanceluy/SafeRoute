@@ -11,6 +11,16 @@ saferoute:
     dir: ${java.io.tmpdir}/saferoute-test-uploads
   benchmark:
     consumer-control-enabled: true
+  # The trust defences are exercised by TrustHardeningIntegrationTest with its own settings; the rest of the suite
+  # runs with them neutral so each test can use fresh accounts freely.
+  trust:
+    reputation-delay: PT0S
+    suspend-after-removals: 0
+  rate-limit:
+    limits:
+      # Same as the standard limits, so the rest of the suite sees today's behaviour for fresh accounts.
+      HAZARD_REPORT_NEW_ACCOUNT: { capacity: 10, period: PT1H }
+      CONFIRMATION_NEW_ACCOUNT: { capacity: 60, period: PT1H }
 
 logging:
   level:

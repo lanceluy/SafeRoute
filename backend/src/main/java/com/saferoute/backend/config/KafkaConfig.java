@@ -12,6 +12,7 @@ import org.apache.kafka.common.serialization.StringSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
@@ -33,8 +34,11 @@ import java.util.Map;
 public class KafkaConfig {
 
     private static final Logger log = LoggerFactory.getLogger(KafkaConfig.class);
-    private static final int PARTITIONS = 3;
-    private static final short REPLICATION_FACTOR = 1; // single-broker local dev
+    // Defaults suit single-broker local dev; the multi-broker benchmark raises both.
+    @Value("${saferoute.kafka.partitions:3}")
+    private int partitions;
+    @Value("${saferoute.kafka.replication-factor:1}")
+    private short replicationFactor;
     private static final long RETRY_INTERVAL_MS = 500;
     private static final long RETRY_ATTEMPTS = 2; // 1 delivery + 2 retries, then DLQ
     private static final long DLQ_RETRY_INTERVAL_MS = 5_000;
@@ -59,8 +63,8 @@ public class KafkaConfig {
     @Bean public NewTopic closureChangedDlq() { return topic(KafkaTopics.CLOSURE_CHANGED + KafkaTopics.DLQ_SUFFIX); }
     @Bean public NewTopic submissionProcessedDlq() { return topic(KafkaTopics.SUBMISSION_PROCESSED + KafkaTopics.DLQ_SUFFIX); }
 
-    private static NewTopic topic(String name) {
-        return TopicBuilder.name(name).partitions(PARTITIONS).replicas(REPLICATION_FACTOR).build();
+    private NewTopic topic(String name) {
+        return TopicBuilder.name(name).partitions(partitions).replicas(replicationFactor).build();
     }
 
     /**

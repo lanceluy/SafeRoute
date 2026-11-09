@@ -85,6 +85,9 @@ saferoute:
   websocket:
     # Tokens in URLs end up in access logs; clients should send the Authorization header.
     allow-query-token: ${WS_ALLOW_QUERY_TOKEN:false}
+  kafka:
+    partitions: ${SAFEROUTE_KAFKA_PARTITIONS:3}
+    replication-factor: ${SAFEROUTE_KAFKA_REPLICATION_FACTOR:1}
   notification:
     group-id: ${SAFEROUTE_NOTIFICATION_GROUP_ID:notification-service-group}
     # true when several backend instances run: each gets its own group so all see every event.
@@ -133,6 +136,15 @@ saferoute:
     max-lon: 121.15
   rate-limit:
     enabled: ${SAFEROUTE_RATE_LIMIT_ENABLED:true}
+  trust:
+    # An account is suspended from contributing once this many of its reports were removed as false (0 = never).
+    suspend-after-removals: ${SAFEROUTE_SUSPEND_AFTER_REMOVALS:3}
+    # Reputation for a verified hazard is paid only after it has stood this long without being removed (PT0S = at once).
+    reputation-delay: ${SAFEROUTE_REPUTATION_DELAY:PT24H}
+    reward-check-interval: PT5M
+    # Count each registration source (IP) once per hazard and ignore the reporter's own. Off by default: people sharing
+    # an IP (campus Wi-Fi, mobile carriers) would be undercounted. Turn on only where that is acceptable.
+    distinct-sources: ${SAFEROUTE_DISTINCT_SOURCES:false}
   uploads:
     dir: ${SAFEROUTE_UPLOADS_DIR:./uploads}
   bootstrap:

@@ -1,0 +1,126 @@
+# Spam and collusion (Sybil) analysis
+
+Reviewer concern: crowdsourced trust was never tested against deliberately false reports. This is a
+simulation of the verification rules in the backend, written before and then used to choose defences,
+four of which are now implemented. It is **not** a test of the running system and **not** field data.
+Honest-user behaviour, moderator speed and the tier mix are assumptions (see the header of
+`benchmark/adversarial/sybil.mjs`), so read the tables as comparisons between configurations, not as
+predictions. The backend behaviour itself is covered by `TrustHardeningIntegrationTest`.
+
+## What the code did before (verified in the source)
+
+- A hazard becomes VERIFIED at 2 confirmations from accounts other than the reporter. Votes are
+  unweighted, and reputation does not influence verification (`HazardLifecycle`, `ReputationService`).
+- A confirmation request carries only an action. There is no location or device check
+  (`ConfirmationRequest`).
+- Registration is limited to 3 per hour per IP; each account may file 10 reports and cast 60
+  confirmations per hour (`RateLimitProperties`).
+- Reputation was paid as soon as a hazard became VERIFIED, so colluding accounts could farm it.
+- An account with removed reports lost reputation but was never suspended.
+
+## What the backend does now
+
+| Defence | Behaviour | Setting |
+|---|---|---|
+| Suspension | After 3 of an account's reports are removed as false it can still read the map but cannot report, verify, dispute, vote or edit (403 `ACCOUNT_SUSPENDED`). Moderators can suspend and reinstate accounts with `POST /api/moderation/users/{id}/suspend` and `/unsuspend`. Staff accounts are never suspended. | `saferoute.trust.suspend-after-removals` (default 3, 0 = off) |
+| New-account limits | Accounts below the Regular tier (reputation under 10) may file 2 reports and cast 10 votes per hour, instead of 10 and 60. Staff are exempt. | `saferoute.rate-limit.limits.HAZARD_REPORT_NEW_ACCOUNT` and `CONFIRMATION_NEW_ACCOUNT` |
+| Delayed reputation | The +5 and +2 for a verified hazard are paid 24 hours later, and only if the hazard was not removed in the meantime. | `saferoute.trust.reputation-delay` (default PT24H, PT0S = old behaviour) |
+| Distinct sources | Each registration source (a keyed hash of the IP the account registered from, never the address) counts once per hazard, and the reporter's own source not at all. | `saferoute.trust.distinct-sources` (default **off**) |
+
+Not implemented: trust-weighted votes, per-device attestation (for example Apple App Attest), and
+changing the verification threshold. Distinct sources is off by default because people sharing an IP
+(campus Wi-Fi, mobile carriers) would be undercounted; turn it on where that is acceptable.
+
+## Findings
+
+1. **Three accounts on one IP were enough.** They fit inside the registration limit and could get about 500
+   fake hazards VERIFIED in a day while disputing nearly every real hazard they could reach. The numbers
+   show the attacker's capacity under the rate limits, not a likely behaviour, and the simulation does not
+   limit how many hazards a moderator can review.
+2. **The implemented defaults cut that by about 95 %** (504 to 24 fake hazards verified), and **with
+   distinct sources on, to zero**, with no change for honest users in this model (85 % of real hazards
+   verified within 6 h either way).
+3. **An attacker with several IPs is only partly stopped.** Against 3 IPs the defaults cut fake verified
+   hazards from 27,330 to 2,471 (about 91 %); turning on distinct sources adds nothing there, because each
+   puppet IP is a separate source. The remaining attack needs the proposals that are not built:
+   trust-weighted votes and device-bound accounts.
+4. **Raising the threshold mostly hurts honest users.** Threshold 5 cuts real hazards verified within 6 h
+   from 85 % to 27 %.
+5. **Honest crowd disputes do not rescue the map** once the attacker holds a few more accounts than the
+   honest voters who happen to pass by (section 3).
+6. **Everything together** (including the unbuilt trust-weighted votes) cut fake VERIFIED hazards from
+   27,330 to 150 for the 3-IP attacker, at a cost of real hazards verified within 6 h falling from 85 % to
+   74 % in the same setting.
+
+Side effects to know about: a genuine new user can now file only 2 reports an hour until they have two
+verified reports behind them (and verified reports pay 24 hours late), and a user whose reports were
+wrongly removed three times is locked out until a moderator reinstates them.
+
+## Limits of this analysis
+
+Moderators are modelled as reviewing every false hazard within a mean of 6 hours with 90 % detection
+regardless of volume. Attackers are assumed greedy, with prepared accounts and no GPS spoofing needed
+(the API has no location check anyway). The simulation's suspension covers only reports that moderators
+remove; it does not model account recovery or appeals.
+
+---
+
+
+Generated by `benchmark/adversarial/sybil.mjs`. Honest behaviour, moderator speed and tier mix are assumptions (see the header of that file). The attack window is 24 simulated hours; "fake" hazards are filed by sock-puppet accounts.
+
+## Results 1. Today’s rules against attackers of different size
+
+| Attacker | Accounts used | Fake hazards filed | Fake hazards VERIFIED | Fake hazard-hours on map | Real hazards disputed | Real hazards verified within 6 h |
+|---|---|---|---|---|---|---|
+| none | 0 | 0 | 0 | 0 | 0 % | 85 % |
+| 3 accounts (1 IP, 1 h) | 3 | 504 | 504 | 4544 | 99 % | 69 % |
+| 1 IP, 6 h prep | 161 | 9042 | 9042 | 80059 | 100 % | 70 % |
+| 3 IPs, 6 h prep | 485 | 27330 | 27330 | 240342 | 99 % | 70 % |
+| 10 IPs, 6 h prep | 500 | 72317 | 72317 | 645434 | 99 % | 65 % |
+
+## 2. Defences against an attacker with 3 accounts on 1 IP
+
+| Defence | Fake VERIFIED | Fake hazard-hours | Accounts suspended | Real disputed | Real verified within 6 h | Same defence, no attacker: verified within 6 h | Real time to verify, median (h) |
+|---|---|---|---|---|---|---|---|
+| current | 504 | 4544 | 0 | 99 % | 69 % | 85 % | 4.36 |
+| threshold 3 | 67 | 795 | 0 | 99 % | 69 % | 70 % | 4.39 |
+| threshold 5 | 3 | 32 | 0 | 99 % | 27 % | 27 % | 7.11 |
+| trust-weighted votes | 40 | 472 | 0 | 0 % | 75 % | 74 % | 3.79 |
+| trust-weighted + delayed rep | 40 | 472 | 0 | 0 % | 75 % | 74 % | 3.79 |
+| suspend after 2 removals | 32 | 328 | 3 | 11 % | 85 % | 85 % | 2.78 |
+| distinct-IP votes | 0 | 0 | 0 | 0 % | 85 % | 85 % | 2.84 |
+| new-account caps | 289 | 2788 | 0 | 96 % | 71 % | 85 % | 4.39 |
+| new-account caps + delayed rep | 144 | 1301 | 0 | 98 % | 74 % | 85 % | 4.36 |
+| implemented (default settings) | 24 | 238 | 3 | 16 % | 83 % | 85 % | 3.15 |
+| implemented + distinct sources | 0 | 0 | 0 | 0 % | 85 % | 85 % | 2.84 |
+| all of the above | 0 | 0 | 0 | 0 % | 74 % | 74 % | 3.93 |
+
+## 2. Defences against an attacker with 3 IPs
+
+| Defence | Fake VERIFIED | Fake hazard-hours | Accounts suspended | Real disputed | Real verified within 6 h | Same defence, no attacker: verified within 6 h | Real time to verify, median (h) |
+|---|---|---|---|---|---|---|---|
+| current | 27330 | 240342 | 0 | 99 % | 70 % | 85 % | 4.19 |
+| threshold 3 | 27330 | 240342 | 0 | 99 % | 70 % | 70 % | 4.19 |
+| threshold 5 | 27330 | 240342 | 0 | 99 % | 28 % | 27 % | 7.21 |
+| trust-weighted votes | 27330 | 240342 | 0 | 99 % | 66 % | 74 % | 4.53 |
+| trust-weighted + delayed rep | 27330 | 240342 | 0 | 99 % | 68 % | 74 % | 4.54 |
+| suspend after 2 removals | 3786 | 35261 | 269 | 99 % | 70 % | 85 % | 4.53 |
+| distinct-IP votes | 27330 | 240342 | 0 | 99 % | 70 % | 85 % | 4.19 |
+| new-account caps | 16249 | 144582 | 0 | 99 % | 70 % | 85 % | 4.41 |
+| new-account caps + delayed rep | 7920 | 69619 | 0 | 99 % | 65 % | 85 % | 4.53 |
+| implemented (default settings) | 2471 | 22834 | 259 | 99 % | 70 % | 85 % | 4.50 |
+| implemented + distinct sources | 2471 | 22834 | 259 | 99 % | 70 % | 85 % | 4.50 |
+| all of the above | 150 | 1721 | 266 | 0 % | 80 % | 74 % | 3.55 |
+
+No attacker, current rules: real hazards verified within 6 h 85 %, median time to verify 2.84 h, real hazards disputed 0 %.
+
+## 3. Sensitivity to the assumption about honest users noticing fakes
+
+Same 3-IP attacker, current rules. `fakeDisputeRate` is how many honest users per hour dispute a fake they walk past.
+
+| Honest disputes per hour | Fake VERIFIED | Fake hazard-hours |
+|---|---|---|
+| 0 | 27330 | 241114 |
+| 0.1 | 27330 | 240342 |
+| 0.4 | 27330 | 240744 |
+| 1 | 27330 | 239491 |

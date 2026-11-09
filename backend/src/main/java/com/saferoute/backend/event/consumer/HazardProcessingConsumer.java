@@ -15,6 +15,7 @@ import com.saferoute.backend.spatial.HazardClassifier;
 import com.saferoute.backend.submission.HazardSubmission;
 import com.saferoute.backend.submission.HazardSubmissionRepository;
 import com.saferoute.backend.submission.SubmissionStatus;
+import com.saferoute.backend.user.AccountStatusService;
 import com.saferoute.backend.user.ReputationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,6 +71,8 @@ public class HazardProcessingConsumer {
     private final JdbcTemplate jdbc;
     private final double duplicateRadiusMeters;
     private final int resolutionThreshold;
+    private final AccountStatusService accountStatus;
+    private boolean distinctSources; // not final: TrustHardeningIntegrationTest switches it on the shared context
 
     public HazardProcessingConsumer(HazardRepository hazardRepository,
                                     HazardSubmissionRepository submissionRepository,
@@ -85,7 +88,9 @@ public class HazardProcessingConsumer {
                                     SafeRouteMetrics metrics,
                                     JdbcTemplate jdbc,
                                     @Value("${saferoute.hazard.duplicate-radius-meters}") double duplicateRadiusMeters,
-                                    @Value("${saferoute.hazard.resolution-threshold}") int resolutionThreshold) {
+                                    @Value("${saferoute.hazard.resolution-threshold}") int resolutionThreshold,
+                                    AccountStatusService accountStatus,
+                                    @Value("${saferoute.trust.distinct-sources:false}") boolean distinctSources) {
         this.hazardRepository = hazardRepository;
         this.submissionRepository = submissionRepository;
         this.confirmationRepository = confirmationRepository;
@@ -101,6 +106,8 @@ public class HazardProcessingConsumer {
         this.jdbc = jdbc;
         this.duplicateRadiusMeters = duplicateRadiusMeters;
         this.resolutionThreshold = resolutionThreshold;
+        this.accountStatus = accountStatus;
+        this.distinctSources = distinctSources;
     }
 
     // ------------------------------------------------------------------ hazard_reported
@@ -206,6 +213,10 @@ public class HazardProcessingConsumer {
                 log.warn("Ignoring self-confirmation on hazard {}", hazard.getId());
                 return;
             }
+            if (accountStatus.isSuspended(event.verifierUserId())) {
+                log.warn("Ignoring opinion from suspended user {} on hazard {}", event.verifierUserId(), hazard.getId());
+                return;
+            }
             if (upsertConfirmation(hazard, event.verifierUserId(), event.action(), Instant.now()) == OpinionUpdate.REPEATED) {
                 // Same opinion again: a VERIFY is a fresh sighting (already applied to expiry above),
                 // but it is not another vote and earns nothing.
@@ -227,6 +238,10 @@ public class HazardProcessingConsumer {
             if (!firstDelivery(event.metadata())) return;
             Hazard hazard = lockActiveHazard(event.hazardId(), event.hazardRevision());
             if (hazard == null) return;
+            if (accountStatus.isSuspended(event.userId())) {
+                log.warn("Ignoring resolution vote from suspended user {}", event.userId());
+                return;
+            }
 
             ResolutionVote vote = resolutionVoteRepository.findByHazardIdAndUserId(hazard.getId(), event.userId())
                     .orElseGet(() -> ResolutionVote.builder().hazardId(hazard.getId()).userId(event.userId()).build());
@@ -328,9 +343,19 @@ public class HazardProcessingConsumer {
         return OpinionUpdate.CHANGED;
     }
 
+    /**
+     * With {@code saferoute.trust.distinct-sources} each registration source (IP) counts once, and the reporter's own
+     * source not at all, so one person with several accounts on one connection is one voice.
+     */
+    private long countOpinions(Hazard hazard, ConfirmationAction action) {
+        return distinctSources
+                ? confirmationRepository.countIndependent(hazard.getId(), action.name())
+                : confirmationRepository.countByHazardIdAndAction(hazard.getId(), action);
+    }
+
     private HazardChange recountAndEvaluate(Hazard hazard, UUID actorId, String note, HazardChange noStatusChange) {
-        int verifies = (int) confirmationRepository.countByHazardIdAndAction(hazard.getId(), ConfirmationAction.VERIFY);
-        int disputes = (int) confirmationRepository.countByHazardIdAndAction(hazard.getId(), ConfirmationAction.DISPUTE);
+        int verifies = (int) countOpinions(hazard, ConfirmationAction.VERIFY);
+        int disputes = (int) countOpinions(hazard, ConfirmationAction.DISPUTE);
         hazard.setConfirmationCount(verifies);
         hazard.setDisputeCount(disputes);
 

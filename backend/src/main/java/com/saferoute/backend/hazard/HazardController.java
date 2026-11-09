@@ -7,6 +7,7 @@ import com.saferoute.backend.delivery.ConditionalResponses;
 import com.saferoute.backend.hazard.dto.*;
 import com.saferoute.backend.ratelimit.RateLimitPolicy;
 import com.saferoute.backend.ratelimit.RateLimitService;
+import com.saferoute.backend.user.AccountStatusService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -34,11 +35,14 @@ public class HazardController {
     private final HazardService hazardService;
     private final RateLimitService rateLimitService;
     private final ObjectMapper objectMapper;
+    private final AccountStatusService accountStatus;
 
-    public HazardController(HazardService hazardService, RateLimitService rateLimitService, ObjectMapper objectMapper) {
+    public HazardController(HazardService hazardService, RateLimitService rateLimitService, ObjectMapper objectMapper,
+                            AccountStatusService accountStatus) {
         this.hazardService = hazardService;
         this.rateLimitService = rateLimitService;
         this.objectMapper = objectMapper;
+        this.accountStatus = accountStatus;
     }
 
     @GetMapping("/nearby")
@@ -100,13 +104,14 @@ public class HazardController {
     @PutMapping("/{id}/confirmation")
     @Operation(summary = "Set your opinion (upsert): VERIFY or DISPUTE",
             description = "One opinion per user per hazard; sending the other action changes it. Asynchronous (202): "
-                    + "the new counts/status arrive as a hazard_* WebSocket frame. 60 per hour per user.")
+                    + "the new counts/status arrive as a hazard_* WebSocket frame. 60 per hour per user, 10 until the account "
+                    + "reaches the Regular tier. Suspended accounts get 403 ACCOUNT_SUSPENDED.")
     @ApiResponse(responseCode = "202", description = "Queued")
     @ApiResponse(responseCode = "409", description = "SELF_CONFIRMATION_NOT_ALLOWED or HAZARD_NOT_ACTIVE")
     public ResponseEntity<CommandAccepted> setConfirmation(@PathVariable UUID id,
                                                            @Valid @RequestBody ConfirmationRequest request,
                                                            @AuthenticationPrincipal AuthenticatedUser principal) {
-        rateLimitService.consume(RateLimitPolicy.CONFIRMATION, principal.id().toString());
+        rateLimitService.consume(accountStatus.admitConfirmation(principal), principal.id().toString());
         return ResponseEntity.accepted().body(hazardService.setConfirmation(id, principal.id(), request.action()));
     }
 
@@ -117,6 +122,7 @@ public class HazardController {
     public ResponseEntity<CommandAccepted> resolutionVote(@PathVariable UUID id,
                                                           @Valid @RequestBody ResolutionVoteRequest request,
                                                           @AuthenticationPrincipal AuthenticatedUser principal) {
+        accountStatus.requireActive(principal.id());
         rateLimitService.consume(RateLimitPolicy.RESOLUTION, principal.id().toString());
         return ResponseEntity.accepted().body(hazardService.requestResolution(id, principal.id(), request.action()));
     }
@@ -128,6 +134,7 @@ public class HazardController {
     public HazardResponse update(@PathVariable UUID id,
                                  @Valid @RequestBody UpdateHazardRequest request,
                                  @AuthenticationPrincipal AuthenticatedUser principal) {
+        if (!principal.canModerate()) accountStatus.requireActive(principal.id());
         return hazardService.update(id, principal, request);
     }
 

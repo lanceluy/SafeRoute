@@ -77,6 +77,10 @@ public class Hazard {
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
+    /** When the reporter's and confirmers' reputation for verifying this hazard may be paid (null until verified). */
+    @Column(name = "reward_due_at")
+    private Instant rewardDueAt;
+
     @Column(name = "reporter_rewarded", nullable = false)
     @Builder.Default
     private boolean reporterRewarded = false;

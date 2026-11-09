@@ -113,4 +113,14 @@ public interface HazardRepository extends JpaRepository<Hazard, UUID> {
     List<Hazard> findByIdIn(Collection<UUID> ids);
 
     long countByReporterIdAndReporterRewardedTrue(UUID reporterId);
+
+    /** Verified hazards whose reputation reward has come due and not yet been paid. */
+    @Query(value = """
+        SELECT id FROM hazards
+        WHERE status IN ('VERIFIED', 'RESOLVED', 'EXPIRED') AND reporter_rewarded = false
+          AND reward_due_at IS NOT NULL AND reward_due_at <= :now
+        ORDER BY reward_due_at
+        LIMIT :limit
+        """, nativeQuery = true)
+    List<UUID> findRewardDueIds(@Param("now") Instant now, @Param("limit") int limit);
 }

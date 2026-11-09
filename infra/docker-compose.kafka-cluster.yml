@@ -1,0 +1,59 @@
+# Three-broker Kafka (KRaft) cluster for the multi-broker benchmark. Replaces the single `kafka`
+# service of docker-compose.yml (stop that one first; both use host port 9092):
+#
+#   docker compose -f infra/docker-compose.yml up -d postgres
+#   docker compose -f infra/docker-compose.kafka-cluster.yml up -d
+#   export KAFKA_BOOTSTRAP_SERVERS=localhost:9092,localhost:9093,localhost:9094
+#   export SAFEROUTE_KAFKA_PARTITIONS=6 SAFEROUTE_KAFKA_REPLICATION_FACTOR=3
+#   benchmark/scripts/start-instances.sh 3
+#
+# min.insync.replicas=2 with acks=all (the producer's setting) means a write survives one broker
+# loss. Brokers share one container host here, so this shows replication/partition overhead and
+# failover behaviour, not network-level scaling.
+name: css123pproj-kafka-cluster
+
+x-kafka-common: &kafka-common
+  image: apache/kafka:3.8.0
+  environment: &kafka-env
+    CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+    KAFKA_PROCESS_ROLES: broker,controller
+    KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:29093,2@kafka-2:29093,3@kafka-3:29093
+    KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+    KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+    KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+    KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+    KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+    KAFKA_MIN_INSYNC_REPLICAS: 2
+    KAFKA_NUM_PARTITIONS: 6
+    KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+services:
+  kafka-1:
+    <<: *kafka-common
+    container_name: saferoute-kafka-1
+    ports: ["9092:9092"]
+    environment:
+      <<: *kafka-env
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:29092,EXTERNAL://localhost:9092
+  kafka-2:
+    <<: *kafka-common
+    container_name: saferoute-kafka-2
+    ports: ["9093:9093"]
+    environment:
+      <<: *kafka-env
+      KAFKA_NODE_ID: 2
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,EXTERNAL://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:29092,EXTERNAL://localhost:9093
+  kafka-3:
+    <<: *kafka-common
+    container_name: saferoute-kafka-3
+    ports: ["9094:9094"]
+    environment:
+      <<: *kafka-env
+      KAFKA_NODE_ID: 3
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,EXTERNAL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:29092,EXTERNAL://localhost:9094

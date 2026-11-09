@@ -7,7 +7,10 @@ public enum RateLimitPolicy {
     HAZARD_REPORT("hazard reports"),
     CONFIRMATION("verifications/disputes"),
     RESOLUTION("resolution requests"),
-    IMAGE_UPLOAD("image uploads");
+    IMAGE_UPLOAD("image uploads"),
+    /** Accounts below the Regular reputation tier: see AccountStatusService. */
+    HAZARD_REPORT_NEW_ACCOUNT("hazard reports from new accounts"),
+    CONFIRMATION_NEW_ACCOUNT("verifications/disputes from new accounts");
 
     private final String description;
 

@@ -1,0 +1,17 @@
+# Stack on top of the benchmark profile: SPRING_PROFILES_ACTIVE=benchmark,benchmark-ratelimit
+#
+# The plain benchmark profile switches rate limiting off, so results exclude the cost of the
+# limiter (one bucket4j lookup per limited request). This profile turns the SAME limiter code path
+# back on but with capacities high enough that synthetic load is never throttled, so the
+# measurement includes the limiter's overhead without the limiter rejecting the experiment.
+# Production limits are in RateLimitProperties; benchmark them only for what they would block.
+saferoute:
+  rate-limit:
+    enabled: true
+    limits:
+      LOGIN_FAILURE: { capacity: 1000000, period: PT1H }
+      REGISTER: { capacity: 1000000, period: PT1H }
+      HAZARD_REPORT: { capacity: 1000000, period: PT1H }
+      CONFIRMATION: { capacity: 1000000, period: PT1H }
+      RESOLUTION: { capacity: 1000000, period: PT1H }
+      IMAGE_UPLOAD: { capacity: 1000000, period: PT1H }

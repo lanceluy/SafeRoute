@@ -29,7 +29,7 @@ public class AuthController {
     @Operation(summary = "Create an account", description = "Limited to 3 registrations per hour per IP (429 afterwards).")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
         rateLimitService.consume(RateLimitPolicy.REGISTER, http.getRemoteAddr());
-        return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request, http.getRemoteAddr()));
     }
 
     @PostMapping("/login")

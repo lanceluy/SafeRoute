@@ -10,6 +10,7 @@ import com.saferoute.backend.moderation.dto.MunicipalResponseRequest;
 import com.saferoute.backend.moderation.dto.ReviewRequest;
 import com.saferoute.backend.moderation.dto.StaffAccountRequest;
 import com.saferoute.backend.moderation.dto.StaffMember;
+import com.saferoute.backend.user.AccountStatusService;
 import com.saferoute.backend.moderation.dto.SavedViewRequest;
 import com.saferoute.backend.moderation.dto.SavedViewResponse;
 import jakarta.validation.Valid;
@@ -37,13 +38,36 @@ public class ModerationController {
     private final MunicipalResponseService responses;
     private final SavedViewService savedViews;
     private final StaffAccountService staff;
+    private final AccountStatusService accountStatus;
 
     public ModerationController(ModerationQueryService queries, MunicipalResponseService responses,
-                                SavedViewService savedViews, StaffAccountService staff) {
+                                SavedViewService savedViews, StaffAccountService staff,
+                                AccountStatusService accountStatus) {
         this.queries = queries;
         this.responses = responses;
         this.savedViews = savedViews;
         this.staff = staff;
+        this.accountStatus = accountStatus;
+    }
+
+    public record SuspendRequest(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 300) String reason) {
+    }
+
+    @PostMapping("/users/{id}/suspend")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Suspend a user from contributing",
+            description = "They can still read the map but cannot report, verify, dispute or vote. Accounts are also suspended "
+                    + "automatically after repeated reports removed as false. Staff accounts cannot be suspended.")
+    public void suspend(@PathVariable UUID id, @Valid @RequestBody SuspendRequest request,
+                        @AuthenticationPrincipal AuthenticatedUser principal) {
+        accountStatus.suspend(id, request.reason(), principal.id());
+    }
+
+    @PostMapping("/users/{id}/unsuspend")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Reinstate a suspended user")
+    public void unsuspend(@PathVariable UUID id, @AuthenticationPrincipal AuthenticatedUser principal) {
+        accountStatus.unsuspend(id, principal.id());
     }
 
     @GetMapping("/staff")

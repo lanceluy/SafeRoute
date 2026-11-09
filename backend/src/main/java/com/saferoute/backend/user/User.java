@@ -45,6 +45,21 @@ public class User {
     @Builder.Default
     private Instant createdAt = Instant.now();
 
+    /** Set when reports from this account were removed as false; blocks contributing, not reading. */
+    @Column(name = "suspended_at")
+    private Instant suspendedAt;
+
+    @Column(name = "suspension_reason", length = 300)
+    private String suspensionReason;
+
+    /** Keyed hash of the IP the account registered from. Never the address itself. */
+    @Column(name = "registration_source", length = 64)
+    private String registrationSource;
+
+    public boolean isSuspended() {
+        return suspendedAt != null;
+    }
+
     public TrustLevel trustLevel() {
         return TrustLevel.fromScore(reputationScore);
     }
