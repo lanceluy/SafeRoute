@@ -1,0 +1,143 @@
+{
+  "scenario": "delivery_mechanisms_many_clients",
+  "at": "2026-11-11T03:15:52.186Z",
+  "revision": "eac9e3cb053f31275e816fe802519c672e4c9f2c",
+  "config": {
+    "clientsPerMechanism": 20,
+    "events": 30,
+    "meanGapMs": 2000
+  },
+  "submissions": {
+    "sent": 30,
+    "created": 30
+  },
+  "mechanisms": {
+    "websocket": {
+      "latencyMs": {
+        "n": 600,
+        "avg": 36.2,
+        "median": 34.9,
+        "p95": 52.2,
+        "p99": 56.8,
+        "max": 56.9
+      },
+      "detected": 600,
+      "missed": 0,
+      "httpRequests": 0,
+      "requestsPerClient": 0,
+      "responseBytes": 0,
+      "bytesPerClient": 0,
+      "notModifiedShare": 0,
+      "errors": 0
+    },
+    "sse": {
+      "latencyMs": {
+        "n": 600,
+        "avg": 27.7,
+        "median": 26.9,
+        "p95": 42.9,
+        "p99": 50.3,
+        "max": 50.9
+      },
+      "detected": 600,
+      "missed": 0,
+      "httpRequests": 20,
+      "requestsPerClient": 1,
+      "responseBytes": 232780,
+      "bytesPerClient": 11639,
+      "notModifiedShare": 0,
+      "errors": 0
+    },
+    "longpoll": {
+      "latencyMs": {
+        "n": 600,
+        "avg": 32.5,
+        "median": 32,
+        "p95": 48.5,
+        "p99": 53.9,
+        "max": 54.8
+      },
+      "detected": 600,
+      "missed": 0,
+      "httpRequests": 640,
+      "requestsPerClient": 32,
+      "responseBytes": 256820,
+      "bytesPerClient": 12841,
+      "notModifiedShare": 0,
+      "errors": 0
+    },
+    "poll-1s": {
+      "latencyMs": {
+        "n": 600,
+        "avg": 555.6,
+        "median": 581.2,
+        "p95": 996.7,
+        "p99": 1021.4,
+        "max": 1065.8
+      },
+      "detected": 600,
+      "missed": 0,
+      "httpRequests": 1357,
+      "requestsPerClient": 67.8,
+      "responseBytes": 14023275,
+      "bytesPerClient": 701164,
+      "notModifiedShare": 0,
+      "errors": 0
+    },
+    "poll-3s": {
+      "latencyMs": {
+        "n": 600,
+        "avg": 1516.3,
+        "median": 1500.9,
+        "p95": 2888.6,
+        "p99": 3000.9,
+        "max": 3033
+      },
+      "detected": 600,
+      "missed": 0,
+      "httpRequests": 453,
+      "requestsPerClient": 22.6,
+      "responseBytes": 4701390,
+      "bytesPerClient": 235070,
+      "notModifiedShare": 0,
+      "errors": 0
+    },
+    "etag-1s": {
+      "latencyMs": {
+        "n": 600,
+        "avg": 503.4,
+        "median": 494.2,
+        "p95": 972.5,
+        "p99": 1016.3,
+        "max": 1066.1
+      },
+      "detected": 600,
+      "missed": 0,
+      "httpRequests": 1358,
+      "requestsPerClient": 67.9,
+      "responseBytes": 6115920,
+      "bytesPerClient": 305796,
+      "notModifiedShare": 0.543,
+      "errors": 0
+    },
+    "etag-3s": {
+      "latencyMs": {
+        "n": 600,
+        "avg": 1534.2,
+        "median": 1575.9,
+        "p95": 2851.1,
+        "p99": 2995.2,
+        "max": 3025.9
+      },
+      "detected": 600,
+      "missed": 0,
+      "httpRequests": 453,
+      "requestsPerClient": 22.6,
+      "responseBytes": 4051676,
+      "bytesPerClient": 202584,
+      "notModifiedShare": 0.082,
+      "errors": 0
+    }
+  }
+}
+Saved /work/benchmark/results/delivery-mechanisms-1794366952265.json

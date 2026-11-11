@@ -1,0 +1,5 @@
+Revision: eac9e3cb053f31275e816fe802519c672e4c9f2c
+Backend image: sha256:d226d489620aab7be07b3bb7f4508896db47df5e86fd4a94de8be0752e47b165
+Benchmark client image: sha256:7702d8aa4d5910871692af4480eb3ba86f23047a6417a44d857d06c95d060d3f
+Topology: one backend and one broker on this Mac, Node client on the same Docker network
+Started UTC: 2026-11-11T03:13:51Z

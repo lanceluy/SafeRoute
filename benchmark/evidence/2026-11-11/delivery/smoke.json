@@ -1,0 +1,415 @@
+{
+  "scenario": "delivery_mechanisms_many_clients",
+  "at": "2026-11-11T03:14:23.136Z",
+  "revision": "eac9e3cb053f31275e816fe802519c672e4c9f2c",
+  "config": {
+    "clientsPerMechanism": 2,
+    "events": 3,
+    "meanGapMs": 2000
+  },
+  "submissions": {
+    "sent": 3,
+    "created": 3
+  },
+  "mechanisms": {
+    "websocket": {
+      "latencyMs": {
+        "n": 6,
+        "avg": 36.5,
+        "median": 28,
+        "p95": 67.5,
+        "p99": 67.5,
+        "max": 67.5
+      },
+      "detected": 6,
+      "missed": 0,
+      "httpRequests": 0,
+      "requestsPerClient": 0,
+      "responseBytes": 0,
+      "bytesPerClient": 0,
+      "notModifiedShare": 0,
+      "errors": 0
+    },
+    "sse": {
+      "latencyMs": {
+        "n": 6,
+        "avg": 34.6,
+        "median": 26.8,
+        "p95": 63.7,
+        "p99": 63.7,
+        "max": 63.7
+      },
+      "detected": 6,
+      "missed": 0,
+      "httpRequests": 2,
+      "requestsPerClient": 1,
+      "responseBytes": 2352,
+      "bytesPerClient": 1176,
+      "notModifiedShare": 0,
+      "errors": 0
+    },
+    "longpoll": {
+      "latencyMs": {
+        "n": 6,
+        "avg": 36.5,
+        "median": 28.8,
+        "p95": 66,
+        "p99": 66,
+        "max": 66
+      },
+      "detected": 6,
+      "missed": 0,
+      "httpRequests": 10,
+      "requestsPerClient": 5,
+      "responseBytes": 2758,
+      "bytesPerClient": 1379,
+      "notModifiedShare": 0,
+      "errors": 0
+    },
+    "poll-1s": {
+      "latencyMs": {
+        "n": 6,
+        "avg": 691.3,
+        "median": 654,
+        "p95": 907.8,
+        "p99": 907.8,
+        "max": 907.8
+      },
+      "detected": 6,
+      "missed": 0,
+      "httpRequests": 26,
+      "requestsPerClient": 13,
+      "responseBytes": 34246,
+      "bytesPerClient": 17123,
+      "notModifiedShare": 0,
+      "errors": 0
+    },
+    "poll-3s": {
+      "latencyMs": {
+        "n": 6,
+        "avg": 1926.5,
+        "median": 1785,
+        "p95": 3011,
+        "p99": 3011,
+        "max": 3011
+      },
+      "detected": 6,
+      "missed": 0,
+      "httpRequests": 9,
+      "requestsPerClient": 4.5,
+      "responseBytes": 11197,
+      "bytesPerClient": 5599,
+      "notModifiedShare": 0,
+      "errors": 0
+    },
+    "etag-1s": {
+      "latencyMs": {
+        "n": 6,
+        "avg": 482.6,
+        "median": 446.7,
+        "p95": 943.8,
+        "p99": 943.8,
+        "max": 943.8
+      },
+      "detected": 6,
+      "missed": 0,
+      "httpRequests": 25,
+      "requestsPerClient": 12.5,
+      "responseBytes": 7906,
+      "bytesPerClient": 3953,
+      "notModifiedShare": 0.68,
+      "errors": 0
+    },
+    "etag-3s": {
+      "latencyMs": {
+        "n": 6,
+        "avg": 1718.3,
+        "median": 1931.4,
+        "p95": 2813.9,
+        "p99": 2813.9,
+        "max": 2813.9
+      },
+      "detected": 6,
+      "missed": 0,
+      "httpRequests": 8,
+      "requestsPerClient": 4,
+      "responseBytes": 5930,
+      "bytesPerClient": 2965,
+      "notModifiedShare": 0.25,
+      "errors": 0
+    }
+  },
+  "raw": {
+    "submissions": [
+      {
+        "submissionId": "68649f1e-600c-48c6-97c7-579daf4c6889",
+        "sentAt": 1794366834134.2979,
+        "hazardId": "1214b1eb-84c9-483f-88a0-9eb953693506"
+      },
+      {
+        "submissionId": "152f66d1-5eda-4554-8117-44b6c0744a6f",
+        "sentAt": 1794366836820.6333,
+        "hazardId": "423598c3-7c98-4020-8294-f2273c5727ed"
+      },
+      {
+        "submissionId": "01d2b0dd-49cf-45a3-9e91-00045f09cea6",
+        "sentAt": 1794366837915.4797,
+        "hazardId": "9bc9fd20-5056-40ee-a31f-b574c27250b9"
+      }
+    ],
+    "observations": [
+      {
+        "mechanism": "sse",
+        "client": 0,
+        "hazardId": "1214b1eb-84c9-483f-88a0-9eb953693506",
+        "at": 1794366834197.6748
+      },
+      {
+        "mechanism": "sse",
+        "client": 1,
+        "hazardId": "1214b1eb-84c9-483f-88a0-9eb953693506",
+        "at": 1794366834197.9768
+      },
+      {
+        "mechanism": "longpoll",
+        "client": 0,
+        "hazardId": "1214b1eb-84c9-483f-88a0-9eb953693506",
+        "at": 1794366834199.98
+      },
+      {
+        "mechanism": "longpoll",
+        "client": 1,
+        "hazardId": "1214b1eb-84c9-483f-88a0-9eb953693506",
+        "at": 1794366834200.324
+      },
+      {
+        "mechanism": "websocket",
+        "client": 1,
+        "hazardId": "1214b1eb-84c9-483f-88a0-9eb953693506",
+        "at": 1794366834201.7666
+      },
+      {
+        "mechanism": "websocket",
+        "client": 0,
+        "hazardId": "1214b1eb-84c9-483f-88a0-9eb953693506",
+        "at": 1794366834201.813
+      },
+      {
+        "mechanism": "etag-1s",
+        "client": 1,
+        "hazardId": "1214b1eb-84c9-483f-88a0-9eb953693506",
+        "at": 1794366834349.2402
+      },
+      {
+        "mechanism": "poll-1s",
+        "client": 0,
+        "hazardId": "1214b1eb-84c9-483f-88a0-9eb953693506",
+        "at": 1794366834556.258
+      },
+      {
+        "mechanism": "poll-1s",
+        "client": 1,
+        "hazardId": "1214b1eb-84c9-483f-88a0-9eb953693506",
+        "at": 1794366834734.4456
+      },
+      {
+        "mechanism": "etag-1s",
+        "client": 0,
+        "hazardId": "1214b1eb-84c9-483f-88a0-9eb953693506",
+        "at": 1794366834857.165
+      },
+      {
+        "mechanism": "poll-3s",
+        "client": 0,
+        "hazardId": "1214b1eb-84c9-483f-88a0-9eb953693506",
+        "at": 1794366835600.1484
+      },
+      {
+        "mechanism": "etag-3s",
+        "client": 0,
+        "hazardId": "1214b1eb-84c9-483f-88a0-9eb953693506",
+        "at": 1794366836065.6628
+      },
+      {
+        "mechanism": "poll-3s",
+        "client": 1,
+        "hazardId": "1214b1eb-84c9-483f-88a0-9eb953693506",
+        "at": 1794366836825.0254
+      },
+      {
+        "mechanism": "sse",
+        "client": 0,
+        "hazardId": "423598c3-7c98-4020-8294-f2273c5727ed",
+        "at": 1794366836847.4824
+      },
+      {
+        "mechanism": "sse",
+        "client": 1,
+        "hazardId": "423598c3-7c98-4020-8294-f2273c5727ed",
+        "at": 1794366836847.645
+      },
+      {
+        "mechanism": "websocket",
+        "client": 1,
+        "hazardId": "423598c3-7c98-4020-8294-f2273c5727ed",
+        "at": 1794366836848.6626
+      },
+      {
+        "mechanism": "websocket",
+        "client": 0,
+        "hazardId": "423598c3-7c98-4020-8294-f2273c5727ed",
+        "at": 1794366836848.833
+      },
+      {
+        "mechanism": "longpoll",
+        "client": 1,
+        "hazardId": "423598c3-7c98-4020-8294-f2273c5727ed",
+        "at": 1794366836849.3833
+      },
+      {
+        "mechanism": "longpoll",
+        "client": 0,
+        "hazardId": "423598c3-7c98-4020-8294-f2273c5727ed",
+        "at": 1794366836850.2021
+      },
+      {
+        "mechanism": "etag-1s",
+        "client": 0,
+        "hazardId": "423598c3-7c98-4020-8294-f2273c5727ed",
+        "at": 1794366836851.1606
+      },
+      {
+        "mechanism": "etag-3s",
+        "client": 1,
+        "hazardId": "423598c3-7c98-4020-8294-f2273c5727ed",
+        "at": 1794366836948.158
+      },
+      {
+        "mechanism": "etag-3s",
+        "client": 1,
+        "hazardId": "1214b1eb-84c9-483f-88a0-9eb953693506",
+        "at": 1794366836948.158
+      },
+      {
+        "mechanism": "etag-1s",
+        "client": 1,
+        "hazardId": "423598c3-7c98-4020-8294-f2273c5727ed",
+        "at": 1794366837357.3486
+      },
+      {
+        "mechanism": "poll-1s",
+        "client": 0,
+        "hazardId": "423598c3-7c98-4020-8294-f2273c5727ed",
+        "at": 1794366837563.7712
+      },
+      {
+        "mechanism": "poll-1s",
+        "client": 1,
+        "hazardId": "423598c3-7c98-4020-8294-f2273c5727ed",
+        "at": 1794366837728.4517
+      },
+      {
+        "mechanism": "sse",
+        "client": 0,
+        "hazardId": "9bc9fd20-5056-40ee-a31f-b574c27250b9",
+        "at": 1794366837928.6638
+      },
+      {
+        "mechanism": "sse",
+        "client": 1,
+        "hazardId": "9bc9fd20-5056-40ee-a31f-b574c27250b9",
+        "at": 1794366837928.7727
+      },
+      {
+        "mechanism": "websocket",
+        "client": 1,
+        "hazardId": "9bc9fd20-5056-40ee-a31f-b574c27250b9",
+        "at": 1794366837929.402
+      },
+      {
+        "mechanism": "websocket",
+        "client": 0,
+        "hazardId": "9bc9fd20-5056-40ee-a31f-b574c27250b9",
+        "at": 1794366837929.4414
+      },
+      {
+        "mechanism": "longpoll",
+        "client": 0,
+        "hazardId": "9bc9fd20-5056-40ee-a31f-b574c27250b9",
+        "at": 1794366837929.744
+      },
+      {
+        "mechanism": "longpoll",
+        "client": 1,
+        "hazardId": "9bc9fd20-5056-40ee-a31f-b574c27250b9",
+        "at": 1794366837930.0837
+      },
+      {
+        "mechanism": "etag-1s",
+        "client": 1,
+        "hazardId": "9bc9fd20-5056-40ee-a31f-b574c27250b9",
+        "at": 1794366838362.191
+      },
+      {
+        "mechanism": "poll-1s",
+        "client": 0,
+        "hazardId": "9bc9fd20-5056-40ee-a31f-b574c27250b9",
+        "at": 1794366838569.5095
+      },
+      {
+        "mechanism": "poll-3s",
+        "client": 0,
+        "hazardId": "9bc9fd20-5056-40ee-a31f-b574c27250b9",
+        "at": 1794366838605.5972
+      },
+      {
+        "mechanism": "poll-3s",
+        "client": 0,
+        "hazardId": "423598c3-7c98-4020-8294-f2273c5727ed",
+        "at": 1794366838605.5972
+      },
+      {
+        "mechanism": "poll-1s",
+        "client": 1,
+        "hazardId": "9bc9fd20-5056-40ee-a31f-b574c27250b9",
+        "at": 1794366838735.9421
+      },
+      {
+        "mechanism": "etag-1s",
+        "client": 0,
+        "hazardId": "9bc9fd20-5056-40ee-a31f-b574c27250b9",
+        "at": 1794366838859.3008
+      },
+      {
+        "mechanism": "etag-3s",
+        "client": 0,
+        "hazardId": "9bc9fd20-5056-40ee-a31f-b574c27250b9",
+        "at": 1794366839067.2834
+      },
+      {
+        "mechanism": "etag-3s",
+        "client": 0,
+        "hazardId": "423598c3-7c98-4020-8294-f2273c5727ed",
+        "at": 1794366839067.2834
+      },
+      {
+        "mechanism": "poll-3s",
+        "client": 1,
+        "hazardId": "9bc9fd20-5056-40ee-a31f-b574c27250b9",
+        "at": 1794366839831.6135
+      },
+      {
+        "mechanism": "poll-3s",
+        "client": 1,
+        "hazardId": "423598c3-7c98-4020-8294-f2273c5727ed",
+        "at": 1794366839831.6135
+      },
+      {
+        "mechanism": "etag-3s",
+        "client": 1,
+        "hazardId": "9bc9fd20-5056-40ee-a31f-b574c27250b9",
+        "at": 1794366839954.3132
+      }
+    ]
+  }
+}

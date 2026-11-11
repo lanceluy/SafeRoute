@@ -4,6 +4,9 @@ Evidence for the paper's research objectives: event-driven processing vs a polli
 behaviour under load, and recovery when a consumer fails. Metric definitions are in
 [`../docs/METRICS.md`](../docs/METRICS.md).
 
+See the [11 November 2026 evidence](evidence/2026-11-11/README.md) for the 2,000- and
+5,000-socket runs and the seven-variant delivery comparison.
+
 ```
 benchmark/
 ├── k6/                     HTTP load (k6): normal-load, high-load, stress, polling-baseline
