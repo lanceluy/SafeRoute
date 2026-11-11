@@ -1,0 +1,1 @@
+Monitoring; leave running for 60s before k6 and 30s after. Ctrl-C stops cleanly.

@@ -1,0 +1,189 @@
+{
+  "requestedConnections": 5000,
+  "requestedEvents": 4,
+  "createdOutcomes": 4,
+  "allRequestedFanoutsComplete": true,
+  "events": [
+    {
+      "event": 0,
+      "hazardId": "fa1ff3d5-6db3-42d5-996f-533e5a61c9f8",
+      "valid": true,
+      "expected": 5000,
+      "receivedWithinDeadline": 5000,
+      "late": 0,
+      "notObserved": 0,
+      "missingOrLateByDeadline": 0,
+      "deadlineMs": 30000,
+      "negativeDeltas": 0,
+      "duplicateRawSamples": 0,
+      "completeFanoutWithinDeadline": true,
+      "deliveryLatencyMs": {
+        "n": 5000,
+        "mean": 382.3696,
+        "median": 400.0,
+        "p95": 624,
+        "p99": 639,
+        "min": 79,
+        "max": 643
+      },
+      "fullFanoutLatencyMs": 643
+    },
+    {
+      "event": 1,
+      "hazardId": "6463457a-33b1-47ed-9b77-99f572e756dd",
+      "valid": true,
+      "expected": 5000,
+      "receivedWithinDeadline": 5000,
+      "late": 0,
+      "notObserved": 0,
+      "missingOrLateByDeadline": 0,
+      "deadlineMs": 30000,
+      "negativeDeltas": 0,
+      "duplicateRawSamples": 0,
+      "completeFanoutWithinDeadline": true,
+      "deliveryLatencyMs": {
+        "n": 5000,
+        "mean": 250.0678,
+        "median": 263.0,
+        "p95": 388,
+        "p99": 397,
+        "min": 62,
+        "max": 399
+      },
+      "fullFanoutLatencyMs": 399
+    },
+    {
+      "event": 2,
+      "hazardId": "f866d0e5-da65-4a3e-9002-79976c036e52",
+      "valid": true,
+      "expected": 5000,
+      "receivedWithinDeadline": 5000,
+      "late": 0,
+      "notObserved": 0,
+      "missingOrLateByDeadline": 0,
+      "deadlineMs": 30000,
+      "negativeDeltas": 0,
+      "duplicateRawSamples": 0,
+      "completeFanoutWithinDeadline": true,
+      "deliveryLatencyMs": {
+        "n": 5000,
+        "mean": 486.2422,
+        "median": 534.0,
+        "p95": 735,
+        "p99": 749,
+        "min": 83,
+        "max": 751
+      },
+      "fullFanoutLatencyMs": 751
+    },
+    {
+      "event": 3,
+      "hazardId": "9e4a7f84-af28-420b-a592-4627c6c4d404",
+      "valid": true,
+      "expected": 5000,
+      "receivedWithinDeadline": 5000,
+      "late": 0,
+      "notObserved": 0,
+      "missingOrLateByDeadline": 0,
+      "deadlineMs": 30000,
+      "negativeDeltas": 0,
+      "duplicateRawSamples": 0,
+      "completeFanoutWithinDeadline": true,
+      "deliveryLatencyMs": {
+        "n": 5000,
+        "mean": 462.1844,
+        "median": 504.0,
+        "p95": 735,
+        "p99": 755,
+        "min": 92,
+        "max": 759
+      },
+      "fullFanoutLatencyMs": 759
+    }
+  ],
+  "pooledDeliveryLatencyMs": {
+    "n": 20000,
+    "mean": 395.216,
+    "median": 364.0,
+    "p95": 717,
+    "p99": 748,
+    "min": 62,
+    "max": 759
+  },
+  "completeEventFanoutLatencyMs": {
+    "n": 4,
+    "mean": 638,
+    "median": 697.0,
+    "p95": 759,
+    "p99": 759,
+    "min": 399,
+    "max": 759
+  },
+  "resources": {
+    "baselineSamples": 29,
+    "idleTargetSamples": 10,
+    "loadedTargetSamples": 30,
+    "monitorErrors": 0,
+    "maxObservedConnections": 5000.0,
+    "baselineBackendCpuPercent": {
+      "n": 29,
+      "mean": 1.6082758620689654,
+      "median": 1.62,
+      "p95": 2.46,
+      "p99": 2.55,
+      "min": 0.91,
+      "max": 2.55
+    },
+    "idleTargetBackendCpuPercent": {
+      "n": 10,
+      "mean": 5.101,
+      "median": 4.42,
+      "p95": 10.37,
+      "p99": 10.37,
+      "min": 2.86,
+      "max": 10.37
+    },
+    "baselineBackendMemoryBytes": {
+      "n": 29,
+      "mean": 2727822591.081931,
+      "median": 2728377974.784,
+      "p95": 2728377974.784,
+      "p99": 2728377974.784,
+      "min": 2721935523.84,
+      "max": 2728377974.784
+    },
+    "idleTargetBackendMemoryBytes": {
+      "n": 10,
+      "mean": 2742336618.496,
+      "median": 2742336618.496,
+      "p95": 2742336618.496,
+      "p99": 2742336618.496,
+      "min": 2742336618.496,
+      "max": 2742336618.496
+    },
+    "loadedTargetBackendMemoryBytes": {
+      "n": 30,
+      "mean": 2742622949.6490664,
+      "median": 2742336618.496,
+      "p95": 2743410360.32,
+      "p99": 2744484102.144,
+      "min": 2742336618.496,
+      "max": 2744484102.144
+    },
+    "loadedBackendCpuPercent": {
+      "n": 30,
+      "mean": 12.346666666666666,
+      "median": 4.675,
+      "p95": 54.06,
+      "p99": 93.35,
+      "min": 2.29,
+      "max": 93.35
+    },
+    "note": "Docker CLI working-set-style memory, not JVM heap; sampled CPU and memory, not instantaneous peaks.",
+    "idleIncrementalMedianBytesPerConnection": 2791.7287423999787,
+    "idleIncrementalSampledPeakBytesPerConnection": 2791.7287423999787,
+    "loadedIncrementalMedianBytesPerConnection": 2791.7287423999787,
+    "loadedIncrementalSampledPeakBytesPerConnection": 3221.225472000027
+  },
+  "caution": "Pooled deliveries are clustered by event, not independent event trials. Do not infer capacity from successful samples alone; review missing/late frames and k6 thresholds."
+}

@@ -1,0 +1,21 @@
+Revision: eac9e3cb053f31275e816fe802519c672e4c9f2c
+Checkout: 7bdc4cd3aef772da2df0d1880c303ebd23b6de15
+Backend image: sha256:d226d489620aab7be07b3bb7f4508896db47df5e86fd4a94de8be0752e47b165
+Topology: one backend and one broker on this Mac
+Spring profiles: docker,benchmark
+Connections: 1000
+Events: 4
+Ramp: 60 s; report gap: 10 s; delivery deadline: 30 s
+Client file descriptor limit: 2560
+Started UTC: 2026-11-11T08:36:07Z
+ProductName:		macOS
+ProductVersion:		27.0.1
+BuildVersion:		26A434
+Apple M4
+17179869184
+Docker VM CPU count: 10; memory bytes: 8319504384
+k6 v2.3.0 (commit/devel, go1.27.1, darwin/arm64)
+6368ac3c3a5ad8806fe6f2a6fd9d08f2d9c135c5dca24a25adc75f9c02ccc1f2  <HOME>/Documents/Codex/2026-10-29/new-chat/SafeRoute/benchmark/evidence/2026-11-11/harness/saferoute-ws.js
+a8651728bd3b39def07aebc777722d236bab4d90f5d4f33d414849d24cc7cde5  <HOME>/Documents/Codex/2026-10-29/new-chat/SafeRoute/benchmark/evidence/2026-11-11/harness/analyze.py
+b02aa48eedf978d35761e4431b78a1752ed1f6a7d9e82695539631635e74666f  <HOME>/Documents/Codex/2026-10-29/new-chat/SafeRoute/benchmark/evidence/2026-11-11/harness/monitor.py
+k6 exit status: 0

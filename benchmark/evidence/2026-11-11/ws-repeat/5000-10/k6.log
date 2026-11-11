@@ -1,0 +1,642 @@
+
+         /\      Grafana   /‾‾/
+    /\  /  \     |\  __   /  /
+   /  \/    \    | |/ /  /   ‾‾\
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/
+
+
+     execution: local
+        script: <HOME>/Documents/Codex/2026-10-29/new-chat/SafeRoute/benchmark/evidence/2026-11-11/harness/saferoute-ws.js
+        output: json (<HOME>/Documents/Codex/2026-10-29/new-chat/SafeRoute/benchmark/results/block7/scale-5000.snfleP0o/raw.json)
+
+     scenarios: (100.00%) 1 scenario, 5000 max VUs, 5m30s max duration (incl. graceful stop):
+              * sockets: 1 iterations for each of 5000 VUs (maxDuration: 5m25s, gracefulStop: 5s)
+
+time="2026-11-11T17:34:22+08:00" level=info msg="{\"kind\":\"config\",\"connections\":5000,\"events\":4,\"rampSeconds\":60,\"lifeSeconds\":205,\"listenerAccounts\":1,\"sharedListenerIdentity\":true,\"note\":\"connection concurrency; not necessarily distinct user accounts\"}" source=console
+
+running (0m00.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m00.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m01.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m01.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m02.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m02.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m03.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m03.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m04.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m04.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m05.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m05.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m06.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m06.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m07.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m07.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m08.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m08.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m09.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m09.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m10.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m10.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m11.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m11.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m12.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m12.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m13.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m13.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m14.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m14.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m15.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m15.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m16.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m16.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m17.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m17.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m18.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m18.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m19.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m19.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m20.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m20.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m21.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m21.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m22.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m22.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m23.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m23.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m24.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m24.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m25.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m25.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m26.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m26.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m27.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m27.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m28.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m28.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m29.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m29.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m30.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m30.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m31.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m31.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m32.6s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m32.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m33.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m33.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m34.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m34.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m35.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m35.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m36.6s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m36.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m37.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m37.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m38.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m38.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m39.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m39.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m40.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m40.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m41.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m41.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m42.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m42.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m43.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m43.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m44.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m44.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m45.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m45.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m46.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m46.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m47.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m47.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m48.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m48.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m49.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m49.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m50.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m50.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m51.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m51.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m52.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m52.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m53.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m53.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m54.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m54.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m55.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m55.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m56.6s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m56.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m57.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m57.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m58.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m58.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (0m59.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  0m59.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m00.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m00.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m01.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m01.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m02.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m02.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m03.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m03.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m04.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m04.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m05.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m05.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m06.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m06.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m07.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m07.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m08.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m08.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m09.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m09.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m10.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m10.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m11.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m11.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m12.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m12.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m13.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m13.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m14.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m14.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m15.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m15.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m16.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m16.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m17.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m17.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m18.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m18.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m19.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m19.5s/5m25s  0000/5000 iters, 1 per VU
+time="2026-11-11T17:35:42+08:00" level=info msg="{\"kind\":\"target_verified\",\"connections\":5000,\"at\":1794389742187}" source=console
+
+running (1m20.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m20.5s/5m25s  0000/5000 iters, 1 per VU
+time="2026-11-11T17:35:42+08:00" level=info msg="{\"kind\":\"matched\",\"event\":\"0\",\"submissionId\":\"b4e08495-4642-4b13-9760-289eb88e4860\",\"hazardId\":\"fa1ff3d5-6db3-42d5-996f-533e5a61c9f8\",\"startedEpochMs\":1794389742190,\"receivedEpochMs\":1794389742673,\"hazardE2EMs\":483,\"completionE2EMs\":85}" source=console
+
+running (1m21.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m21.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m22.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m22.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m23.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m23.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m24.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m24.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m25.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m25.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m26.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m26.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m27.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m27.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m28.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m28.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m29.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m29.5s/5m25s  0000/5000 iters, 1 per VU
+time="2026-11-11T17:35:52+08:00" level=info msg="{\"kind\":\"matched\",\"event\":\"1\",\"submissionId\":\"c8bba42b-7764-450c-998d-2b78e4de7021\",\"hazardId\":\"6463457a-33b1-47ed-9b77-99f572e756dd\",\"startedEpochMs\":1794389752193,\"receivedEpochMs\":1794389752499,\"hazardE2EMs\":306,\"completionE2EMs\":92}" source=console
+
+running (1m30.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m30.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m31.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m31.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m32.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m32.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m33.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m33.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m34.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m34.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m35.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m35.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m36.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m36.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m37.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m37.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m38.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m38.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m39.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m39.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m40.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m40.5s/5m25s  0000/5000 iters, 1 per VU
+time="2026-11-11T17:36:02+08:00" level=info msg="{\"kind\":\"matched\",\"event\":\"2\",\"submissionId\":\"7d08595b-9b0f-49cd-b7ae-4adf8c6bd359\",\"hazardId\":\"f866d0e5-da65-4a3e-9002-79976c036e52\",\"startedEpochMs\":1794389762199,\"receivedEpochMs\":1794389762821,\"hazardE2EMs\":622,\"completionE2EMs\":132}" source=console
+
+running (1m41.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m41.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m42.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m42.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m43.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m43.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m44.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m44.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m45.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m45.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m46.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m46.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m47.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m47.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m48.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m48.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m49.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m49.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m50.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m50.5s/5m25s  0000/5000 iters, 1 per VU
+time="2026-11-11T17:36:12+08:00" level=info msg="{\"kind\":\"matched\",\"event\":\"3\",\"submissionId\":\"3f191903-b36d-4795-bcb8-b39aca9120d6\",\"hazardId\":\"9e4a7f84-af28-420b-a592-4627c6c4d404\",\"startedEpochMs\":1794389772240,\"receivedEpochMs\":1794389772817,\"hazardE2EMs\":577,\"completionE2EMs\":120}" source=console
+
+running (1m51.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m51.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m52.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m52.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m53.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m53.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m54.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m54.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m55.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m55.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m56.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m56.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m57.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m57.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m58.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m58.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (1m59.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  1m59.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m00.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m00.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m01.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m01.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m02.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m02.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m03.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m03.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m04.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m04.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m05.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m05.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m06.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m06.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m07.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m07.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m08.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m08.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m09.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m09.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m10.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m10.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m11.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m11.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m12.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m12.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m13.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m13.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m14.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m14.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m15.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m15.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m16.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m16.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m17.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m17.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m18.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m18.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m19.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m19.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m20.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m20.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m21.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m21.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m22.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m22.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m23.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m23.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m24.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m24.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m25.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m25.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m26.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m26.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m27.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m27.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m28.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m28.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m29.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m29.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m30.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m30.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m31.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m31.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m32.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m32.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m33.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m33.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m34.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m34.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m35.6s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m35.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m36.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m36.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m37.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m37.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m38.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m38.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m39.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m39.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m40.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m40.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m41.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m41.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m42.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m42.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m43.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m43.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m44.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m44.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m45.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m45.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m46.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m46.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m47.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m47.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m48.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m48.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m49.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m49.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m50.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m50.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m51.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m51.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m52.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m52.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m53.6s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m53.6s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m54.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m54.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m55.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m55.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m56.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m56.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m57.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m57.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m58.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m58.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (2m59.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  2m59.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m00.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m00.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m01.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m01.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m02.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m02.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m03.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m03.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m04.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m04.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m05.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m05.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m06.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m06.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m07.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m07.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m08.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m08.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m09.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m09.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m10.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m10.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m11.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m11.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m12.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m12.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m13.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m13.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m14.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m14.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m15.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m15.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m16.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m16.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m17.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m17.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m18.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m18.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m19.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m19.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m20.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m20.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m21.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m21.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m22.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m22.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m23.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m23.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m24.5s), 5000/5000 VUs, 0 complete and 0 interrupted iterations
+sockets   [   0% ] 5000 VUs  3m24.5s/5m25s  0000/5000 iters, 1 per VU
+
+running (3m25.5s), 1911/5000 VUs, 3089 complete and 0 interrupted iterations
+sockets   [  62% ] 5000 VUs  3m25.5s/5m25s  3089/5000 iters, 1 per VU
+
+running (3m25.7s), 0000/5000 VUs, 5000 complete and 0 interrupted iterations
+sockets ✓ [ 100% ] 5000 VUs  3m25.6s/5m25s  5000/5000 iters, 1 per VU

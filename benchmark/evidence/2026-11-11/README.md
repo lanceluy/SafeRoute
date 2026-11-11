@@ -11,10 +11,46 @@ Native k6 opened one socket per virtual user. After the 60-second ramp, the harn
 | 2,000 | 8,000 / 8,000 | 83 / 346 ms | 373, 130, 107, 128 ms | 247.1 KiB | 7.3% / 38.2% |
 | 5,000 | 20,000 / 20,000 | 243 / 533 ms | 588, 584, 304, 336 ms | 161.5 KiB | 15.4% / 165.0% |
 
-Each load level ran once. Both runs had zero missing, late, or duplicate deliveries. Each has 29 idle baseline samples and 30 samples in the loaded window. Incremental memory is the difference between median backend Docker memory under load and its median idle baseline, divided by observed connections. The baseline and JVM state can vary between runs. CPU percentages are the Docker CLI's aggregate backend values and can exceed 100% across cores. The sampled peaks may miss shorter bursts.
+Each load level in the original series ran once. Both runs had zero missing, late, or duplicate deliveries. Each has 29 idle baseline samples and 30 samples in the loaded window. Incremental memory is the difference between median backend Docker memory under load and its median idle baseline, divided by observed connections. The baseline and JVM state can vary between runs. CPU percentages are the Docker CLI's aggregate backend values and can exceed 100% across cores. The sampled peaks may miss shorter bursts.
 
 - [2,000 sockets](ws-2000/analysis.json)
 - [5,000 sockets](ws-5000/analysis.json)
+
+## WebSocket follow-up trials
+
+The follow-up used the same backend revision and image, benchmark profile, host,
+and four-report protocol. The backend stayed running between trials. The original
+2,000- and 5,000-socket runs above are archived separately.
+
+| Concurrent sockets | Trials | Unique deliveries | Trial median latency | Trial p95 latency | Time to reach all clients |
+|---:|---:|---:|---:|---:|---:|
+| 100 | 1 | 400 / 400 | 39.5 ms | 199 ms | 36–200 ms |
+| 1,000 | 1 | 4,000 / 4,000 | 129 ms | 210 ms | 154–225 ms |
+| 2,000 | 1 | 8,000 / 8,000 | 96 ms | 288 ms | 120–315 ms |
+| 5,000 | 10 | 200,000 / 200,000 | 168–533 ms | 352–992 ms | 238–1,115 ms |
+
+Latency columns show the range of each statistic across trials, or the
+single-trial statistic where only one trial ran. The last column ranges across
+individual reports. All 52 reports reached all expected listeners by the
+30-second deadline, with zero missing, late, or duplicate deliveries. At 5,000
+sockets, the median of the ten trial medians was 262.5 ms and the median of
+the ten trial p95s was 509.5 ms. These are descriptive results from one
+continuously running stack.
+
+| Concurrent sockets | Mean backend CPU under load | Highest sampled backend CPU | Incremental container memory per socket |
+|---:|---:|---:|---:|
+| 100 | 1.9% | 12.6% | 10.5 KiB |
+| 1,000 | 3.6% | 21.9% | 8.4 KiB |
+| 2,000 | 4.4% | 56.3% | No usable estimate |
+| 5,000 | 4.7–18.1% | 224.6% | 2.73–76.76 KiB |
+
+The 2,000-socket follow-up's median container memory dropped from about 2,348 MiB
+at baseline to 2,047 MiB under load. For the 5,000-socket trials, the idle baseline
+ranged from about 2,040 to 2,602 MiB. The per-socket values describe changes
+relative to those baselines. They are insufficient to establish a fixed
+per-connection memory cost. The saved analyses retain the signed differences.
+
+[Raw outputs, Docker samples, and per-trial analyses](ws-repeat/).
 
 ## Delivery-channel comparison
 
@@ -46,6 +82,21 @@ for n in 2000 5000; do
     --resources "ws-$n/resources.jsonl" --connections "$n" \
     --events 4 --out "$scratch/analysis-$n.json" >/dev/null
   cmp "ws-$n/analysis.json" "$scratch/analysis-$n.json"
+done
+```
+
+To verify the follow-up trials with the same analyzer, reuse that scratch
+directory and run:
+
+```bash
+for trial in ws-repeat/*; do
+  n=${trial##*/}
+  n=${n%-*}
+  gzip -dc "$trial/raw.json.gz" > "$scratch/raw-repeat.json"
+  python3 harness/analyze.py --raw "$scratch/raw-repeat.json" \
+    --resources "$trial/resources.jsonl" --connections "$n" \
+    --events 4 --out "$scratch/analysis-repeat.json" >/dev/null
+  cmp "$trial/analysis.json" "$scratch/analysis-repeat.json" || break
 done
 ```
 
@@ -99,4 +150,4 @@ The full Maven backend suite completed on 11 November 2026 using Java 21 and Doc
 
 ## Evidence scope
 
-The local runs establish delivery at the tested connection counts and a comparison of the seven delivery variants on this stack. Repeated trials, a separate load-generator host, multi-backend or multi-broker tests, a no-Kafka baseline, and APNs tests are outside this evidence set. The original Makati routing dataset and script remain unverified. See the [routing recovery note](routing-recovery.md).
+The local runs establish delivery at the tested connection counts and a comparison of the seven delivery variants on this stack. The follow-up adds repeated trials at 5,000 sockets on the same stack. Repeated lower-tier trials, a separate load-generator host, multi-backend or multi-broker tests, a no-Kafka baseline, and APNs tests remain outside this evidence set. The original Makati routing dataset and script remain unverified. See the [routing recovery note](routing-recovery.md).
