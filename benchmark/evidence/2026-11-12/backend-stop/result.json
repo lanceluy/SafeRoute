@@ -1,0 +1,22 @@
+{
+  "backend": "saferoute-icbim-backend",
+  "image": "sha256:d226d489620aab7be07b3bb7f4508896db47df5e86fd4a94de8be0752e47b165",
+  "clientsRequested": 100,
+  "checkout": "910d031744059ca9cca6fda78528245f1c211de0",
+  "method": "Single backend, shared listener account, no client retries",
+  "passed": true,
+  "sessionsBeforeStop": 100.0,
+  "stopCommandStartedMs": 1794458172135,
+  "stopConfirmedMs": 1794458173325,
+  "k6Exit": 0,
+  "restartCommandStartedMs": 1794458173350,
+  "healthyAgainMs": 1794458178640,
+  "opened": 100,
+  "peerClosed": 100,
+  "closedAfterStop": 100,
+  "socketErrors": 100,
+  "clientTimeouts": 0,
+  "firstCloseMs": 607,
+  "medianCloseMs": 609.0,
+  "lastCloseMs": 610
+}

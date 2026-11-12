@@ -47,6 +47,12 @@ because hazards were created late. The other missed 2 of 50 events on every clie
 than 1 s polling at the median and about 55× faster than 3 s polling. Polling faster than the
 event rate wastes most requests. At 1 s, more than half returned nothing new.
 
+**Published eight-run grouping.** The benchmark notes associate two idle empty-database
+runs and three idle populated-database runs with the September benchmark (`d57c22e`),
+and three busier runs with the October re-check (`d35d78c`, section 4.1). The original
+raw filenames are unverified. See the [12 November evidence follow-up](../benchmark/evidence/2026-11-12/README.md)
+for the audit and subsequent backend shutdown test.
+
 ## 2. Synthetic scenarios (`simulate.mjs`, 3 rounds each)
 
 | Scenario | Offered per run | Lost | HTTP errors | Failed | Throughput | Processing latency median / p95 |

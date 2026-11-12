@@ -1,0 +1,54 @@
+
+         /\      Grafana   /‾‾/
+    /\  /  \     |\  __   /  /
+   /  \/    \    | |/ /  /   ‾‾\
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/
+
+
+     execution: local
+        script: /Users/princeleanardvargas/Documents/Codex/2026-10-29/new-chat/SafeRoute/benchmark/simulator/backend-stop.js
+        output: json (benchmark/results/backend-stop-20261112-123608/k6.jsonl)
+
+     scenarios: (100.00%) 1 scenario, 100 max VUs, 2m5s max duration (incl. graceful stop):
+              * listeners: 1 iterations for each of 100 VUs (maxDuration: 1m35s, gracefulStop: 30s)
+
+
+running (0m01.0s), 100/100 VUs, 0 complete and 0 interrupted iterations
+listeners   [   0% ] 100 VUs  0m01.0s/1m35s  000/100 iters, 1 per VU
+
+running (0m02.0s), 100/100 VUs, 0 complete and 0 interrupted iterations
+listeners   [   0% ] 100 VUs  0m02.0s/1m35s  000/100 iters, 1 per VU
+
+running (0m03.0s), 100/100 VUs, 0 complete and 0 interrupted iterations
+listeners   [   0% ] 100 VUs  0m03.0s/1m35s  000/100 iters, 1 per VU
+
+
+  █ TOTAL RESULTS
+
+    CUSTOM
+    shutdown_opened_ms.........: avg=1794458169313.36 min=1794458169279 med=1794458169318 max=1794458169335 p(90)=1794458169330 p(95)=1794458169331
+    shutdown_peer_closed_ms....: avg=1794458172743.76 min=1794458172742 med=1794458172744 max=1794458172745 p(90)=1794458172745 p(95)=1794458172745
+    shutdown_socket_error_ms...: avg=1794458172743.68 min=1794458172742 med=1794458172744 max=1794458172745 p(90)=1794458172745 p(95)=1794458172745
+
+    EXECUTION
+    iteration_duration.........: avg=3.49s            min=3.48s         med=3.49s         max=3.49s         p(90)=3.49s         p(95)=3.49s
+    iterations.................: 100   28.616839/s
+    vus........................: 100   min=100     max=100
+    vus_max....................: 100   min=100     max=100
+
+    NETWORK
+    data_received..............: 46 kB 13 kB/s
+    data_sent..................: 61 kB 17 kB/s
+
+    WEBSOCKET
+    ws_connecting..............: avg=58.94ms          min=25.25ms       med=63.19ms       max=79.55ms       p(90)=74.97ms       p(95)=75.64ms
+    ws_msgs_sent...............: 100   28.616839/s
+    ws_session_duration........: avg=3.48s            min=3.48s         med=3.48s         max=3.49s         p(90)=3.49s         p(95)=3.49s
+    ws_sessions................: 100   28.616839/s
+
+
+
+
+running (0m03.5s), 000/100 VUs, 100 complete and 0 interrupted iterations
+listeners ✓ [ 100% ] 100 VUs  0m03.5s/1m35s  100/100 iters, 1 per VU
